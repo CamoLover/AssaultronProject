@@ -49,51 +49,6 @@ class AssaultronCore:
         self.system_logs.append(log_entry)
         print(f"[{timestamp}] {event_type}: {message}")
         
-    def process_actions(self, text):
-        """Extract and execute action commands from AI response"""
-        import re
-        actions_executed = []
-        
-        # LED Intensity Control
-        led_match = re.search(r'\[LED_INTENSITY:(\d+)\]', text)
-        if led_match:
-            intensity = int(led_match.group(1))
-            if 0 <= intensity <= 100:
-                self.hardware_state["led_intensity"] = intensity
-                actions_executed.append(f"LED_INTENSITY set to {intensity}%")
-                self.log_event(f"LED intensity set to {intensity}%", "ACTION")
-        
-        # Hand Movement Control
-        hand_matches = re.findall(r'\[HAND_(LEFT|RIGHT)_(OPEN|CLOSE):(\d+)\]', text)
-        for hand, action, value in hand_matches:
-            hand_key = hand.lower()
-            raw_position = int(value)
-            
-            if 0 <= raw_position <= 100:
-                # CRITICAL FIX: Handle CLOSE vs OPEN commands correctly
-                if action == "CLOSE":
-                    # For CLOSE commands, invert the value (100 = fully closed = position 0)
-                    position = 100 - raw_position
-                else:  # OPEN
-                    # For OPEN commands, use value directly (100 = fully open = position 100)
-                    position = raw_position
-                
-                self.hardware_state["hands"][hand_key]["position"] = position
-                
-                # Update status based on final position
-                if position <= 10:
-                    self.hardware_state["hands"][hand_key]["status"] = "closed"
-                elif position >= 90:
-                    self.hardware_state["hands"][hand_key]["status"] = "open_max"
-                else:
-                    self.hardware_state["hands"][hand_key]["status"] = f"open_{position}%"
-                
-                action_desc = f"Hand {hand_key} {action.lower()} to {raw_position}% (final position: {position}%)"
-                actions_executed.append(action_desc)
-                self.log_event(action_desc, "ACTION")
-        
-        return actions_executed
-    
     def analyze_context_and_suggest_actions(self, user_message):
         """Analyze user message for contextual cues and suggest actions to AI"""
         import re
@@ -153,28 +108,6 @@ class AssaultronCore:
         
         return context_additions
     
-    def validate_action_execution(self, ai_response, actions_executed):
-        """Check if AI described actions without proper tag execution"""
-        import re
-        response_lower = ai_response.lower()
-        
-        # Check for action descriptions without corresponding tags
-        action_words = [
-            "increasing led", "reducing led", "setting led", "led intensity",
-            "closed hand", "closing hand", "opened hand", "opening hand",
-            "grip protocol", "grab", "executing", "manipulator"
-        ]
-        
-        described_actions = []
-        for word in action_words:
-            if word in response_lower:
-                described_actions.append(word)
-        
-        if described_actions and len(actions_executed) == 0:
-            self.log_event(f"WARNING: AI described actions {described_actions} but no hardware tags executed", "WARNING")
-        elif len(described_actions) > len(actions_executed):
-            self.log_event(f"WARNING: AI described more actions than executed. Described: {len(described_actions)}, Executed: {len(actions_executed)}", "WARNING")
-    
     def add_to_memory(self, user_msg, ai_response):
         """Add important context to long-term memory"""
         # Extract key information patterns
@@ -216,6 +149,21 @@ class AssaultronCore:
                 return self.tool_get_time()
             elif tool_name == "get_date":
                 return self.tool_get_date()
+            elif tool_name == "set_led_intensity":
+                intensity = int(params.get("intensity", 50))
+                return self.tool_set_led_intensity(intensity)
+            elif tool_name == "set_hand_left_open":
+                position = int(params.get("position", 100))
+                return self.tool_set_hand_left_open(position)
+            elif tool_name == "set_hand_left_close":
+                position = int(params.get("position", 100))
+                return self.tool_set_hand_left_close(position)
+            elif tool_name == "set_hand_right_open":
+                position = int(params.get("position", 100))
+                return self.tool_set_hand_right_open(position)
+            elif tool_name == "set_hand_right_close":
+                position = int(params.get("position", 100))
+                return self.tool_set_hand_right_close(position)
             # Future tools can be added here:
             # elif tool_name == "camera_scan":
             #     return self.tool_camera_scan(params)
@@ -245,6 +193,146 @@ class AssaultronCore:
             "formatted": current_date.strftime("%A, %B %d, %Y"),
             "day_of_week": current_date.strftime("%A")
         }
+    
+    def tool_set_led_intensity(self, intensity):
+        """Set LED intensity (0-100%)"""
+        if 0 <= intensity <= 100:
+            self.hardware_state["led_intensity"] = intensity
+            self.log_event(f"LED intensity set to {intensity}%", "TOOL")
+            return {
+                "success": True,
+                "intensity": intensity,
+                "message": f"LED intensity set to {intensity}%"
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Intensity must be between 0 and 100, got {intensity}"
+            }
+    
+    def tool_set_hand_left_open(self, position):
+        """Open left hand (OPEN commands: 0=closed, 100=fully open)"""
+        if 0 <= position <= 100:
+            self.hardware_state["hands"]["left"]["position"] = position
+            
+            # Update status based on position
+            if position <= 10:
+                self.hardware_state["hands"]["left"]["status"] = "closed"
+            elif position >= 90:
+                self.hardware_state["hands"]["left"]["status"] = "open_max"
+            else:
+                self.hardware_state["hands"]["left"]["status"] = f"open_{position}%"
+            
+            self.log_event(f"Left hand opened to {position}%", "TOOL")
+            return {
+                "success": True,
+                "hand": "left",
+                "action": "open",
+                "position": position,
+                "status": self.hardware_state["hands"]["left"]["status"],
+                "message": f"Left hand opened to {position}%"
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Position must be between 0 and 100, got {position}"
+            }
+    
+    def tool_set_hand_left_close(self, position):
+        """Close left hand (CLOSE commands: 0=fully open, 100=fully closed)"""
+        if 0 <= position <= 100:
+            # Convert: CLOSE position (0-100) -> actual position (100-0)
+            # position=100 (close command) -> actual position=0 (fully closed)
+            # position=0 (close command) -> actual position=100 (fully open)
+            actual_position = 100 - position
+            
+            self.hardware_state["hands"]["left"]["position"] = actual_position
+            
+            # Update status based on final position
+            if actual_position <= 10:
+                self.hardware_state["hands"]["left"]["status"] = "closed"
+            elif actual_position >= 90:
+                self.hardware_state["hands"]["left"]["status"] = "open_max"
+            else:
+                self.hardware_state["hands"]["left"]["status"] = f"open_{actual_position}%"
+            
+            self.log_event(f"Left hand closed to {position}% grip (actual position: {actual_position}%)", "TOOL")
+            return {
+                "success": True,
+                "hand": "left",
+                "action": "close",
+                "grip_strength": position,
+                "actual_position": actual_position,
+                "status": self.hardware_state["hands"]["left"]["status"],
+                "message": f"Left hand closed to {position}% grip strength"
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Position must be between 0 and 100, got {position}"
+            }
+    
+    def tool_set_hand_right_open(self, position):
+        """Open right hand (OPEN commands: 0=closed, 100=fully open)"""
+        if 0 <= position <= 100:
+            self.hardware_state["hands"]["right"]["position"] = position
+            
+            # Update status based on position
+            if position <= 10:
+                self.hardware_state["hands"]["right"]["status"] = "closed"
+            elif position >= 90:
+                self.hardware_state["hands"]["right"]["status"] = "open_max"
+            else:
+                self.hardware_state["hands"]["right"]["status"] = f"open_{position}%"
+            
+            self.log_event(f"Right hand opened to {position}%", "TOOL")
+            return {
+                "success": True,
+                "hand": "right",
+                "action": "open",
+                "position": position,
+                "status": self.hardware_state["hands"]["right"]["status"],
+                "message": f"Right hand opened to {position}%"
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Position must be between 0 and 100, got {position}"
+            }
+    
+    def tool_set_hand_right_close(self, position):
+        """Close right hand (CLOSE commands: 0=fully open, 100=fully closed)"""
+        if 0 <= position <= 100:
+            # Convert: CLOSE position (0-100) -> actual position (100-0)
+            # position=100 (close command) -> actual position=0 (fully closed)
+            # position=0 (close command) -> actual position=100 (fully open)
+            actual_position = 100 - position
+            
+            self.hardware_state["hands"]["right"]["position"] = actual_position
+            
+            # Update status based on final position
+            if actual_position <= 10:
+                self.hardware_state["hands"]["right"]["status"] = "closed"
+            elif actual_position >= 90:
+                self.hardware_state["hands"]["right"]["status"] = "open_max"
+            else:
+                self.hardware_state["hands"]["right"]["status"] = f"open_{actual_position}%"
+            
+            self.log_event(f"Right hand closed to {position}% grip (actual position: {actual_position}%)", "TOOL")
+            return {
+                "success": True,
+                "hand": "right",
+                "action": "close",
+                "grip_strength": position,
+                "actual_position": actual_position,
+                "status": self.hardware_state["hands"]["right"]["status"],
+                "message": f"Right hand closed to {position}% grip strength"
+            }
+        else:
+            return {
+                "success": False,
+                "error": f"Position must be between 0 and 100, got {position}"
+            }
     
     def process_tool_requests(self, text):
         """Extract and execute tool requests from AI response"""
@@ -299,12 +387,18 @@ class AssaultronCore:
                     replacement = f"It's {result['formatted']}."
                 elif tool_name == "get_date":
                     replacement = f"Today is {result['formatted']}."
+                elif tool_name == "set_led_intensity":
+                    # Hardware tools can be removed from response, they execute silently
+                    replacement = ""
+                elif tool_name.startswith("set_hand_"):
+                    # Hardware tools can be removed from response, they execute silently
+                    replacement = ""
                 else:
                     replacement = str(result)
             else:
                 replacement = f"Tool error: {result.get('error', 'Unknown error')}"
             
-            # Replace the tool tag with the result
+            # Replace the tool tag with the result (remove if empty string)
             modified_response = re.sub(pattern, replacement, modified_response, count=1)
         
         return modified_response
@@ -368,9 +462,6 @@ class AssaultronCore:
                         (self.performance_stats["avg_response_time"] + response_time) / 2
                     )
                 
-                # Process actions from AI response
-                actions_executed = self.process_actions(ai_response)
-                
                 # Process tool requests from AI response
                 tools_executed = self.process_tool_requests(ai_response)
                 
@@ -379,9 +470,6 @@ class AssaultronCore:
                 ai_response = self.inject_tool_results(ai_response, tools_executed)
                 if tools_executed:
                     self.log_event(f"Tool injection: '{original_response}' → '{ai_response}'", "TOOL")
-                
-                # Check for action descriptions without proper tags
-                self.validate_action_execution(ai_response, actions_executed)
                 
                 # Add to memory
                 self.add_to_memory(message, ai_response)
@@ -392,7 +480,6 @@ class AssaultronCore:
                     "assistant": ai_response,
                     "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "response_time": response_time,
-                    "actions": actions_executed,
                     "tools": tools_executed
                 })
                 
@@ -568,8 +655,67 @@ def get_available_tools():
                 "name": "get_date", 
                 "description": "Get current date",
                 "parameters": []
+            },
+            {
+                "name": "set_led_intensity",
+                "description": "Set LED brightness intensity",
+                "parameters": [
+                    {
+                        "name": "intensity",
+                        "type": "integer",
+                        "description": "LED intensity from 0 (off) to 100 (max brightness)",
+                        "required": True
+                    }
+                ]
+            },
+            {
+                "name": "set_hand_left_open",
+                "description": "Open left hand",
+                "parameters": [
+                    {
+                        "name": "position",
+                        "type": "integer",
+                        "description": "Hand opening position from 0 (closed) to 100 (fully open)",
+                        "required": True
+                    }
+                ]
+            },
+            {
+                "name": "set_hand_left_close",
+                "description": "Close left hand (grip)",
+                "parameters": [
+                    {
+                        "name": "position",
+                        "type": "integer",
+                        "description": "Grip strength from 0 (fully open) to 100 (fully closed)",
+                        "required": True
+                    }
+                ]
+            },
+            {
+                "name": "set_hand_right_open",
+                "description": "Open right hand",
+                "parameters": [
+                    {
+                        "name": "position",
+                        "type": "integer",
+                        "description": "Hand opening position from 0 (closed) to 100 (fully open)",
+                        "required": True
+                    }
+                ]
+            },
+            {
+                "name": "set_hand_right_close",
+                "description": "Close right hand (grip)",
+                "parameters": [
+                    {
+                        "name": "position",
+                        "type": "integer",
+                        "description": "Grip strength from 0 (fully open) to 100 (fully closed)",
+                        "required": True
+                    }
+                ]
             }
-            # Future tools will be added here
         ]
     })
 
