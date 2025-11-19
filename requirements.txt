@@ -1,0 +1,4 @@
+flask>=2.0.0
+psutil>=5.8.0
+pygame>=2.0.0
+requests>=2.25.0
