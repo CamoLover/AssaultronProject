@@ -26,7 +26,7 @@
         <div class="bg-gray-100 border-b border-gray-300">
             <nav class="flex space-x-4 px-3">
                 <button onclick="switchTab('interface')" id="tabInterface" class="tab-button active py-2 px-4 text-sm font-bold border-b-2 border-blue-500">INTERFACE</button>
-                <button onclick="switchTab('realBody')" id="tabRealBody" class="tab-button py-2 px-4 text-sm font-bold border-b-2 border-transparent hover:border-gray-400">REAL BODY</button>
+                <button onclick="switchTab('embodied')" id="tabEmbodied" class="tab-button py-2 px-4 text-sm font-bold border-b-2 border-transparent hover:border-gray-400">EMBODIED AGENT</button>
             </nav>
         </div>
         
@@ -71,108 +71,128 @@
                 </div>
             </div>
         </div>
-        
-        <!-- Real Body Tab Content -->
-        <div id="realBodyTab" class="flex-1 flex tab-content hidden">
-            <!-- Hardware Status Panel -->
-            <div class="flex-1 p-4 bg-white">
-                <h2 class="text-lg font-bold mb-4 text-green-600">ASSAULTRON HARDWARE STATUS</h2>
-                
-                <!-- LED Control Section -->
-                <div class="mb-6 p-4 border border-gray-300 rounded bg-gray-50">
-                    <h3 class="font-bold text-sm mb-3">LED INTENSITY CONTROL</h3>
-                    <div class="flex items-center gap-4">
-                        <div class="flex-1">
-                            <input type="range" id="ledSlider" min="0" max="100" value="50" 
-                                   class="w-full h-2 bg-gray-300 rounded outline-none"
-                                   onchange="setLedManually(this.value)">
-                        </div>
-                        <div class="text-center min-w-[60px]">
-                            <div id="ledValue" class="font-bold text-lg">50%</div>
-                            <div class="w-8 h-8 border-2 border-gray-400 rounded-full mx-auto mt-1" id="ledIndicator" style="background-color: rgb(128, 128, 128);"></div>
-                        </div>
+
+        <!-- Embodied Agent Tab Content -->
+        <div id="embodiedTab" class="flex-1 flex flex-col tab-content hidden p-4 overflow-y-auto">
+            <h2 class="text-lg font-bold mb-4 text-purple-600">EMBODIED AGENT SYSTEM</h2>
+
+            <div class="grid grid-cols-3 gap-4">
+                <!-- Cognitive State -->
+                <div class="p-4 border border-purple-300 rounded bg-purple-50">
+                    <h3 class="font-bold text-sm mb-3 text-purple-700">COGNITIVE LAYER</h3>
+                    <div id="cognitiveState" class="text-xs space-y-2">
+                        <div><span class="font-bold">Goal:</span> <span id="cogGoal" class="text-purple-600">idle</span></div>
+                        <div><span class="font-bold">Emotion:</span> <span id="cogEmotion" class="text-purple-600">neutral</span></div>
+                        <div><span class="font-bold">Confidence:</span> <span id="cogConfidence" class="text-purple-600">0.0</span></div>
+                        <div><span class="font-bold">Urgency:</span> <span id="cogUrgency" class="text-purple-600">0.0</span></div>
+                        <div><span class="font-bold">Focus:</span> <span id="cogFocus" class="text-purple-600">null</span></div>
                     </div>
                 </div>
-                
-                <!-- Hand Controls Section -->
-                <div class="mb-6 p-4 border border-gray-300 rounded bg-gray-50">
-                    <h3 class="font-bold text-sm mb-3">HAND MOVEMENT CONTROL</h3>
-                    
-                    <!-- Left Hand -->
-                    <div class="mb-4">
-                        <h4 class="font-bold text-xs mb-2 text-blue-600">LEFT HAND</h4>
-                        <div class="flex items-center gap-4">
-                            <div class="flex-1">
-                                <input type="range" id="leftHandSlider" min="0" max="100" value="0" 
-                                       class="w-full h-2 bg-gray-300 rounded outline-none"
-                                       onchange="setHandManually('left', this.value)">
-                            </div>
-                            <div class="text-center min-w-[80px]">
-                                <div id="leftHandValue" class="font-bold">0% (closed)</div>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <!-- Right Hand -->
-                    <div class="mb-4">
-                        <h4 class="font-bold text-xs mb-2 text-blue-600">RIGHT HAND</h4>
-                        <div class="flex items-center gap-4">
-                            <div class="flex-1">
-                                <input type="range" id="rightHandSlider" min="0" max="100" value="0" 
-                                       class="w-full h-2 bg-gray-300 rounded outline-none"
-                                       onchange="setHandManually('right', this.value)">
-                            </div>
-                            <div class="text-center min-w-[80px]">
-                                <div id="rightHandValue" class="font-bold">0% (closed)</div>
-                            </div>
-                        </div>
+
+                <!-- Virtual Body State - Enhanced for Assaultron -->
+                <div class="p-4 border border-blue-300 rounded bg-blue-50">
+                    <h3 class="font-bold text-sm mb-3 text-blue-700">VIRTUAL BODY (ASSAULTRON)</h3>
+                    <div id="bodyState" class="text-xs space-y-2">
+                        <div class="font-bold text-xs mb-1 text-blue-800">HEAD UNIT</div>
+                        <div><span class="font-bold">Head Tilt:</span> <span id="bodyHeadTilt" class="text-blue-600">0°</span></div>
+                        <div><span class="font-bold">Head Pan:</span> <span id="bodyHeadPan" class="text-blue-600">0°</span></div>
+                        <div><span class="font-bold">Eye Luminance:</span> <span id="bodyLuminance" class="text-blue-600">dim</span></div>
+
+                        <div class="font-bold text-xs mb-1 mt-2 text-blue-800">TORSO</div>
+                        <div><span class="font-bold">Posture:</span> <span id="bodyPosture" class="text-blue-600">idle</span></div>
+                        <div><span class="font-bold">Torso Rotation:</span> <span id="bodyTorsoRotation" class="text-blue-600">0°</span></div>
+                        <div><span class="font-bold">Lean Angle:</span> <span id="bodyLeanAngle" class="text-blue-600">0°</span></div>
+
+                        <div class="font-bold text-xs mb-1 mt-2 text-blue-800">ARMS</div>
+                        <div><span class="font-bold">Left Hand:</span> <span id="bodyLeftHand" class="text-blue-600">closed</span></div>
+                        <div><span class="font-bold">Right Hand:</span> <span id="bodyRightHand" class="text-blue-600">closed</span></div>
+                        <div><span class="font-bold">Arm Mode:</span> <span id="bodyArmMode" class="text-blue-600">neutral</span></div>
+
+                        <div class="font-bold text-xs mb-1 mt-2 text-blue-800">LOCOMOTION</div>
+                        <div><span class="font-bold">Leg Stance:</span> <span id="bodyLegStance" class="text-blue-600">stable</span></div>
+                        <div><span class="font-bold">Balance:</span> <span id="bodyBalance" class="text-blue-600">100%</span></div>
+                        <div><span class="font-bold">Movement:</span> <span id="bodyMovement" class="text-blue-600">stationary</span></div>
+
+                        <div class="font-bold text-xs mb-1 mt-2 text-blue-800">SENSORS</div>
+                        <div><span class="font-bold">Attention:</span> <span id="bodyAttention" class="text-blue-600">null</span></div>
                     </div>
                 </div>
-                
-                <!-- Memory Banks Section -->
-                <div class="mb-6 p-4 border border-gray-300 rounded bg-gray-50">
-                    <h3 class="font-bold text-sm mb-3">MEMORY BANKS</h3>
-                    <div id="memoryDisplay" class="text-xs space-y-1 max-h-32 overflow-y-auto">
-                        <div class="text-gray-500">Memory banks empty</div>
+
+                <!-- World State -->
+                <div class="p-4 border border-green-300 rounded bg-green-50">
+                    <h3 class="font-bold text-sm mb-3 text-green-700">WORLD PERCEPTION</h3>
+                    <div id="worldState" class="text-xs space-y-2">
+                        <div><span class="font-bold">Environment:</span> <span id="worldEnv" class="text-green-600">normal</span></div>
+                        <div><span class="font-bold">Threat Level:</span> <span id="worldThreat" class="text-green-600">none</span></div>
+                        <div><span class="font-bold">Entities:</span> <span id="worldEntities" class="text-green-600">none</span></div>
+                        <div><span class="font-bold">Time of Day:</span> <span id="worldTime" class="text-green-600">unknown</span></div>
                     </div>
                 </div>
-                
-                <!-- Voice System Section -->
-                <div class="mb-6 p-4 border border-gray-300 rounded bg-gray-50">
-                    <h3 class="font-bold text-sm mb-3">ASSAULTRON VOICE SYSTEM</h3>
+            </div>
+
+            <!-- Motion Controller Hardware State -->
+            <div class="mt-4 grid grid-cols-2 gap-4">
+                <div class="p-4 border border-orange-300 rounded bg-orange-50">
+                    <h3 class="font-bold text-sm mb-3 text-orange-700">MOTION CONTROLLER OUTPUT</h3>
+                    <div id="motionState" class="text-xs space-y-2">
+                        <div><span class="font-bold">LED Intensity:</span> <span id="motionLED" class="text-orange-600">0%</span></div>
+                        <div><span class="font-bold">Left Hand Pos:</span> <span id="motionLeftPos" class="text-orange-600">0</span></div>
+                        <div><span class="font-bold">Right Hand Pos:</span> <span id="motionRightPos" class="text-orange-600">0</span></div>
+                        <div><span class="font-bold">Hand Mode:</span> <span id="motionHandMode" class="text-orange-600">idle</span></div>
+                    </div>
+                </div>
+
+                <!-- Voice System -->
+                <div class="p-4 border border-red-300 rounded bg-red-50">
+                    <h3 class="font-bold text-sm mb-3 text-red-700">VOICE SYSTEM</h3>
                     <div class="space-y-3">
-                        <div class="flex items-center gap-4">
-                            <button id="voiceStartBtn" onclick="startVoiceServer()" 
-                                    class="px-4 py-2 bg-red-500 text-white rounded text-sm hover:bg-red-600 disabled:bg-gray-400">
-                                🚀 START VOICE SERVER
+                        <div class="flex items-center gap-2">
+                            <button id="voiceStartBtn" onclick="startVoiceServer()"
+                                    class="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:bg-gray-400">
+                                START
                             </button>
-                            <button id="voiceStopBtn" onclick="stopVoiceServer()" 
-                                    class="px-4 py-2 bg-gray-500 text-white rounded text-sm hover:bg-gray-600 disabled:bg-gray-400" disabled>
-                                🛑 STOP VOICE SERVER
+                            <button id="voiceStopBtn" onclick="stopVoiceServer()"
+                                    class="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 disabled:bg-gray-400" disabled>
+                                STOP
                             </button>
-                        </div>
-                        <div id="voiceStatus" class="text-sm">
                             <div class="flex items-center gap-2">
-                                <span id="voiceStatusText" class="text-red-500">Voice system offline</span>
+                                <span id="voiceStatusText" class="text-xs text-red-500">Offline</span>
                                 <div id="voiceStatusIndicator" class="w-2 h-2 rounded-full bg-red-500"></div>
                             </div>
-                            <div id="voiceDetails" class="text-xs text-gray-600 mt-1">
-                                Server: <span id="serverStatus">Stopped</span> | 
-                                Model: <span id="modelStatus">Not loaded</span>
-                            </div>
+                        </div>
+                        <div id="voiceDetails" class="text-xs text-gray-600">
+                            Server: <span id="serverStatus">Stopped</span> |
+                            Model: <span id="modelStatus">Not loaded</span>
                         </div>
                         <div class="flex gap-2">
-                            <input type="text" id="testSpeechInput" placeholder="Test speech..." 
-                                   class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm">
-                            <button onclick="testSpeech()" 
-                                    class="px-4 py-2 bg-green-500 text-white rounded text-sm hover:bg-green-600 disabled:bg-gray-400">
+                            <input type="text" id="testSpeechInput" placeholder="Test speech..."
+                                   class="flex-1 px-2 py-1 border border-gray-300 rounded text-xs">
+                            <button onclick="testSpeech()"
+                                    class="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:bg-gray-400">
                                 TEST
                             </button>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Behavior Selection History -->
+            <div class="mt-4 p-4 border border-indigo-300 rounded bg-indigo-50">
+                <h3 class="font-bold text-sm mb-3 text-indigo-700">BEHAVIOR SELECTION HISTORY</h3>
+                <div id="behaviorHistory" class="text-xs space-y-1 max-h-64 overflow-y-auto">
+                    <div class="text-gray-500">No behaviors executed yet</div>
+                </div>
+            </div>
+
+            <!-- State Transition History -->
+            <div class="mt-4 p-4 border border-teal-300 rounded bg-teal-50">
+                <h3 class="font-bold text-sm mb-3 text-teal-700">STATE TRANSITION HISTORY</h3>
+                <div id="stateHistory" class="text-xs space-y-1 max-h-64 overflow-y-auto">
+                    <div class="text-gray-500">No state changes yet</div>
+                </div>
+            </div>
         </div>
+
         
         <!-- Bottom Stats Section -->
         <div class="border-t border-gray-300 bg-gray-50 p-3">
@@ -264,10 +284,16 @@
                 WARNING: 'text-orange-600',
                 ERROR: 'text-red-600',
                 AI: 'text-green-600',
+                COGNITIVE: 'text-purple-600',
+                BEHAVIOR: 'text-indigo-600',
+                MOTION: 'text-orange-600',
+                WORLD: 'text-green-600',
                 CONTEXT: 'text-purple-600',
                 ACTION: 'text-indigo-600',
                 TOOL: 'text-teal-600',
-                VOICE: 'text-pink-600'
+                VOICE: 'text-pink-600',
+                MANUAL: 'text-gray-600',
+                MEMORY: 'text-purple-400'
             };
             
             const logDiv = document.createElement('div');
@@ -331,6 +357,16 @@
                     messageCountEl.textContent = messageCount;
                     responseTimeEl.textContent = `${responseTime}ms`;
                     addLog('AI', `Response received (${responseTime}ms)`);
+
+                    // Log cognitive state if available
+                    if (data.cognitive_state) {
+                        addLog('COGNITIVE', `Goal: ${data.cognitive_state.goal}, Emotion: ${data.cognitive_state.emotion}`);
+                    }
+
+                    // Update embodied agent display if on that tab
+                    if (currentTab === 'embodied') {
+                        updateEmbodiedAgentData();
+                    }
                 } else {
                     throw new Error(`HTTP ${response.status}`);
                 }
@@ -421,181 +457,91 @@
         // Tab Management
         function switchTab(tabName) {
             currentTab = tabName;
-            
+
             // Hide all tabs
             document.getElementById('interfaceTab').classList.toggle('hidden', tabName !== 'interface');
-            document.getElementById('realBodyTab').classList.toggle('hidden', tabName !== 'realBody');
-            
+            document.getElementById('embodiedTab').classList.toggle('hidden', tabName !== 'embodied');
+
             // Update tab buttons
-            document.getElementById('tabInterface').classList.toggle('active', tabName === 'interface');
-            document.getElementById('tabInterface').classList.toggle('border-blue-500', tabName === 'interface');
-            document.getElementById('tabInterface').classList.toggle('border-transparent', tabName !== 'interface');
-            
-            document.getElementById('tabRealBody').classList.toggle('active', tabName === 'realBody');
-            document.getElementById('tabRealBody').classList.toggle('border-blue-500', tabName === 'realBody');
-            document.getElementById('tabRealBody').classList.toggle('border-transparent', tabName !== 'realBody');
-            
-            if (tabName === 'realBody') {
-                updateHardwareStatus();
-                updateMemoryDisplay();
+            const tabs = ['Interface', 'Embodied'];
+            tabs.forEach(tab => {
+                const tabEl = document.getElementById(`tab${tab}`);
+                const isActive = tabName === tab.toLowerCase();
+                tabEl.classList.toggle('active', isActive);
+                tabEl.classList.toggle('border-blue-500', isActive);
+                tabEl.classList.toggle('border-transparent', !isActive);
+            });
+
+            if (tabName === 'embodied') {
+                updateEmbodiedAgentData();
             }
         }
 
-        // Hardware Control Functions
-        async function setLedManually(intensity) {
-            try {
-                const response = await fetch('/api/hardware/led', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ intensity: parseInt(intensity) })
-                });
-                
-                if (response.ok) {
-                    updateLedDisplay(intensity);
-                    addLog('MANUAL', `LED set to ${intensity}%`);
-                }
-            } catch (error) {
-                addLog('ERROR', `LED control failed: ${error.message}`);
-            }
-        }
-
-        async function setHandManually(hand, position) {
-            try {
-                const response = await fetch('/api/hardware/hands', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ hand: hand, position: parseInt(position) })
-                });
-                
-                if (response.ok) {
-                    updateHandDisplay(hand, position);
-                    addLog('MANUAL', `Hand ${hand} set to ${position}%`);
-                }
-            } catch (error) {
-                addLog('ERROR', `Hand control failed: ${error.message}`);
-            }
-        }
-
-        function updateLedDisplay(intensity) {
-            document.getElementById('ledValue').textContent = `${intensity}%`;
-            document.getElementById('ledSlider').value = intensity;
-            
-            // Update LED indicator color
-            const colorValue = Math.floor((intensity / 100) * 255);
-            document.getElementById('ledIndicator').style.backgroundColor = `rgb(${colorValue}, ${colorValue}, ${colorValue})`;
-        }
-
-        function updateHandDisplay(hand, position) {
-            const statusText = position <= 10 ? 'closed' : 
-                              position >= 90 ? 'open_max' : 
-                              `open_${position}%`;
-            
-            document.getElementById(`${hand}HandValue`).textContent = `${position}% (${statusText})`;
-            document.getElementById(`${hand}HandSlider`).value = position;
-        }
-
-        async function updateHardwareStatus() {
-            try {
-                const response = await fetch('/api/hardware');
-                if (response.ok) {
-                    const data = await response.json();
-                    
-                    // Update LED
-                    updateLedDisplay(data.led_intensity);
-                    
-                    // Update Hands
-                    updateHandDisplay('left', data.hands.left.position);
-                    updateHandDisplay('right', data.hands.right.position);
-                }
-            } catch (error) {
-                addLog('ERROR', `Hardware status update failed: ${error.message}`);
-            }
-        }
-
-        async function updateMemoryDisplay() {
-            try {
-                const response = await fetch('/api/memory');
-                if (response.ok) {
-                    const data = await response.json();
-                    const memoryDiv = document.getElementById('memoryDisplay');
-                    
-                    if (data.length === 0) {
-                        memoryDiv.innerHTML = '<div class="text-gray-500">Memory banks empty</div>';
-                    } else {
-                        memoryDiv.innerHTML = data.map(entry => 
-                            `<div class="text-blue-600"><span class="text-gray-500">[${entry.timestamp}]</span> ${entry.content}</div>`
-                        ).join('');
-                    }
-                }
-            } catch (error) {
-                addLog('ERROR', `Memory update failed: ${error.message}`);
-            }
-        }
 
         // Voice System Functions
         async function startVoiceServer() {
             const startBtn = document.getElementById('voiceStartBtn');
             const stopBtn = document.getElementById('voiceStopBtn');
-            
+
             try {
                 startBtn.disabled = true;
-                startBtn.textContent = '🔄 STARTING...';
-                
+                startBtn.textContent = 'STARTING...';
+
                 addLog('VOICE', 'Starting Assaultron voice system...');
-                updateVoiceStatus(false, 'Starting voice system...', 'Starting', 'Loading');
-                
+                updateVoiceStatus(false, 'Starting...', 'Starting', 'Loading');
+
                 const response = await fetch('/api/voice/start', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     addLog('VOICE', 'Voice system started successfully!');
-                    updateVoiceStatus(true, 'Voice system online', 'Running', 'Loaded');
-                    
+                    updateVoiceStatus(true, 'Online', 'Running', 'Loaded');
+
                     startBtn.disabled = true;
                     stopBtn.disabled = false;
-                    startBtn.textContent = '✅ VOICE ONLINE';
+                    startBtn.textContent = 'ONLINE';
                 } else {
                     throw new Error(data.error || 'Failed to start voice system');
                 }
-                
+
             } catch (error) {
                 addLog('ERROR', `Voice system startup failed: ${error.message}`);
-                updateVoiceStatus(false, 'Voice system offline - startup failed', 'Stopped', 'Not loaded');
-                
+                updateVoiceStatus(false, 'Offline', 'Stopped', 'Not loaded');
+
                 startBtn.disabled = false;
-                startBtn.textContent = '🚀 START VOICE SERVER';
+                startBtn.textContent = 'START';
             }
         }
 
         async function stopVoiceServer() {
             const startBtn = document.getElementById('voiceStartBtn');
             const stopBtn = document.getElementById('voiceStopBtn');
-            
+
             try {
                 stopBtn.disabled = true;
-                stopBtn.textContent = '🔄 STOPPING...';
-                
+                stopBtn.textContent = 'STOPPING...';
+
                 addLog('VOICE', 'Stopping voice system...');
-                
+
                 const response = await fetch('/api/voice/stop', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' }
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     addLog('VOICE', 'Voice system stopped');
-                    updateVoiceStatus(false, 'Voice system offline', 'Stopped', 'Not loaded');
-                    
+                    updateVoiceStatus(false, 'Offline', 'Stopped', 'Not loaded');
+
                     startBtn.disabled = false;
                     stopBtn.disabled = true;
-                    startBtn.textContent = '🚀 START VOICE SERVER';
-                    stopBtn.textContent = '🛑 STOP VOICE SERVER';
+                    startBtn.textContent = 'START';
+                    stopBtn.textContent = 'STOP';
                 } else {
                     throw new Error(data.error || 'Failed to stop voice system');
                 }
@@ -603,7 +549,7 @@
             } catch (error) {
                 addLog('ERROR', `Voice system stop failed: ${error.message}`);
                 stopBtn.disabled = false;
-                stopBtn.textContent = '🛑 STOP VOICE SERVER';
+                stopBtn.textContent = 'STOP';
             }
         }
 
@@ -705,6 +651,121 @@
             }
         }
 
+        // Embodied Agent Functions
+        async function updateEmbodiedAgentData() {
+            await Promise.all([
+                updateVirtualWorld(),
+                updateBehaviorHistory(),
+                updateStateHistory()
+            ]);
+        }
+
+        async function updateVirtualWorld() {
+            try {
+                const response = await fetch('/api/embodied/virtual_world');
+                if (response.ok) {
+                    const data = await response.json();
+
+                    // Update cognitive state
+                    if (data.cognitive_state) {
+                        document.getElementById('cogGoal').textContent = data.cognitive_state.goal || 'idle';
+                        document.getElementById('cogEmotion').textContent = data.cognitive_state.emotion || 'neutral';
+                        document.getElementById('cogConfidence').textContent = (data.cognitive_state.confidence || 0).toFixed(2);
+                        document.getElementById('cogUrgency').textContent = (data.cognitive_state.urgency || 0).toFixed(2);
+                        document.getElementById('cogFocus').textContent = data.cognitive_state.focus || 'null';
+                    }
+
+                    // Update body state
+                    if (data.body_state) {
+                        document.getElementById('bodyPosture').textContent = data.body_state.posture || 'idle';
+                        document.getElementById('bodyLuminance').textContent = data.body_state.luminance || 'dim';
+                        document.getElementById('bodyLeftHand').textContent = data.body_state.left_hand || 'closed';
+                        document.getElementById('bodyRightHand').textContent = data.body_state.right_hand || 'closed';
+                        document.getElementById('bodyAttention').textContent = data.body_state.attention_focus || 'null';
+                    }
+
+                    // Update world state
+                    if (data.world_state) {
+                        document.getElementById('worldEnv').textContent = data.world_state.environment || 'normal';
+                        document.getElementById('worldThreat').textContent = data.world_state.threat_level || 'none';
+                        document.getElementById('worldEntities').textContent =
+                            (data.world_state.entities && data.world_state.entities.length > 0) ?
+                            data.world_state.entities.join(', ') : 'none';
+                        document.getElementById('worldTime').textContent = data.world_state.time_of_day || 'unknown';
+                    }
+
+                    // Update motion/hardware state (from last hardware state)
+                    const hwResponse = await fetch('/api/hardware');
+                    if (hwResponse.ok) {
+                        const hwData = await hwResponse.json();
+                        document.getElementById('motionLED').textContent = `${hwData.led_intensity}%`;
+                        document.getElementById('motionLeftPos').textContent = hwData.hands.left.position;
+                        document.getElementById('motionRightPos').textContent = hwData.hands.right.position;
+                        document.getElementById('motionHandMode').textContent = hwData.hands.mode || 'idle';
+                    }
+                }
+            } catch (error) {
+                addLog('ERROR', `Failed to update embodied agent data: ${error.message}`);
+            }
+        }
+
+        async function updateBehaviorHistory() {
+            try {
+                const response = await fetch('/api/embodied/behavior_history');
+                if (response.ok) {
+                    const data = await response.json();
+                    const behaviorDiv = document.getElementById('behaviorHistory');
+
+                    if (data.length === 0) {
+                        behaviorDiv.innerHTML = '<div class="text-gray-500">No behaviors executed yet</div>';
+                    } else {
+                        behaviorDiv.innerHTML = data.map(entry => {
+                            const timestamp = new Date(entry.timestamp).toLocaleTimeString();
+                            const alternatives = entry.all_utilities ? entry.all_utilities.map(([name, utility]) =>
+                                `${name}: ${utility.toFixed(2)}`
+                            ).join(', ') : 'N/A';
+                            return `<div class="border-b border-indigo-200 pb-1 mb-1">
+                                <div class="font-bold text-indigo-600">[${timestamp}] ${entry.selected_behavior} (utility: ${entry.selected_utility.toFixed(2)})</div>
+                                <div class="text-gray-600">Goal: ${entry.cognitive_state.goal}, Emotion: ${entry.cognitive_state.emotion}</div>
+                                <div class="text-gray-500 text-xs">Alternatives: ${alternatives}</div>
+                            </div>`;
+                        }).join('');
+                    }
+                }
+            } catch (error) {
+                addLog('ERROR', `Failed to update behavior history: ${error.message}`);
+            }
+        }
+
+        async function updateStateHistory() {
+            try {
+                const response = await fetch('/api/embodied/state_history');
+                if (response.ok) {
+                    const data = await response.json();
+                    const stateDiv = document.getElementById('stateHistory');
+
+                    if (data.length === 0) {
+                        stateDiv.innerHTML = '<div class="text-gray-500">No state changes yet</div>';
+                    } else {
+                        stateDiv.innerHTML = data.map(entry => {
+                            const timestamp = new Date(entry.timestamp).toLocaleTimeString();
+                            const newState = entry.new_state || {};
+                            return `<div class="border-b border-teal-200 pb-1 mb-1">
+                                <div class="font-bold text-teal-600">[${timestamp}]</div>
+                                <div class="text-gray-600">
+                                    Posture: ${newState.posture || 'N/A'},
+                                    Luminance: ${newState.luminance || 'N/A'},
+                                    Hands: ${newState.left_hand || 'N/A'}/${newState.right_hand || 'N/A'}
+                                </div>
+                            </div>`;
+                        }).join('');
+                    }
+                }
+            } catch (error) {
+                addLog('ERROR', `Failed to update state history: ${error.message}`);
+            }
+        }
+
         // Initialize
         addLog('INFO', 'Interface started');
         updateStats();
@@ -714,12 +775,11 @@
         setInterval(updateStats, 2000);  // Update stats every 2 seconds
         setInterval(updateUptime, 1000); // Update uptime every second
         setInterval(() => {
-            if (currentTab === 'realBody') {
-                updateHardwareStatus();
-                updateMemoryDisplay();
+            if (currentTab === 'embodied') {
+                updateEmbodiedAgentData();
                 updateVoiceSystemStatus();
             }
-        }, 3000); // Update hardware status every 3 seconds when on Real Body tab
+        }, 3000); // Update tab-specific data every 3 seconds
     </script>
 </body>
 </html>

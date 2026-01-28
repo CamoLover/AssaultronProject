@@ -670,23 +670,38 @@ class VoiceManager:
     def synthesize_voice(self, text, play_audio=True, filename=None):
         """
         Synthesize text to speech using loaded Assaultron model
-        
+
         Args:
             text (str): Text to synthesize
             play_audio (bool): Whether to automatically play the audio
             filename (str): Optional custom filename (without extension)
-            
+
         Returns:
             str: Path to generated audio file, or None if failed
         """
         if not self.is_initialized:
             self.log("Voice system not initialized", "ERROR")
             return None
-        
+
         try:
             # Clean text for synthesis
             import re
-            clean_text = re.sub(r'\[.*?\]', '', text).strip()
+
+            # Remove square brackets and their contents
+            clean_text = re.sub(r'\[.*?\]', '', text)
+
+            # SECURITY: Remove parentheses and their contents
+            # This prevents the AI from adding stage directions or meta-commentary
+            # that would be synthesized to speech
+            # Example: "hello (pause for a bit) how are you?" → "hello how are you?"
+            clean_text = re.sub(r'\([^)]*\)', '', clean_text)
+
+            # Remove asterisks and stage directions (e.g., *looks around*)
+            clean_text = re.sub(r'\*[^*]*\*', '', clean_text)
+
+            # Clean up multiple spaces and strip
+            clean_text = re.sub(r'\s+', ' ', clean_text).strip()
+
             if not clean_text:
                 self.log("No text to synthesize after cleaning", "WARN")
                 return None

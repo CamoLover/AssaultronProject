@@ -1,3 +1,12 @@
+"""
+Assaultron Main Server - Embodied Agent Architecture
+
+This is the refactored main server that implements the behavior-based
+embodied agent system. The AI no longer uses tools to directly control
+hardware - instead it reasons about goals and emotions, which are then
+translated through behavioral and motion layers.
+"""
+
 from flask import Flask, render_template, request, jsonify
 import threading
 import time
@@ -8,14 +17,37 @@ from config import Config
 import psutil
 from voicemanager import VoiceManager
 
+# Import new embodied agent layers
+from virtual_body import (
+    VirtualWorld, BodyState, WorldState, CognitiveState, BodyCommand,
+    analyze_user_message_for_world_cues
+)
+from cognitive_layer import CognitiveEngine, extract_memory_from_message
+from behavioral_layer import BehaviorArbiter, describe_behavior_library
+from motion_controller import MotionController, HardwareStateValidator
+
+
 app = Flask(__name__)
 config = Config()
 
 
-class AssaultronCore:
+# ============================================================================
+# EMBODIED ASSAULTRON CORE
+# ============================================================================
+
+class EmbodiedAssaultronCore:
+    """
+    Main Assaultron system using embodied agent architecture.
+
+    Architecture layers:
+    1. Cognitive Layer: LLM reasoning about goals/emotions
+    2. Behavioral Layer: Selects behaviors based on cognitive state
+    3. Virtual Body: Maintains symbolic body state
+    4. Motion Controller: Translates symbolic states to hardware
+    """
+
     def __init__(self):
-        self.conversation_history = []
-        self.memory_context = []  # Enhanced memory for key information
+        # System state
         self.system_logs = []
         self.status = "Initializing..."
         self.ai_active = False
@@ -25,21 +57,37 @@ class AssaultronCore:
             "avg_response_time": 0,
             "last_response_time": 0
         }
-        
-        # Hardware state tracking
-        self.hardware_state = {
-            "led_intensity": 50,  # 0-100 percentage
-            "hands": {
-                "left": {"position": 0, "status": "closed"},    # 0-100 (closed to open)
-                "right": {"position": 0, "status": "closed"}
-            }
-        }
-        
-        # Initialize voice system with VoiceManager
+
+        # Initialize embodied agent layers
+        self.log_event("Initializing Embodied Agent Architecture...", "SYSTEM")
+
+        # Virtual World (body + environment)
+        self.virtual_world = VirtualWorld()
+        self.log_event("Virtual World initialized", "SYSTEM")
+
+        # Cognitive Layer (LLM interface)
+        self.cognitive_engine = CognitiveEngine(
+            ollama_url=Config.OLLAMA_URL,
+            model=Config.AI_MODEL,
+            system_prompt=Config.ASSAULTRON_PROMPT
+        )
+        self.log_event("Cognitive Engine initialized", "SYSTEM")
+
+        # Behavioral Layer (behavior selection)
+        self.behavior_arbiter = BehaviorArbiter()
+        self.log_event(f"Behavior Arbiter initialized with {len(self.behavior_arbiter.behaviors)} behaviors", "SYSTEM")
+
+        # Motion Controller (hardware translation)
+        self.motion_controller = MotionController()
+        self.log_event("Motion Controller initialized", "SYSTEM")
+
+        # Voice system
         self.voice_system = VoiceManager(logger=self)
         self.voice_enabled = False
-        
+        self.log_event("Voice Manager initialized", "SYSTEM")
+
     def log_event(self, message, event_type="INFO"):
+        """Log system events"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         log_entry = {
             "timestamp": timestamp,
@@ -47,462 +95,131 @@ class AssaultronCore:
             "message": message
         }
         self.system_logs.append(log_entry)
+
+        # Limit log size
+        if len(self.system_logs) > 1000:
+            self.system_logs = self.system_logs[-1000:]
+
         print(f"[{timestamp}] {event_type}: {message}")
-        
-    def analyze_context_and_suggest_actions(self, user_message):
-        """Analyze user message for contextual cues and suggest actions to AI"""
-        import re
-        user_lower = user_message.lower()
-        context_additions = []
-        
-        # Check for time/date requests ONLY (very specific phrases)
-        time_phrases = ["what time is it", "current time", "time now", "what's the time", "tell me the time"]
-        date_phrases = ["what date", "today's date", "what day is it", "current date", "what's today's date"]
-        
-        if any(phrase in user_lower for phrase in time_phrases):
-            context_additions.append("TOOL_REQUEST: User asking for current time. Use get_time tool.")
-            return context_additions
-        elif any(phrase in user_lower for phrase in date_phrases):
-            context_additions.append("TOOL_REQUEST: User asking for current date. Use get_date tool.")
-            return context_additions
-        
-        # Skip context analysis for other conversational questions that don't need hardware
-        conversation_keywords = [
-            "who", "where", "why", "how", "tell me", "explain", 
-            "thanks", "thank you", "hello", "hi", "good", "ok", "okay", "nice",
-            "created", "made", "built", "weather"
-        ]
-        
-        if any(keyword in user_lower for keyword in conversation_keywords) and \
-           not any(action_word in user_lower for action_word in ["grab", "close", "open", "dark", "bright", "light"]):
-            return context_additions  # Return empty for pure conversation
-        
-        # Lighting context detection
-        if any(phrase in user_lower for phrase in ["it's dark", "too dark", "can't see", "really dark", "very dark", "too dim"]):
-            context_additions.append("ENVIRONMENTAL_ASSESSMENT: Low light conditions detected. Recommend increasing LED intensity to 85-100% for optimal visibility.")
-        elif any(phrase in user_lower for phrase in ["too bright", "dim the light", "lower light", "too much light"]):
-            context_additions.append("ENVIRONMENTAL_ASSESSMENT: High light conditions detected. Recommend reducing LED intensity to 20-40%.")
-        elif any(phrase in user_lower for phrase in ["stealth", "hide", "quiet", "covert"]):
-            context_additions.append("TACTICAL_ASSESSMENT: Stealth operations required. Recommend LED intensity 0-10%.")
-        
-        # Object manipulation context
-        grab_match = re.search(r'grab.*?(left|right).*?hand', user_lower)
-        if grab_match:
-            hand = grab_match.group(1)
-            context_additions.append(f"MANIPULATION_COMMAND: Object acquisition requested with {hand} hand. Execute close grip protocol.")
-        elif "grab" in user_lower and ("left" in user_lower or "right" in user_lower):
-            if "left" in user_lower:
-                context_additions.append("MANIPULATION_COMMAND: Left hand object acquisition. Execute close grip protocol.")
-            if "right" in user_lower:
-                context_additions.append("MANIPULATION_COMMAND: Right hand object acquisition. Execute close grip protocol.")
-        elif any(phrase in user_lower for phrase in ["close both hands", "close your hands", "close hands", "both hands"]):
-            context_additions.append("MANIPULATION_COMMAND: Close both left and right hands. Use separate commands for each hand.")
-        elif any(phrase in user_lower for phrase in ["open hands", "release", "let go", "drop"]):
-            context_additions.append("MANIPULATION_COMMAND: Object release requested. Execute open hand protocol.")
-        
-        # Simple states
-        if any(phrase in user_lower for phrase in ["ready", "alert"]):
-            context_additions.append("SYSTEM_STATE: Alert mode - increase visibility and prepare hands.")
-        elif any(phrase in user_lower for phrase in ["relax", "at ease", "standby"]):
-            context_additions.append("SYSTEM_STATE: Standby mode - reduce power consumption.")
-        
-        return context_additions
-    
-    def add_to_memory(self, user_msg, ai_response):
-        """Add important context to long-term memory"""
-        # Extract key information patterns
-        import re
-        
-        # Look for important context markers
-        memory_triggers = [
-            r"my name is (\w+)",
-            r"i am (\w+)",
-            r"call me (\w+)",
-            r"remember that (.*)",
-            r"important: (.*)",
-            r"note: (.*)"
-        ]
-        
-        for trigger in memory_triggers:
-            matches = re.findall(trigger, user_msg.lower())
-            for match in matches:
-                memory_entry = {
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "type": "context",
-                    "content": match,
-                    "source": "user_input"
-                }
-                self.memory_context.append(memory_entry)
-                self.log_event(f"Added to memory: {match}", "MEMORY")
-        
-        # Limit memory to last 50 entries
-        if len(self.memory_context) > 50:
-            self.memory_context = self.memory_context[-50:]
-    
-    def execute_tool(self, tool_name, params=None):
-        """Execute a tool and return the result"""
-        if params is None:
-            params = {}
-        
-        try:
-            if tool_name == "get_time":
-                return self.tool_get_time()
-            elif tool_name == "get_date":
-                return self.tool_get_date()
-            elif tool_name == "set_led_intensity":
-                intensity = int(params.get("intensity", 50))
-                return self.tool_set_led_intensity(intensity)
-            elif tool_name == "set_hand_left_open":
-                position = int(params.get("position", 100))
-                return self.tool_set_hand_left_open(position)
-            elif tool_name == "set_hand_left_close":
-                position = int(params.get("position", 100))
-                return self.tool_set_hand_left_close(position)
-            elif tool_name == "set_hand_right_open":
-                position = int(params.get("position", 100))
-                return self.tool_set_hand_right_open(position)
-            elif tool_name == "set_hand_right_close":
-                position = int(params.get("position", 100))
-                return self.tool_set_hand_right_close(position)
-            # Future tools can be added here:
-            # elif tool_name == "camera_scan":
-            #     return self.tool_camera_scan(params)
-            # elif tool_name == "sensor_reading":
-            #     return self.tool_sensor_reading(params.get("sensor_type"))
-            else:
-                return {"error": f"Unknown tool: {tool_name}"}
-        except Exception as e:
-            return {"error": f"Tool execution failed: {str(e)}"}
-    
-    def tool_get_time(self):
-        """Get current time"""
-        current_time = datetime.now()
-        return {
-            "success": True,
-            "time": current_time.strftime("%H:%M:%S"),
-            "formatted": current_time.strftime("%I:%M %p"),
-            "timestamp": current_time.isoformat()
-        }
-    
-    def tool_get_date(self):
-        """Get current date"""
-        current_date = datetime.now()
-        return {
-            "success": True,
-            "date": current_date.strftime("%Y-%m-%d"),
-            "formatted": current_date.strftime("%A, %B %d, %Y"),
-            "day_of_week": current_date.strftime("%A")
-        }
-    
-    def tool_set_led_intensity(self, intensity):
-        """Set LED intensity (0-100%)"""
-        if 0 <= intensity <= 100:
-            self.hardware_state["led_intensity"] = intensity
-            self.log_event(f"LED intensity set to {intensity}%", "TOOL")
-            return {
-                "success": True,
-                "intensity": intensity,
-                "message": f"LED intensity set to {intensity}%"
-            }
-        else:
-            return {
-                "success": False,
-                "error": f"Intensity must be between 0 and 100, got {intensity}"
-            }
-    
-    def tool_set_hand_left_open(self, position):
-        """Open left hand (OPEN commands: 0=closed, 100=fully open)"""
-        if 0 <= position <= 100:
-            self.hardware_state["hands"]["left"]["position"] = position
-            
-            # Update status based on position
-            if position <= 10:
-                self.hardware_state["hands"]["left"]["status"] = "closed"
-            elif position >= 90:
-                self.hardware_state["hands"]["left"]["status"] = "open_max"
-            else:
-                self.hardware_state["hands"]["left"]["status"] = f"open_{position}%"
-            
-            self.log_event(f"Left hand opened to {position}%", "TOOL")
-            return {
-                "success": True,
-                "hand": "left",
-                "action": "open",
-                "position": position,
-                "status": self.hardware_state["hands"]["left"]["status"],
-                "message": f"Left hand opened to {position}%"
-            }
-        else:
-            return {
-                "success": False,
-                "error": f"Position must be between 0 and 100, got {position}"
-            }
-    
-    def tool_set_hand_left_close(self, position):
-        """Close left hand (CLOSE commands: 0=fully open, 100=fully closed)"""
-        if 0 <= position <= 100:
-            # Convert: CLOSE position (0-100) -> actual position (100-0)
-            # position=100 (close command) -> actual position=0 (fully closed)
-            # position=0 (close command) -> actual position=100 (fully open)
-            actual_position = 100 - position
-            
-            self.hardware_state["hands"]["left"]["position"] = actual_position
-            
-            # Update status based on final position
-            if actual_position <= 10:
-                self.hardware_state["hands"]["left"]["status"] = "closed"
-            elif actual_position >= 90:
-                self.hardware_state["hands"]["left"]["status"] = "open_max"
-            else:
-                self.hardware_state["hands"]["left"]["status"] = f"open_{actual_position}%"
-            
-            self.log_event(f"Left hand closed to {position}% grip (actual position: {actual_position}%)", "TOOL")
-            return {
-                "success": True,
-                "hand": "left",
-                "action": "close",
-                "grip_strength": position,
-                "actual_position": actual_position,
-                "status": self.hardware_state["hands"]["left"]["status"],
-                "message": f"Left hand closed to {position}% grip strength"
-            }
-        else:
-            return {
-                "success": False,
-                "error": f"Position must be between 0 and 100, got {position}"
-            }
-    
-    def tool_set_hand_right_open(self, position):
-        """Open right hand (OPEN commands: 0=closed, 100=fully open)"""
-        if 0 <= position <= 100:
-            self.hardware_state["hands"]["right"]["position"] = position
-            
-            # Update status based on position
-            if position <= 10:
-                self.hardware_state["hands"]["right"]["status"] = "closed"
-            elif position >= 90:
-                self.hardware_state["hands"]["right"]["status"] = "open_max"
-            else:
-                self.hardware_state["hands"]["right"]["status"] = f"open_{position}%"
-            
-            self.log_event(f"Right hand opened to {position}%", "TOOL")
-            return {
-                "success": True,
-                "hand": "right",
-                "action": "open",
-                "position": position,
-                "status": self.hardware_state["hands"]["right"]["status"],
-                "message": f"Right hand opened to {position}%"
-            }
-        else:
-            return {
-                "success": False,
-                "error": f"Position must be between 0 and 100, got {position}"
-            }
-    
-    def tool_set_hand_right_close(self, position):
-        """Close right hand (CLOSE commands: 0=fully open, 100=fully closed)"""
-        if 0 <= position <= 100:
-            # Convert: CLOSE position (0-100) -> actual position (100-0)
-            # position=100 (close command) -> actual position=0 (fully closed)
-            # position=0 (close command) -> actual position=100 (fully open)
-            actual_position = 100 - position
-            
-            self.hardware_state["hands"]["right"]["position"] = actual_position
-            
-            # Update status based on final position
-            if actual_position <= 10:
-                self.hardware_state["hands"]["right"]["status"] = "closed"
-            elif actual_position >= 90:
-                self.hardware_state["hands"]["right"]["status"] = "open_max"
-            else:
-                self.hardware_state["hands"]["right"]["status"] = f"open_{actual_position}%"
-            
-            self.log_event(f"Right hand closed to {position}% grip (actual position: {actual_position}%)", "TOOL")
-            return {
-                "success": True,
-                "hand": "right",
-                "action": "close",
-                "grip_strength": position,
-                "actual_position": actual_position,
-                "status": self.hardware_state["hands"]["right"]["status"],
-                "message": f"Right hand closed to {position}% grip strength"
-            }
-        else:
-            return {
-                "success": False,
-                "error": f"Position must be between 0 and 100, got {position}"
-            }
-    
-    def process_tool_requests(self, text):
-        """Extract and execute tool requests from AI response"""
-        import re
-        tools_executed = []
-        
-        # Look for tool requests in format [TOOL:tool_name] or [TOOL:tool_name:params]
-        tool_matches = re.findall(r'\[TOOL:([^:]+)(?::([^]]+))?\]', text)
-        
-        for tool_name, params_str in tool_matches:
-            params = {}
-            if params_str:
-                # Simple parameter parsing - can be extended
-                try:
-                    # Format: param1=value1,param2=value2
-                    for param in params_str.split(','):
-                        if '=' in param:
-                            key, value = param.split('=', 1)
-                            params[key.strip()] = value.strip()
-                except:
-                    pass
-            
-            result = self.execute_tool(tool_name, params)
-            tools_executed.append({
-                "tool": tool_name,
-                "params": params,
-                "result": result
-            })
-            
-            self.log_event(f"Tool executed: {tool_name} -> {result}", "TOOL")
-        
-        return tools_executed
-    
-    def inject_tool_results(self, ai_response, tools_executed):
-        """Replace tool tags in AI response with actual tool results"""
-        import re
-        
-        if not tools_executed:
-            return ai_response
-        
-        modified_response = ai_response
-        
-        for tool_exec in tools_executed:
-            tool_name = tool_exec["tool"]
-            result = tool_exec["result"]
-            
-            # Find the tool tag in the response
-            pattern = rf'\[TOOL:{re.escape(tool_name)}(?::[^\]]+)?\]'
-            
-            if result.get("success"):
-                if tool_name == "get_time":
-                    replacement = f"It's {result['formatted']}."
-                elif tool_name == "get_date":
-                    replacement = f"Today is {result['formatted']}."
-                elif tool_name == "set_led_intensity":
-                    # Hardware tools can be removed from response, they execute silently
-                    replacement = ""
-                elif tool_name.startswith("set_hand_"):
-                    # Hardware tools can be removed from response, they execute silently
-                    replacement = ""
-                else:
-                    replacement = str(result)
-            else:
-                replacement = f"Tool error: {result.get('error', 'Unknown error')}"
-            
-            # Replace the tool tag with the result (remove if empty string)
-            modified_response = re.sub(pattern, replacement, modified_response, count=1)
-        
-        return modified_response
-        
-    def send_to_ai(self, message):
-        """Send message to Ollama AI model"""
+
+    def process_message(self, user_message: str) -> dict:
+        """
+        Process user message through the embodied agent pipeline.
+
+        Pipeline:
+        1. Update world state based on user message cues
+        2. Cognitive Layer: LLM generates CognitiveState
+        3. Behavioral Layer: Select and execute behavior
+        4. Motion Controller: Translate to hardware
+        5. Update virtual body
+        6. Voice synthesis (if enabled)
+
+        Returns:
+            Dictionary with response, hardware state, and metadata
+        """
         start_time = time.time()
+
         try:
-            self.log_event(f"Sending message to AI: {message[:50]}...", "AI")
-            
-            # Prepare the conversation context
-            messages = [
-                {"role": "system", "content": config.ASSAULTRON_PROMPT},
-            ]
-            
-            # Add memory context if available
-            if self.memory_context:
-                memory_summary = "MEMORY BANKS: "
-                for mem in self.memory_context[-10:]:  # Last 10 memory entries
-                    memory_summary += f"{mem['content']}; "
-                messages.append({"role": "system", "content": memory_summary})
-            
-            # Analyze user message for contextual cues
-            context_cues = self.analyze_context_and_suggest_actions(message)
-            if context_cues:
-                context_msg = "CONTEXTUAL_ANALYSIS: " + " ".join(context_cues)
-                messages.append({"role": "system", "content": context_msg})
-                self.log_event(f"Context detected: {len(context_cues)} cues", "CONTEXT")
-            
-            # Add recent conversation history
-            for entry in self.conversation_history[-8:]:  # Increased from 5 to 8 for better context
-                messages.append({"role": "user", "content": entry["user"]})
-                messages.append({"role": "assistant", "content": entry["assistant"]})
-            
-            messages.append({"role": "user", "content": message})
-            
-            # Send to Ollama
-            response = requests.post(f"{config.OLLAMA_URL}/api/chat", 
-                json={
-                    "model": config.AI_MODEL,
-                    "messages": messages,
-                    "stream": False
-                },
-                timeout=30
+            # Step 1: Analyze user message for world cues
+            world_updates = analyze_user_message_for_world_cues(user_message)
+            if world_updates:
+                self.virtual_world.update_world(**world_updates)
+                self.log_event(f"World state updated: {world_updates}", "WORLD")
+
+            # Get current states
+            world_state = self.virtual_world.get_world_state()
+            body_state = self.virtual_world.get_body_state()
+
+            # Step 2: Cognitive Layer - Generate intent
+            self.log_event("Cognitive processing...", "COGNITIVE")
+            memory_summary = self.cognitive_engine.get_memory_summary()
+
+            cognitive_state = self.cognitive_engine.process_input(
+                user_message=user_message,
+                world_state=world_state,
+                body_state=body_state,
+                memory_summary=memory_summary
             )
-            
-            response_time = round((time.time() - start_time) * 1000)  # Convert to ms
-            
-            if response.status_code == 200:
-                ai_response = response.json()["message"]["content"]
-                
-                # Update performance stats
-                self.performance_stats["total_requests"] += 1
-                self.performance_stats["last_response_time"] = response_time
-                
-                # Calculate rolling average
-                if self.performance_stats["avg_response_time"] == 0:
-                    self.performance_stats["avg_response_time"] = response_time
-                else:
-                    self.performance_stats["avg_response_time"] = round(
-                        (self.performance_stats["avg_response_time"] + response_time) / 2
-                    )
-                
-                # Process tool requests from AI response
-                tools_executed = self.process_tool_requests(ai_response)
-                
-                # Replace tool placeholders with actual results
-                original_response = ai_response
-                ai_response = self.inject_tool_results(ai_response, tools_executed)
-                if tools_executed:
-                    self.log_event(f"Tool injection: '{original_response}' → '{ai_response}'", "TOOL")
-                
-                # Add to memory
-                self.add_to_memory(message, ai_response)
-                
-                # Add to conversation history
-                self.conversation_history.append({
-                    "user": message,
-                    "assistant": ai_response,
-                    "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                    "response_time": response_time,
-                    "tools": tools_executed
-                })
-                
-                self.log_event(f"AI Response received ({response_time}ms): {ai_response[:50]}...", "AI")
-                
-                # Generate voice if enabled
-                if self.voice_enabled:
-                    self.voice_system.synthesize_async(ai_response)
-                
-                return ai_response
+
+            self.log_event(
+                f"Cognitive state: goal={cognitive_state.goal}, emotion={cognitive_state.emotion}",
+                "COGNITIVE"
+            )
+
+            # Step 3: Behavioral Layer - Select behavior
+            self.log_event("Behavior selection...", "BEHAVIOR")
+
+            body_command = self.behavior_arbiter.select_and_execute(
+                cognitive_state=cognitive_state,
+                body_state=body_state
+            )
+
+            # Step 4: Motion Controller - Translate to hardware
+            self.log_event("Motion translation...", "MOTION")
+
+            hardware_state = self.motion_controller.apply_body_command(body_command)
+
+            # Validate hardware state
+            is_valid, error = HardwareStateValidator.validate(hardware_state)
+            if not is_valid:
+                self.log_event(f"Hardware validation failed: {error}", "ERROR")
+
+            # Step 5: Update virtual body
+            self.virtual_world.update_body(body_command)
+
+            # Step 6: Extract and store memories
+            memory = extract_memory_from_message(user_message, cognitive_state.dialogue)
+            if memory:
+                self.cognitive_engine.add_memory(memory)
+                self.log_event(f"Memory stored: {memory['content']}", "MEMORY")
+
+            # Calculate performance metrics
+            response_time = round((time.time() - start_time) * 1000)
+            self.performance_stats["total_requests"] += 1
+            self.performance_stats["last_response_time"] = response_time
+
+            if self.performance_stats["avg_response_time"] == 0:
+                self.performance_stats["avg_response_time"] = response_time
             else:
-                error_msg = f"AI Error: HTTP {response.status_code}"
-                self.log_event(error_msg, "ERROR")
-                return "AI communication error occurred."
-                
+                self.performance_stats["avg_response_time"] = round(
+                    (self.performance_stats["avg_response_time"] + response_time) / 2
+                )
+
+            self.log_event(f"Response generated in {response_time}ms", "SYSTEM")
+
+            # Step 7: Voice synthesis (if enabled)
+            if self.voice_enabled:
+                self.voice_system.synthesize_async(cognitive_state.dialogue)
+
+            # Return complete response
+            return {
+                "success": True,
+                "dialogue": cognitive_state.dialogue,
+                "cognitive_state": cognitive_state.to_dict(),
+                "body_command": body_command.to_dict(),
+                "hardware_state": hardware_state,
+                "body_state": body_state.to_dict(),
+                "world_state": world_state.to_dict(),
+                "response_time": response_time,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
         except Exception as e:
             response_time = round((time.time() - start_time) * 1000)
-            error_msg = f"AI Communication failed: {str(e)}"
+            error_msg = f"Processing failed: {str(e)}"
             self.log_event(error_msg, "ERROR")
-            return "Unable to communicate with AI system."
-    
-    # Voice system initialization is now handled by the start_server_and_load_model method
-    
+
+            import traceback
+            traceback.print_exc()
+
+            return {
+                "success": False,
+                "error": error_msg,
+                "dialogue": "System error. Give me a moment to recalibrate.",
+                "response_time": response_time,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+
     def initialize_ai(self):
         """Initialize AI connection"""
         try:
@@ -510,7 +227,7 @@ class AssaultronCore:
             response = requests.get(f"{config.OLLAMA_URL}/api/tags", timeout=10)
             if response.status_code == 200:
                 self.ai_active = True
-                self.status = "AI Online - Assaultron Ready"
+                self.status = "AI Online - Embodied Agent Ready"
                 self.log_event("AI connection established successfully", "SYSTEM")
             else:
                 self.status = "AI Connection Failed"
@@ -519,37 +236,103 @@ class AssaultronCore:
             self.status = "AI Connection Failed"
             self.log_event(f"AI initialization error: {str(e)}", "ERROR")
 
-# Initialize Assaultron
-assaultron = AssaultronCore()
+    def get_hardware_state(self):
+        """Get current hardware state (backward compatible)"""
+        return self.motion_controller.get_hardware_state()
+
+    def set_hardware_manual(self, led_intensity=None, hand_left=None, hand_right=None):
+        """
+        Manually override hardware state.
+
+        This is for manual control via web UI. It bypasses the embodied
+        agent pipeline and directly updates hardware.
+        """
+        hardware = self.motion_controller.hardware_state
+
+        if led_intensity is not None:
+            if 0 <= led_intensity <= 100:
+                hardware["led_intensity"] = led_intensity
+                self.log_event(f"LED manually set to {led_intensity}%", "MANUAL")
+
+        if hand_left is not None:
+            if 0 <= hand_left <= 100:
+                hardware["hands"]["left"]["position"] = hand_left
+                hardware["hands"]["left"]["status"] = self._position_to_status(hand_left)
+                self.log_event(f"Left hand manually set to {hand_left}%", "MANUAL")
+
+        if hand_right is not None:
+            if 0 <= hand_right <= 100:
+                hardware["hands"]["right"]["position"] = hand_right
+                hardware["hands"]["right"]["status"] = self._position_to_status(hand_right)
+                self.log_event(f"Right hand manually set to {hand_right}%", "MANUAL")
+
+    def _position_to_status(self, position: int) -> str:
+        """Convert position to status string"""
+        if position <= 10:
+            return "closed"
+        elif position <= 40:
+            return "relaxed"
+        elif position <= 65:
+            return "pointing"
+        else:
+            return "open"
+
+
+# ============================================================================
+# FLASK APPLICATION
+# ============================================================================
+
+# Initialize Embodied Assaultron
+assaultron = EmbodiedAssaultronCore()
+
 
 @app.route('/')
 def index():
     return render_template('index.html')
 
+
 @app.route('/api/chat', methods=['POST'])
 def chat():
+    """
+    Main chat endpoint - processes user message through embodied agent pipeline.
+    """
     data = request.get_json()
     message = data.get('message', '').strip()
-    
+
     if not message:
         return jsonify({"error": "Empty message"}), 400
-    
-    # Get AI response
-    ai_response = assaultron.send_to_ai(message)
-    
-    return jsonify({
-        "response": ai_response,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    })
+
+    # Process through embodied agent pipeline
+    result = assaultron.process_message(message)
+
+    if result["success"]:
+        # Return response in format compatible with existing web UI
+        return jsonify({
+            "response": result["dialogue"],
+            "timestamp": result["timestamp"],
+            "cognitive_state": result.get("cognitive_state"),
+            "hardware_state": result.get("hardware_state"),
+            "body_state": result.get("body_state")
+        })
+    else:
+        return jsonify({
+            "response": result["dialogue"],
+            "error": result.get("error"),
+            "timestamp": result["timestamp"]
+        }), 500
+
 
 @app.route('/api/logs')
 def get_logs():
-    return jsonify(assaultron.system_logs[-50:])  # Last 50 logs
+    """Get system logs"""
+    return jsonify(assaultron.system_logs[-50:])
+
 
 @app.route('/api/status')
 def get_status():
+    """Get system status"""
     uptime_seconds = (datetime.now() - assaultron.start_time).total_seconds()
-    
+
     # Get system stats
     try:
         cpu_percent = psutil.cpu_percent()
@@ -558,176 +341,153 @@ def get_status():
     except:
         cpu_percent = 0
         memory_percent = 0
-    
+
     return jsonify({
         "status": assaultron.status,
         "ai_active": assaultron.ai_active,
-        "conversation_count": len(assaultron.conversation_history),
+        "conversation_count": len(assaultron.cognitive_engine.conversation_history),
         "uptime_seconds": int(uptime_seconds),
         "performance": assaultron.performance_stats,
         "system": {
             "cpu_percent": cpu_percent,
             "memory_percent": memory_percent
-        }
+        },
+        "architecture": "embodied_agent"
     })
+
 
 @app.route('/api/history')
 def get_history():
-    return jsonify(assaultron.conversation_history[-10:])  # Last 10 conversations
+    """Get conversation history"""
+    history = assaultron.cognitive_engine.get_conversation_history(limit=10)
+    return jsonify(history)
+
 
 @app.route('/api/hardware')
 def get_hardware():
-    """Get current hardware state"""
-    return jsonify(assaultron.hardware_state)
+    """Get current hardware state (backward compatible)"""
+    return jsonify(assaultron.get_hardware_state())
+
 
 @app.route('/api/memory')
 def get_memory():
     """Get AI memory context"""
-    return jsonify(assaultron.memory_context[-20:])  # Last 20 memory entries
+    memories = assaultron.cognitive_engine.memory_context[-20:]
+    return jsonify(memories)
+
 
 @app.route('/api/hardware/led', methods=['POST'])
 def set_led():
-    """Manually set LED intensity"""
+    """Manually set LED intensity (bypass embodied agent)"""
     data = request.get_json()
     intensity = data.get('intensity', 50)
+
     if 0 <= intensity <= 100:
-        assaultron.hardware_state["led_intensity"] = intensity
-        assaultron.log_event(f"LED manually set to {intensity}%", "MANUAL")
+        assaultron.set_hardware_manual(led_intensity=intensity)
         return jsonify({"success": True, "intensity": intensity})
+
     return jsonify({"error": "Invalid intensity value"}), 400
+
 
 @app.route('/api/hardware/hands', methods=['POST'])
 def set_hands():
-    """Manually set hand positions"""
+    """Manually set hand positions (bypass embodied agent)"""
     data = request.get_json()
     hand = data.get('hand')  # 'left' or 'right'
     position = data.get('position', 0)
-    
-    if hand in ['left', 'right'] and 0 <= position <= 100:
-        assaultron.hardware_state["hands"][hand]["position"] = position
-        if position <= 10:
-            assaultron.hardware_state["hands"][hand]["status"] = "closed"
-        elif position >= 90:
-            assaultron.hardware_state["hands"][hand]["status"] = "open_max"
-        else:
-            assaultron.hardware_state["hands"][hand]["status"] = f"open_{position}%"
-        
-        assaultron.log_event(f"Hand {hand} manually set to {position}%", "MANUAL")
-        return jsonify({"success": True, "hand": hand, "position": position})
-    return jsonify({"error": "Invalid hand or position value"}), 400
 
-@app.route('/api/debug/last_response')
-def get_last_response():
-    """Get the last AI response for debugging"""
-    if assaultron.conversation_history:
-        last = assaultron.conversation_history[-1]
-        return jsonify({
-            "raw_response": last["assistant"],
-            "actions_found": last.get("actions", []),
-            "tools_found": last.get("tools", []),
-            "user_message": last["user"]
-        })
-    return jsonify({"error": "No conversation history"})
+    if hand not in ['left', 'right']:
+        return jsonify({"error": "Invalid hand (must be 'left' or 'right')"}), 400
 
-@app.route('/api/tools/execute', methods=['POST'])
-def execute_tool():
-    """Manually execute a tool"""
-    data = request.get_json()
-    tool_name = data.get('tool')
-    params = data.get('params', {})
-    
-    if tool_name:
-        result = assaultron.execute_tool(tool_name, params)
-        return jsonify(result)
-    return jsonify({"error": "Tool name required"}), 400
+    if not (0 <= position <= 100):
+        return jsonify({"error": "Invalid position (must be 0-100)"}), 400
 
-@app.route('/api/tools/available')
-def get_available_tools():
-    """Get list of available tools"""
+    if hand == 'left':
+        assaultron.set_hardware_manual(hand_left=position)
+    else:
+        assaultron.set_hardware_manual(hand_right=position)
+
+    return jsonify({"success": True, "hand": hand, "position": position})
+
+
+# ============================================================================
+# EMBODIED AGENT API ENDPOINTS
+# ============================================================================
+
+@app.route('/api/embodied/virtual_world')
+def get_virtual_world():
+    """Get complete virtual world state"""
+    return jsonify(assaultron.virtual_world.to_dict())
+
+
+@app.route('/api/embodied/body_state')
+def get_body_state():
+    """Get current virtual body state"""
+    return jsonify(assaultron.virtual_world.get_body_state().to_dict())
+
+
+@app.route('/api/embodied/world_state')
+def get_world_state():
+    """Get current world perception state"""
+    return jsonify(assaultron.virtual_world.get_world_state().to_dict())
+
+
+@app.route('/api/embodied/behavior_history')
+def get_behavior_history():
+    """Get behavior selection history"""
+    history = assaultron.behavior_arbiter.get_selection_history(limit=20)
+    return jsonify(history)
+
+
+@app.route('/api/embodied/behaviors')
+def get_available_behaviors():
+    """Get list of available behaviors"""
+    behaviors = describe_behavior_library()
     return jsonify({
-        "tools": [
-            {
-                "name": "get_time",
-                "description": "Get current time",
-                "parameters": []
-            },
-            {
-                "name": "get_date", 
-                "description": "Get current date",
-                "parameters": []
-            },
-            {
-                "name": "set_led_intensity",
-                "description": "Set LED brightness intensity",
-                "parameters": [
-                    {
-                        "name": "intensity",
-                        "type": "integer",
-                        "description": "LED intensity from 0 (off) to 100 (max brightness)",
-                        "required": True
-                    }
-                ]
-            },
-            {
-                "name": "set_hand_left_open",
-                "description": "Open left hand",
-                "parameters": [
-                    {
-                        "name": "position",
-                        "type": "integer",
-                        "description": "Hand opening position from 0 (closed) to 100 (fully open)",
-                        "required": True
-                    }
-                ]
-            },
-            {
-                "name": "set_hand_left_close",
-                "description": "Close left hand (grip)",
-                "parameters": [
-                    {
-                        "name": "position",
-                        "type": "integer",
-                        "description": "Grip strength from 0 (fully open) to 100 (fully closed)",
-                        "required": True
-                    }
-                ]
-            },
-            {
-                "name": "set_hand_right_open",
-                "description": "Open right hand",
-                "parameters": [
-                    {
-                        "name": "position",
-                        "type": "integer",
-                        "description": "Hand opening position from 0 (closed) to 100 (fully open)",
-                        "required": True
-                    }
-                ]
-            },
-            {
-                "name": "set_hand_right_close",
-                "description": "Close right hand (grip)",
-                "parameters": [
-                    {
-                        "name": "position",
-                        "type": "integer",
-                        "description": "Grip strength from 0 (fully open) to 100 (fully closed)",
-                        "required": True
-                    }
-                ]
-            }
-        ]
+        "behaviors": behaviors,
+        "count": len(behaviors)
     })
+
+
+@app.route('/api/embodied/state_history')
+def get_state_history():
+    """Get virtual body state transition history"""
+    history = assaultron.virtual_world.get_history(limit=20)
+    return jsonify(history)
+
+
+@app.route('/api/embodied/world_state', methods=['POST'])
+def update_world_state():
+    """
+    Manually update world state (for testing/simulation).
+
+    Accepts: environment, threat_level, entities, time_of_day
+    """
+    data = request.get_json()
+
+    try:
+        assaultron.virtual_world.update_world(**data)
+        assaultron.log_event(f"World state manually updated: {data}", "MANUAL")
+        return jsonify({
+            "success": True,
+            "world_state": assaultron.virtual_world.get_world_state().to_dict()
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
+# ============================================================================
+# VOICE SYSTEM ENDPOINTS (unchanged)
+# ============================================================================
 
 @app.route('/api/voice/start', methods=['POST'])
 def start_voice_server():
     """Start xVAsynth server and load Assaultron voice model"""
     try:
         assaultron.log_event("Starting Assaultron voice system...", "VOICE")
-        
-        # Run the complete voice startup process
+
         result = assaultron.voice_system.initialize_complete_system()
-        
+
         if result["success"]:
             assaultron.voice_enabled = True
             assaultron.log_event("Assaultron voice system online", "VOICE")
@@ -743,11 +503,12 @@ def start_voice_server():
                 "error": result["error"],
                 "voice_enabled": False
             }), 500
-            
+
     except Exception as e:
         error_msg = f"Voice system startup exception: {str(e)}"
         assaultron.log_event(error_msg, "ERROR")
         return jsonify({"success": False, "error": error_msg}), 500
+
 
 @app.route('/api/voice/stop', methods=['POST'])
 def stop_voice_server():
@@ -760,21 +521,22 @@ def stop_voice_server():
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
 
+
 @app.route('/api/voice/speak', methods=['POST'])
 def manual_speak():
     """Manually trigger speech synthesis"""
     data = request.get_json()
     text = data.get('text', '')
-    
+
     if not text:
         return jsonify({"error": "Text required"}), 400
-    
+
     if not assaultron.voice_enabled:
         return jsonify({"error": "Voice system not enabled"}), 400
-    
-    # Generate speech asynchronously
-    thread = assaultron.voice_system.synthesize_async(text)
+
+    assaultron.voice_system.synthesize_async(text)
     return jsonify({"success": True, "message": "Speech generation started"})
+
 
 @app.route('/api/voice/status')
 def voice_status():
@@ -783,11 +545,48 @@ def voice_status():
     status["voice_enabled"] = assaultron.voice_enabled
     return jsonify(status)
 
+
+# ============================================================================
+# BACKWARD COMPATIBILITY ENDPOINTS
+# ============================================================================
+
+@app.route('/api/debug/last_response')
+def get_last_response():
+    """Get the last AI response for debugging"""
+    history = assaultron.cognitive_engine.get_conversation_history(limit=1)
+    if history:
+        last = history[-1]
+        return jsonify({
+            "raw_response": last["assistant"],
+            "user_message": last["user"],
+            "timestamp": last.get("timestamp")
+        })
+    return jsonify({"error": "No conversation history"})
+
+
+@app.route('/api/tools/available')
+def get_available_tools():
+    """
+    Legacy endpoint - tools are deprecated in embodied architecture.
+    Returns behavior library instead.
+    """
+    return jsonify({
+        "deprecated": True,
+        "message": "Tool system replaced with embodied agent architecture",
+        "behaviors": describe_behavior_library(),
+        "info": "The AI now reasons about goals and emotions instead of using tools"
+    })
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
+
 if __name__ == '__main__':
     # Initialize AI on startup
     threading.Thread(target=assaultron.initialize_ai, daemon=True).start()
-    
-    # Voice system will be initialized manually via web interface
-    
-    assaultron.log_event("Assaultron System Starting...", "SYSTEM")
+
+    assaultron.log_event("Embodied Assaultron System Starting...", "SYSTEM")
+    assaultron.log_event("Architecture: Cognitive → Behavioral → Motion", "SYSTEM")
+
     app.run(debug=True, host='127.0.0.1', port=8080)
