@@ -219,6 +219,9 @@ class CognitiveState:
     # Natural language dialogue response
     dialogue: str = ""
 
+    # Potential long-term memory to store (if important)
+    memory: Optional[str] = None
+
     def __post_init__(self):
         """Validate ranges"""
         self.confidence = max(0.0, min(1.0, self.confidence))
@@ -232,7 +235,8 @@ class CognitiveState:
             "confidence": self.confidence,
             "urgency": self.urgency,
             "focus": self.focus,
-            "dialogue": self.dialogue
+            "dialogue": self.dialogue,
+            "memory": self.memory
         }
 
     @classmethod
@@ -244,7 +248,8 @@ class CognitiveState:
             confidence=data["confidence"],
             urgency=data["urgency"],
             focus=data.get("focus"),
-            dialogue=data.get("dialogue", "")
+            dialogue=data.get("dialogue", ""),
+            memory=data.get("memory")
         )
 
 

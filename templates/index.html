@@ -442,6 +442,36 @@
                         </div>
                     </div>
 
+                    <!-- Core Memories Card -->
+                    <div
+                        class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-[300px]">
+                        <div class="bg-gray-800 px-3 py-2 border-b border-gray-700 flex justify-between items-center">
+                            <h3 class="font-bold text-white text-[10px] tracking-widest uppercase">Core Memories</h3>
+                            <div class="flex items-center gap-2">
+                                <span id="memoryCountBadge"
+                                    class="text-[10px] font-mono font-bold text-gray-400">0/10</span>
+                                <button onclick="addMemoryManual()" class="text-gray-400 hover:text-green-500"
+                                    title="Add Memory">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v16m8-8H4"></path>
+                                    </svg>
+                                </button>
+                                <button onclick="fetchLongTermMemories()" class="text-gray-400 hover:text-blue-500">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                        </path>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                        <div id="longTermMemoryList"
+                            class="flex-1 overflow-y-auto bg-white scrollbar-thin scrollbar-thumb-gray-200">
+                            <div class="p-4 text-center text-gray-300 italic text-xs">Accessing memory core...</div>
+                        </div>
+                    </div>
+
                     <!-- Behavior Logs -->
                     <div
                         class="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-[300px]">
@@ -956,6 +986,7 @@
 
             if (tabName === 'embodied') {
                 updateEmbodiedAgentData();
+                fetchLongTermMemories();
             }
 
             if (tabName === 'vision') {
@@ -1625,16 +1656,129 @@
             modelDisplay.textContent = `Active Model: ${model}`;
         }
 
-        // Initialize
-        addLog('INFO', 'Interface started');
+        // ============================================================================
+        // LONG TERM MEMORY FUNCTIONS
+        // ============================================================================
+        async function fetchLongTermMemories() {
+            try {
+                const response = await fetch('/api/embodied/long_term_memories');
+                const memories = await response.json();
+                renderLongTermMemories(memories);
+            } catch (error) {
+                console.error('Failed to fetch memories:', error);
+            }
+        }
+
+        function renderLongTermMemories(memories) {
+            const list = document.getElementById('longTermMemoryList');
+            if (!list) return;
+
+            list.innerHTML = '';
+
+            if (memories.length === 0) {
+                list.innerHTML = `<div class="p-4 text-center text-gray-400 italic text-xs">No core memories found.</div>`;
+                return;
+            }
+
+            memories.forEach((mem, index) => {
+                const div = document.createElement('div');
+                div.className = 'p-3 border-b border-gray-100 hover:bg-gray-50 flex items-start gap-3 group';
+                div.innerHTML = `
+                    <div class="flex-1">
+                        <p class="text-[11px] text-gray-700 leading-relaxed">${mem.content}</p>
+                        <p class="text-[9px] text-gray-400 mt-1 font-mono">${new Date(mem.timestamp).toLocaleString()}</p>
+                    </div>
+                    <div class="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onclick="editMemory(${index}, '${mem.content.replace(/'/g, "\\'")}')" class="p-1 text-blue-400 hover:text-blue-600">
+                             <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
+                        </button>
+                        <button onclick="deleteMemory(${index})" class="p-1 text-red-400 hover:text-red-600">
+                            <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                        </button>
+                    </div>
+                `;
+                list.appendChild(div);
+            });
+
+            // Update memory count badge
+            const countEl = document.getElementById('memoryCountBadge');
+            if (countEl) {
+                countEl.textContent = `${memories.length}/10`;
+                if (memories.length >= 10) countEl.classList.add('text-red-500');
+                else countEl.classList.remove('text-red-500');
+            }
+        }
+
+        async function addMemoryManual() {
+            const content = prompt("Enter new core memory:");
+            if (!content) return;
+
+            try {
+                const response = await fetch('/api/embodied/long_term_memories/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ content })
+                });
+                if (response.ok) {
+                    addLog('MEMORY', `Core memory added manually: ${content}`);
+                    fetchLongTermMemories();
+                } else {
+                    const data = await response.json();
+                    alert(data.error);
+                }
+            } catch (error) {
+                addLog('ERROR', 'Failed to add memory');
+            }
+        }
+
+        async function deleteMemory(index) {
+            if (!confirm("Delete this core memory?")) return;
+
+            try {
+                const response = await fetch('/api/embodied/long_term_memories/delete', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ index })
+                });
+                if (response.ok) {
+                    addLog('MEMORY', 'Core memory deleted');
+                    fetchLongTermMemories();
+                }
+            } catch (error) {
+                addLog('ERROR', 'Failed to delete memory');
+            }
+        }
+
+        async function editMemory(index, oldContent) {
+            const content = prompt("Edit core memory:", oldContent);
+            if (!content || content === oldContent) return;
+
+            try {
+                const response = await fetch('/api/embodied/long_term_memories/edit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ index, content })
+                });
+                if (response.ok) {
+                    addLog('MEMORY', 'Core memory updated');
+                    fetchLongTermMemories();
+                }
+            } catch (error) {
+                addLog('ERROR', 'Failed to edit memory');
+            }
+        }
+
+        // Initialize state
+        startTime = Date.now();
         updateStats();
-        getModelInfo();
-        getProviderStatus();
+        updateUptime();
+        setInterval(updateStats, 5000);
+        setInterval(updateUptime, 1000);
+
+        // Load history on startup
         loadHistory();
 
-        // Periodic updates
-        setInterval(updateStats, 2000);  // Update stats every 2 seconds
-        setInterval(updateUptime, 1000); // Update uptime every second
+        // Additional periodic updates (kept from original)
         setInterval(() => {
             if (currentTab === 'embodied') {
                 updateEmbodiedAgentData();

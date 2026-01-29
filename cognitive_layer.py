@@ -58,6 +58,10 @@ class CognitiveEngine:
         self.history_file = "conversation_history.json"
         self.conversation_history: List[Dict[str, str]] = self._load_history()
         
+        # Long-term memories
+        self.memory_file = "memories.json"
+        self.long_term_memories: List[Dict[str, Any]] = self._load_long_term_memories()
+        
         # Configure Gemini if selected
         if Config.LLM_PROVIDER == "gemini":
             if not GEMINI_AVAILABLE:
@@ -152,6 +156,10 @@ class CognitiveEngine:
         # Update conversation history
         self._update_history(user_message, cognitive_state.dialogue)
 
+        # Handle long-term memory extraction if suggested by the AI
+        if cognitive_state.memory:
+            self.manage_memory(cognitive_state.memory)
+
         return cognitive_state
 
     def _build_prompt(
@@ -206,14 +214,15 @@ class CognitiveEngine:
                 "content": f"CURRENT VISUAL PERCEPTION (what you see through your camera):\n{vision_context}\n\nYou can describe what you see when asked. This is your real-time vision."
             })
 
-        # 5. Memory summary
-        if memory_summary:
+        # 5. Long-term Memories (Persistent across sessions, max 10)
+        if self.long_term_memories:
+            memory_list = "\n".join([f"- {m['content']}" for m in self.long_term_memories])
             messages.append({
                 "role": "system",
-                "content": f"RELEVANT MEMORIES:\n{memory_summary}"
+                "content": f"CORE MEMORIES ABOUT THE OPERATOR (EVAN):\n{memory_list}\n\nThese are important facts you must never forget."
             })
 
-        # 5. Recent conversation history (last 8 exchanges)
+        # 6. Recent conversation history (last 8 exchanges)
         for exchange in self.conversation_history[-8:]:
             messages.append({"role": "user", "content": exchange["user"]})
             messages.append({"role": "assistant", "content": exchange["assistant"]})
@@ -266,7 +275,8 @@ You must provide TWO outputs:
     "confidence": <0.0-1.0>,
     "urgency": <0.0-1.0>,
     "focus": "<entity_id or null>",
-    "dialogue": "<your spoken response>"
+    "dialogue": "<your spoken response>",
+    "memory": "<OPTIONAL: a short factual memory to store about Evan or this event (use only for important things)>"
 }
 ```
 
@@ -599,7 +609,8 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 confidence=float(data.get("confidence", 0.5)),
                 urgency=float(data.get("urgency", 0.3)),
                 focus=data.get("focus"),
-                dialogue=clean_dialogue
+                dialogue=clean_dialogue,
+                memory=data.get("memory")
             )
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             print(f"[COGNITIVE WARNING] JSON parse error: {e}")
@@ -679,6 +690,97 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         """Clear conversation history both in memory and on disk"""
         self.conversation_history = []
         self._save_history()
+
+    def _load_long_term_memories(self) -> List[Dict[str, Any]]:
+        """Load long-term memories from disk"""
+        try:
+            import os
+            if os.path.exists(self.memory_file):
+                with open(self.memory_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] Failed to load long-term memories: {e}")
+        return []
+
+    def _save_long_term_memories(self) -> None:
+        """Save long-term memories to disk"""
+        try:
+            with open(self.memory_file, 'w', encoding='utf-8') as f:
+                json.dump(self.long_term_memories, f, indent=2)
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] Failed to save long-term memories: {e}")
+
+    def manage_memory(self, new_memory_content: str) -> bool:
+        """
+        Add a new memory, possibly replacing an existing one if full.
+        Uses an LLM call to decide importance.
+        """
+        if not new_memory_content:
+            return False
+
+        # If we have less than 10 memories, just add it
+        if len(self.long_term_memories) < 10:
+            # Check for duplicates or near duplicates? (skipped for now)
+            self.long_term_memories.append({
+                "content": new_memory_content,
+                "timestamp": datetime.now().isoformat()
+            })
+            self._save_long_term_memories()
+            print(f"[COGNITIVE] New memory stored: {new_memory_content}")
+            return True
+
+        # If we have 10, ask the AI to decide
+        try:
+            prompt = f"""
+You are the Memory Management Unit for ASR-7, an Assaultron robot.
+Your task is to decide if a NEW memory is more important than existing CORE MEMORIES.
+ASR-7 is deeply loyal to her creator, Evan.
+
+EXISTING MEMORIES:
+{chr(10).join([f"{i+1}. {m['content']}" for i, m in enumerate(self.long_term_memories)])}
+
+NEW POTENTIAL MEMORY:
+"{new_memory_content}"
+
+DECISION CRITERIA:
+1. Is the new memory significantly more important for ASR-7's relationship with Evan or her core mission?
+2. If YES, which existing memory (1-10) should be replaced? 
+3. If NO, should we keep all existing memories?
+
+RESPOND ONLY WITH THIS JSON:
+{{
+    "important": true/false,
+    "replace_index": 0-9,
+    "reason": "short explanation"
+}}
+"""
+            messages = [{"role": "system", "content": prompt}]
+            
+            # Simple call to existing AI provider
+            response_text = self._call_llm(messages)
+            
+            # Extract JSON
+            json_match = re.search(r'(\{.*?\})', response_text, re.DOTALL)
+            if json_match:
+                data = json.loads(json_match.group(1))
+                if data.get("important"):
+                    idx = data.get("replace_index")
+                    if idx is not None and 0 <= int(idx) < len(self.long_term_memories):
+                        old_mem = self.long_term_memories[int(idx)]["content"]
+                        self.long_term_memories[int(idx)] = {
+                            "content": new_memory_content,
+                            "timestamp": datetime.now().isoformat()
+                        }
+                        self._save_long_term_memories()
+                        print(f"[COGNITIVE] Memory Replaced: '{old_mem}' -> '{new_memory_content}'")
+                        return True
+            
+            print(f"[COGNITIVE] Memory discarded: '{new_memory_content}' (Not important enough)")
+            
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] Memory management failed: {e}")
+        
+        return False
 
     def add_memory(self, memory: Dict[str, Any]) -> None:
         """
