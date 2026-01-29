@@ -1,9 +1,20 @@
 ﻿import os
+from dotenv import load_dotenv
+
+# Load environment variables from .env file
+load_dotenv()
 
 class Config:
+    # LLM Choice: "ollama" or "gemini"
+    LLM_PROVIDER = "gemini"
+
+    # Gemini Configuration
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+    GEMINI_MODEL = "gemini-2.5-flash"
+    
     # Ollama Configuration
     OLLAMA_URL = "http://localhost:11434"
-    AI_MODEL = "gemma3:1b"  # Lightweight Gemma3 model for testing
+    AI_MODEL = "gemma3:1b"  # Backup local model
     
     # xVAsynth Configuration
     XVASYNTH_PATH = "./Content/xVAsynth"

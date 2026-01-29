@@ -15,6 +15,15 @@ import requests
 from datetime import datetime
 
 from virtual_body import CognitiveState, WorldState, BodyState
+from config import Config
+
+# Optional import for Gemini
+try:
+    import google.generativeai as genai
+    GEMINI_AVAILABLE = True
+except ImportError:
+    GEMINI_AVAILABLE = False
+
 
 
 # ============================================================================
@@ -47,10 +56,44 @@ class CognitiveEngine:
 
         # Conversation state
         self.conversation_history: List[Dict[str, str]] = []
+        
+        # Configure Gemini if selected
+        if Config.LLM_PROVIDER == "gemini":
+            if not GEMINI_AVAILABLE:
+                print("[COGNITIVE ERROR] google-generativeai not installed. Run: pip install google-generativeai")
+            elif Config.GEMINI_API_KEY and "YOUR_API_KEY" not in Config.GEMINI_API_KEY:
+                genai.configure(api_key=Config.GEMINI_API_KEY)
+                print(f"[COGNITIVE] Gemini configured with model {Config.GEMINI_MODEL}")
+            else:
+                print("[COGNITIVE WARNING] Gemini API Key not set! Update config.py")
         self.memory_context: List[Dict[str, Any]] = []
 
         # Warmup: preload model to avoid timeout on first request
         self._warmup_model()
+
+    def switch_provider(self, provider: str):
+        """Switch between 'ollama' and 'gemini' at runtime"""
+        if provider not in ["ollama", "gemini"]:
+            raise ValueError("Invalid provider. Use 'ollama' or 'gemini'")
+        
+        Config.LLM_PROVIDER = provider
+        
+        # Configure Gemini if switching to it
+        if provider == "gemini":
+            if not GEMINI_AVAILABLE:
+                print("[COGNITIVE ERROR] Cannot switch to Gemini: library missing")
+                return False
+            
+            if Config.GEMINI_API_KEY and "YOUR_API_KEY" not in Config.GEMINI_API_KEY:
+                genai.configure(api_key=Config.GEMINI_API_KEY)
+                print(f"[COGNITIVE] Switched to Gemini ({Config.GEMINI_MODEL})")
+            else:
+                print("[COGNITIVE WARNING] Gemini API Key missing/invalid!")
+                return False
+        else:
+            print(f"[COGNITIVE] Switched to Local Ollama ({Config.AI_MODEL})")
+            
+        return True
 
     def process_input(
         self,
@@ -84,7 +127,10 @@ class CognitiveEngine:
 
         # Call LLM
         try:
-            response_text = self._call_llm(messages)
+            if Config.LLM_PROVIDER == "gemini":
+                response_text = self._call_gemini(messages)
+            else:
+                response_text = self._call_ollama(messages)
         except Exception as e:
             print(f"[COGNITIVE ERROR] LLM call failed: {e}")
             # Fallback to safe neutral state
@@ -334,18 +380,14 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
 - Right Hand: {body_state.right_hand.value}"""
 
     def _call_llm(self, messages: List[Dict[str, str]]) -> str:
-        """
-        Call Ollama LLM API.
+        """Call the selected LLM provider"""
+        if Config.LLM_PROVIDER == "gemini":
+            return self._call_gemini(messages)
+        else:
+            return self._call_ollama(messages)
 
-        Args:
-            messages: Message list for chat completion
-
-        Returns:
-            Raw response text from LLM
-
-        Raises:
-            Exception on API failure
-        """
+    def _call_ollama(self, messages: List[Dict[str, str]]) -> str:
+        """Call standard Ollama endpoint"""
         try:
             response = requests.post(
                 f"{self.ollama_url}/api/chat",
@@ -354,12 +396,12 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                     "messages": messages,
                     "stream": False,
                     "options": {
-                        "temperature": 0.7,
-                        "num_ctx": 2048,  # Context window size
+                        "temperature": 0.9,
+                        "num_ctx": 4096, 
                     },
-                    "keep_alive": "5m"  # Keep model loaded for 5 minutes
+                    "keep_alive": "5m"
                 },
-                timeout=120  # Increased timeout for initial model load (was 30s)
+                timeout=120
             )
 
             if response.status_code == 200:
@@ -370,6 +412,53 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
 
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to connect to Ollama: {e}")
+
+    def _call_gemini(self, messages: List[Dict[str, str]]) -> str:
+        """Call Google Gemini API"""
+        if not GEMINI_AVAILABLE:
+            raise ImportError("google-generativeai library is missing")
+            
+        # Convert message format
+        gemini_messages = []
+        system_instruction = None
+        
+        for msg in messages:
+            role = msg["role"]
+            content = msg["content"]
+            
+            if role == "system":
+                # Concatenate system prompts
+                if system_instruction is None:
+                    system_instruction = content
+                else:
+                    system_instruction += "\n\n" + content
+            elif role == "user":
+                gemini_messages.append({"role": "user", "parts": [content]})
+            elif role == "assistant":
+                gemini_messages.append({"role": "model", "parts": [content]})
+        
+        try:
+            model = genai.GenerativeModel(
+                model_name=Config.GEMINI_MODEL,
+                system_instruction=system_instruction
+            )
+            
+            response = model.generate_content(
+                gemini_messages,
+                generation_config=genai.types.GenerationConfig(
+                    candidate_count=1,
+                    temperature=0.9,
+                    # Force JSON output for Gemini which supports it natively
+                    response_mime_type="application/json" 
+                )
+            )
+            
+            return response.text
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] Gemini Request Failed: {e}")
+            if "API_KEY" in str(e) or "403" in str(e):
+                return '{"goal": "idle", "emotion": "neutral", "dialogue": "System Error: Please check my API Key."}'
+            raise
 
     def _sanitize_dialogue(self, text: str) -> str:
         """

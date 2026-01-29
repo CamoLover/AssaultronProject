@@ -72,6 +72,7 @@ class EmbodiedAssaultronCore:
             model=Config.AI_MODEL,
             system_prompt=Config.ASSAULTRON_PROMPT
         )
+        self.ai_active = True
         self.log_event("Cognitive Engine initialized", "SYSTEM")
 
         # Behavioral Layer (behavior selection)
@@ -165,7 +166,8 @@ class EmbodiedAssaultronCore:
                 self.log_event(f"Vision: {vision_data['scene_description']}", "VISION")
 
             # Step 2: Cognitive Layer - Generate intent
-            self.log_event("Cognitive processing...", "COGNITIVE")
+            provider_label = Config.LLM_PROVIDER.upper()
+            self.log_event(f"Cognitive: Processing with {provider_label}...", "COGNITIVE")
             memory_summary = self.cognitive_engine.get_memory_summary()
 
             cognitive_state = self.cognitive_engine.process_input(
@@ -347,7 +349,9 @@ def chat():
             "timestamp": result["timestamp"],
             "cognitive_state": result.get("cognitive_state"),
             "hardware_state": result.get("hardware_state"),
-            "body_state": result.get("body_state")
+            "body_state": result.get("body_state"),
+            "provider": Config.LLM_PROVIDER,
+            "model": Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL
         })
     else:
         return jsonify({
@@ -377,9 +381,13 @@ def get_status():
         cpu_percent = 0
         memory_percent = 0
 
+    current_model = Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL
+
     return jsonify({
         "status": assaultron.status,
         "ai_active": assaultron.ai_active,
+        "provider": Config.LLM_PROVIDER,
+        "model": current_model,
         "conversation_count": len(assaultron.cognitive_engine.conversation_history),
         "uptime_seconds": int(uptime_seconds),
         "performance": assaultron.performance_stats,
@@ -762,6 +770,31 @@ def set_detection_confidence():
         })
     except (ValueError, TypeError) as e:
         return jsonify({"error": f"Invalid confidence value: {e}"}), 400
+
+
+@app.route('/api/settings/provider', methods=['GET', 'POST'])
+def handle_provider_settings():
+    """Get or set the AI provider (ollama/gemini)"""
+    if request.method == 'POST':
+        data = request.get_json()
+        provider = data.get('provider')
+        if not provider:
+            return jsonify({"error": "Provider not specified"}), 400
+            
+        try:
+            success = assaultron.cognitive_engine.switch_provider(provider)
+            if success:
+                return jsonify({"success": True, "provider": provider})
+            else:
+                return jsonify({"error": "Failed to switch provider (check logs/keys)"}), 500
+        except ValueError as e:
+            return jsonify({"error": str(e)}), 400
+            
+    # GET request
+    return jsonify({
+        "provider": Config.LLM_PROVIDER,
+        "model": Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL
+    })
 
 
 # ============================================================================

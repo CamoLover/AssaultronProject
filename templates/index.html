@@ -83,6 +83,31 @@
 
                 <!-- COGNITIVE & VOICE (Left Column) -->
                 <div class="col-span-1 md:col-span-4 space-y-6">
+
+                    <!-- Brain Source (Toggle) -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="bg-gray-800 px-4 py-2 flex justify-between items-center">
+                            <h3 class="font-bold text-white text-xs tracking-widest uppercase">Brain Source</h3>
+                            <span id="providerBadge"
+                                class="text-[10px] font-bold bg-blue-500 text-white px-2 py-0.5 rounded uppercase">Init</span>
+                        </div>
+                        <div class="p-3 bg-gray-50">
+                            <div class="flex p-1 bg-gray-200 rounded-lg">
+                                <button onclick="setProvider('ollama')" id="btnOllama"
+                                    class="flex-1 py-1 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900">
+                                    Local
+                                </button>
+                                <button onclick="setProvider('gemini')" id="btnGemini"
+                                    class="flex-1 py-1 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900">
+                                    Gemini
+                                </button>
+                            </div>
+                            <div class="mt-2 text-[10px] text-center text-gray-400 font-mono" id="currentModelDisplay">
+                                Loading model info...
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Cognitive State Card -->
                     <div
                         class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden transition-all hover:shadow-md">
@@ -735,7 +760,9 @@
                     messageCount++;
                     messageCountEl.textContent = messageCount;
                     responseTimeEl.textContent = `${responseTime}ms`;
-                    addLog('AI', `Response received (${responseTime}ms)`);
+
+                    const provider = data.provider ? data.provider.toUpperCase() : 'AI';
+                    addLog('AI', `Response received from ${provider} (${responseTime}ms)`);
 
                     // Log cognitive state if available
                     if (data.cognitive_state) {
@@ -787,6 +814,16 @@
                     // Update other stats
                     messageCountEl.textContent = data.conversation_count || messageCount;
 
+                    // NEW: Update provider and model info in real-time
+                    if (data.model) {
+                        modelNameEl.textContent = data.model;
+                        if (data.provider === 'gemini') {
+                            modelNameEl.className = 'font-bold text-blue-500';
+                        } else {
+                            modelNameEl.className = 'font-bold text-green-500';
+                        }
+                    }
+
                 } else {
                     throw new Error('Status check failed');
                 }
@@ -795,22 +832,13 @@
                 apiStatus.textContent = 'Error';
                 apiStatus.className = 'font-bold text-red-500';
                 pingEl.textContent = 'Error';
-                addLog('ERROR', `Stats update failed: ${error.message}`);
+                // Don't spam log for regular background polling
             }
         }
 
         async function getModelInfo() {
-            try {
-                const response = await fetch('http://localhost:11434/api/tags');
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.models && data.models.length > 0) {
-                        modelNameEl.textContent = data.models[0].name;
-                    }
-                }
-            } catch (error) {
-                modelNameEl.textContent = 'Unknown';
-            }
+            // Now simply triggers updateStats which handles model info
+            await updateStats();
         }
 
         function updateUptime() {
@@ -1453,10 +1481,77 @@
             }
         });
 
+        // ============================================================================
+        // PROVIDER SWITCHING
+        // ============================================================================
+
+        async function getProviderStatus() {
+            try {
+                const response = await fetch('/api/settings/provider');
+                const data = await response.json();
+                updateProviderUI(data.provider, data.model);
+            } catch (error) {
+                console.error('Failed to get provider status:', error);
+            }
+        }
+
+        async function setProvider(provider) {
+            // Optimistic UI update
+            const badge = document.getElementById('providerBadge');
+            badge.textContent = 'SWITCHING...';
+            badge.className = 'text-[10px] font-bold bg-yellow-500 text-white px-2 py-0.5 rounded uppercase';
+
+            try {
+                const response = await fetch('/api/settings/provider', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ provider: provider })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    await getProviderStatus(); // Refresh full status
+                } else {
+                    alert('Switch failed: ' + data.error);
+                    getProviderStatus(); // Revert UI
+                }
+            } catch (error) {
+                console.error('Provider switch error:', error);
+                alert('Connection error');
+                getProviderStatus();
+            }
+        }
+
+        function updateProviderUI(provider, model) {
+            const btnOllama = document.getElementById('btnOllama');
+            const btnGemini = document.getElementById('btnGemini');
+            const badge = document.getElementById('providerBadge');
+            const modelDisplay = document.getElementById('currentModelDisplay');
+
+            if (provider === 'gemini') {
+                // Active: Gemini
+                btnGemini.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase bg-white text-blue-600 shadow-sm border border-gray-200';
+                btnOllama.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900';
+
+                badge.textContent = 'CLOUD';
+                badge.className = 'text-[10px] font-bold bg-blue-500 text-white px-2 py-0.5 rounded uppercase';
+            } else {
+                // Active: Ollama
+                btnOllama.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase bg-white text-green-600 shadow-sm border border-gray-200';
+                btnGemini.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900';
+
+                badge.textContent = 'LOCAL';
+                badge.className = 'text-[10px] font-bold bg-green-500 text-white px-2 py-0.5 rounded uppercase';
+            }
+
+            modelDisplay.textContent = `Active Model: ${model}`;
+        }
+
         // Initialize
         addLog('INFO', 'Interface started');
         updateStats();
         getModelInfo();
+        getProviderStatus();
 
         // Periodic updates
         setInterval(updateStats, 2000);  // Update stats every 2 seconds
