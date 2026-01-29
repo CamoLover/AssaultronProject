@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -12,24 +13,30 @@
             width: 4px;
             min-height: 100%;
         }
+
         .resize-handle:hover {
             background: #999;
         }
+
         .panel {
             min-width: 300px;
         }
     </style>
 </head>
+
 <body class="bg-white text-gray-900 min-h-screen font-mono">
     <div class="h-screen flex flex-col">
         <!-- Tab Navigation -->
         <div class="bg-gray-100 border-b border-gray-300">
             <nav class="flex space-x-4 px-3">
-                <button onclick="switchTab('interface')" id="tabInterface" class="tab-button active py-2 px-4 text-sm font-bold border-b-2 border-blue-500">INTERFACE</button>
-                <button onclick="switchTab('embodied')" id="tabEmbodied" class="tab-button py-2 px-4 text-sm font-bold border-b-2 border-transparent hover:border-gray-400">EMBODIED AGENT</button>
+                <button onclick="switchTab('interface')" id="tabInterface"
+                    class="tab-button active py-2 px-4 text-sm font-bold border-b-2 border-blue-500">INTERFACE</button>
+                <button onclick="switchTab('embodied')" id="tabEmbodied"
+                    class="tab-button py-2 px-4 text-sm font-bold border-b-2 border-transparent hover:border-gray-400">EMBODIED
+                    AGENT</button>
             </nav>
         </div>
-        
+
         <!-- Interface Tab Content -->
         <div id="interfaceTab" class="flex-1 flex tab-content">
             <!-- Logs Panel -->
@@ -41,30 +48,25 @@
                     <div class="text-blue-600">[INFO] Interface initialized</div>
                 </div>
             </div>
-            
+
             <!-- Resize Handle -->
             <div class="resize-handle" id="resizeHandle"></div>
-            
+
             <!-- Chat Panel -->
             <div id="chatPanel" class="panel flex-1 flex flex-col">
                 <div class="p-3 bg-gray-100 border-b border-gray-300">
                     <h2 class="text-sm font-bold">Chat</h2>
                 </div>
                 <div id="chatHistory" class="flex-1 p-3 overflow-y-auto text-sm space-y-2 bg-white">
-                    <div class="text-green-600 font-bold">ASSAULTRON UNIT ASR-7 ONLINE - AWAITING OPERATOR COMMANDS</div>
+                    <div class="text-green-600 font-bold">ASSAULTRON UNIT ASR-7 ONLINE - AWAITING OPERATOR COMMANDS
+                    </div>
                 </div>
                 <div class="p-3 border-t border-gray-300 bg-gray-50">
                     <div class="flex gap-2">
-                        <input 
-                            type="text" 
-                            id="chatInput" 
-                            placeholder="ENTER COMMAND OR COMMUNICATION..."
-                            class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500"
-                        >
-                        <button 
-                            id="sendBtn"
-                            class="px-4 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:bg-gray-400"
-                        >
+                        <input type="text" id="chatInput" placeholder="ENTER COMMAND OR COMMUNICATION..."
+                            class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500">
+                        <button id="sendBtn"
+                            class="px-4 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:bg-gray-400">
                             TRANSMIT
                         </button>
                     </div>
@@ -73,127 +75,346 @@
         </div>
 
         <!-- Embodied Agent Tab Content -->
-        <div id="embodiedTab" class="flex-1 flex flex-col tab-content hidden p-4 overflow-y-auto">
-            <h2 class="text-lg font-bold mb-4 text-purple-600">EMBODIED AGENT SYSTEM</h2>
+        <div id="embodiedTab" class="flex-1 flex flex-col tab-content hidden bg-gray-50 overflow-hidden">
 
-            <div class="grid grid-cols-3 gap-4">
-                <!-- Cognitive State -->
-                <div class="p-4 border border-purple-300 rounded bg-purple-50">
-                    <h3 class="font-bold text-sm mb-3 text-purple-700">COGNITIVE LAYER</h3>
-                    <div id="cognitiveState" class="text-xs space-y-2">
-                        <div><span class="font-bold">Goal:</span> <span id="cogGoal" class="text-purple-600">idle</span></div>
-                        <div><span class="font-bold">Emotion:</span> <span id="cogEmotion" class="text-purple-600">neutral</span></div>
-                        <div><span class="font-bold">Confidence:</span> <span id="cogConfidence" class="text-purple-600">0.0</span></div>
-                        <div><span class="font-bold">Urgency:</span> <span id="cogUrgency" class="text-purple-600">0.0</span></div>
-                        <div><span class="font-bold">Focus:</span> <span id="cogFocus" class="text-purple-600">null</span></div>
-                    </div>
-                </div>
+            <div class="flex-1 overflow-y-auto p-4 lg:p-6 grid grid-cols-1 md:grid-cols-12 gap-6">
 
-                <!-- Virtual Body State - Enhanced for Assaultron -->
-                <div class="p-4 border border-blue-300 rounded bg-blue-50">
-                    <h3 class="font-bold text-sm mb-3 text-blue-700">VIRTUAL BODY (ASSAULTRON)</h3>
-                    <div id="bodyState" class="text-xs space-y-2">
-                        <div class="font-bold text-xs mb-1 text-blue-800">HEAD UNIT</div>
-                        <div><span class="font-bold">Head Tilt:</span> <span id="bodyHeadTilt" class="text-blue-600">0°</span></div>
-                        <div><span class="font-bold">Head Pan:</span> <span id="bodyHeadPan" class="text-blue-600">0°</span></div>
-                        <div><span class="font-bold">Eye Luminance:</span> <span id="bodyLuminance" class="text-blue-600">dim</span></div>
+                <!-- COGNITIVE & VOICE (Left Column) -->
+                <div class="col-span-1 md:col-span-4 space-y-6">
+                    <!-- Cognitive State Card -->
+                    <div
+                        class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden transition-all hover:shadow-md">
+                        <div
+                            class="bg-gradient-to-r from-purple-700 to-indigo-700 px-4 py-2 flex justify-between items-center">
+                            <h3 class="font-bold text-white text-xs tracking-widest uppercase">Cognitive Matrix</h3>
+                            <span class="h-2 w-2 rounded-full bg-green-400 animate-pulse"></span>
+                        </div>
+                        <div class="p-4 space-y-4">
+                            <!-- Goal & Focus -->
+                            <div class="bg-purple-50 p-3 rounded border border-purple-100">
+                                <span
+                                    class="text-[10px] uppercase text-purple-500 font-bold block mb-1 tracking-wider">Current
+                                    Directive</span>
+                                <span id="cogGoal"
+                                    class="text-lg font-bold text-gray-800 block leading-tight">Idle</span>
+                                <div class="mt-2 text-xs flex items-center gap-2">
+                                    <span class="text-purple-400 font-bold">FOCUS:</span>
+                                    <span id="cogFocus"
+                                        class="bg-purple-200 text-purple-800 px-2 py-0.5 rounded text-[10px] font-mono">NULL</span>
+                                </div>
+                            </div>
 
-                        <div class="font-bold text-xs mb-1 mt-2 text-blue-800">TORSO</div>
-                        <div><span class="font-bold">Posture:</span> <span id="bodyPosture" class="text-blue-600">idle</span></div>
-                        <div><span class="font-bold">Torso Rotation:</span> <span id="bodyTorsoRotation" class="text-blue-600">0°</span></div>
-                        <div><span class="font-bold">Lean Angle:</span> <span id="bodyLeanAngle" class="text-blue-600">0°</span></div>
+                            <!-- Meters -->
+                            <div class="space-y-4">
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="font-bold text-gray-500 uppercase text-[10px]">Confidence
+                                            Calculation</span>
+                                        <span id="cogConfidenceText"
+                                            class="text-purple-700 font-mono font-bold">0.00</span>
+                                    </div>
+                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                        <div id="cogConfidenceBar"
+                                            class="h-full bg-purple-500 transition-all duration-700 ease-out shadow-[0_0_10px_rgba(168,85,247,0.5)]"
+                                            style="width: 0%"></div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="font-bold text-gray-500 uppercase text-[10px]">Action
+                                            Urgency</span>
+                                        <span id="cogUrgencyText" class="text-red-600 font-mono font-bold">0.00</span>
+                                    </div>
+                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                        <div id="cogUrgencyBar"
+                                            class="h-full bg-red-500 transition-all duration-700 ease-out shadow-[0_0_10px_rgba(239,68,68,0.5)]"
+                                            style="width: 0%"></div>
+                                    </div>
+                                </div>
+                            </div>
 
-                        <div class="font-bold text-xs mb-1 mt-2 text-blue-800">ARMS</div>
-                        <div><span class="font-bold">Left Hand:</span> <span id="bodyLeftHand" class="text-blue-600">closed</span></div>
-                        <div><span class="font-bold">Right Hand:</span> <span id="bodyRightHand" class="text-blue-600">closed</span></div>
-                        <div><span class="font-bold">Arm Mode:</span> <span id="bodyArmMode" class="text-blue-600">neutral</span></div>
-
-                        <div class="font-bold text-xs mb-1 mt-2 text-blue-800">LOCOMOTION</div>
-                        <div><span class="font-bold">Leg Stance:</span> <span id="bodyLegStance" class="text-blue-600">stable</span></div>
-                        <div><span class="font-bold">Balance:</span> <span id="bodyBalance" class="text-blue-600">100%</span></div>
-                        <div><span class="font-bold">Movement:</span> <span id="bodyMovement" class="text-blue-600">stationary</span></div>
-
-                        <div class="font-bold text-xs mb-1 mt-2 text-blue-800">SENSORS</div>
-                        <div><span class="font-bold">Attention:</span> <span id="bodyAttention" class="text-blue-600">null</span></div>
-                    </div>
-                </div>
-
-                <!-- World State -->
-                <div class="p-4 border border-green-300 rounded bg-green-50">
-                    <h3 class="font-bold text-sm mb-3 text-green-700">WORLD PERCEPTION</h3>
-                    <div id="worldState" class="text-xs space-y-2">
-                        <div><span class="font-bold">Environment:</span> <span id="worldEnv" class="text-green-600">normal</span></div>
-                        <div><span class="font-bold">Threat Level:</span> <span id="worldThreat" class="text-green-600">none</span></div>
-                        <div><span class="font-bold">Entities:</span> <span id="worldEntities" class="text-green-600">none</span></div>
-                        <div><span class="font-bold">Time of Day:</span> <span id="worldTime" class="text-green-600">unknown</span></div>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Motion Controller Hardware State -->
-            <div class="mt-4 grid grid-cols-2 gap-4">
-                <div class="p-4 border border-orange-300 rounded bg-orange-50">
-                    <h3 class="font-bold text-sm mb-3 text-orange-700">MOTION CONTROLLER OUTPUT</h3>
-                    <div id="motionState" class="text-xs space-y-2">
-                        <div><span class="font-bold">LED Intensity:</span> <span id="motionLED" class="text-orange-600">0%</span></div>
-                        <div><span class="font-bold">Left Hand Pos:</span> <span id="motionLeftPos" class="text-orange-600">0</span></div>
-                        <div><span class="font-bold">Right Hand Pos:</span> <span id="motionRightPos" class="text-orange-600">0</span></div>
-                        <div><span class="font-bold">Hand Mode:</span> <span id="motionHandMode" class="text-orange-600">idle</span></div>
-                    </div>
-                </div>
-
-                <!-- Voice System -->
-                <div class="p-4 border border-red-300 rounded bg-red-50">
-                    <h3 class="font-bold text-sm mb-3 text-red-700">VOICE SYSTEM</h3>
-                    <div class="space-y-3">
-                        <div class="flex items-center gap-2">
-                            <button id="voiceStartBtn" onclick="startVoiceServer()"
-                                    class="px-3 py-1 bg-red-500 text-white rounded text-xs hover:bg-red-600 disabled:bg-gray-400">
-                                START
-                            </button>
-                            <button id="voiceStopBtn" onclick="stopVoiceServer()"
-                                    class="px-3 py-1 bg-gray-500 text-white rounded text-xs hover:bg-gray-600 disabled:bg-gray-400" disabled>
-                                STOP
-                            </button>
-                            <div class="flex items-center gap-2">
-                                <span id="voiceStatusText" class="text-xs text-red-500">Offline</span>
-                                <div id="voiceStatusIndicator" class="w-2 h-2 rounded-full bg-red-500"></div>
+                            <!-- Emotion Badge -->
+                            <div class="flex items-center justify-between pt-3 border-t border-gray-100">
+                                <span class="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Emotional
+                                    State</span>
+                                <span id="cogEmotion"
+                                    class="px-3 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100 uppercase tracking-wider">Neutral</span>
                             </div>
                         </div>
-                        <div id="voiceDetails" class="text-xs text-gray-600">
-                            Server: <span id="serverStatus">Stopped</span> |
-                            Model: <span id="modelStatus">Not loaded</span>
+                    </div>
+
+                    <!-- Voice Control -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="bg-gray-800 px-4 py-2 flex justify-between items-center">
+                            <h3 class="font-bold text-white text-xs tracking-widest uppercase">Vocal Synthesis</h3>
+                            <div id="voiceStatusIndicator" class="h-2 w-2 rounded-full bg-red-500"></div>
                         </div>
-                        <div class="flex gap-2">
-                            <input type="text" id="testSpeechInput" placeholder="Test speech..."
-                                   class="flex-1 px-2 py-1 border border-gray-300 rounded text-xs">
-                            <button onclick="testSpeech()"
-                                    class="px-3 py-1 bg-green-500 text-white rounded text-xs hover:bg-green-600 disabled:bg-gray-400">
-                                TEST
-                            </button>
+                        <div class="p-4 space-y-4">
+                            <div class="flex justify-between items-start mb-2">
+                                <div class="text-xs text-gray-500 space-y-1">
+                                    <div class="flex items-center gap-2"><span
+                                            class="w-12 text-gray-400 text-[10px] uppercase">Server</span> <span
+                                            id="serverStatus"
+                                            class="font-mono text-gray-800 bg-gray-100 px-1 rounded">Stopped</span>
+                                    </div>
+                                    <div class="flex items-center gap-2"><span
+                                            class="w-12 text-gray-400 text-[10px] uppercase">Model</span> <span
+                                            id="modelStatus"
+                                            class="font-mono text-gray-800 bg-gray-100 px-1 rounded">--</span></div>
+                                </div>
+                                <span id="voiceStatusText"
+                                    class="text-[10px] font-bold text-red-500 uppercase border border-red-200 px-2 py-0.5 rounded bg-red-50">Offline</span>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <button id="voiceStartBtn" onclick="startVoiceServer()"
+                                    class="flex items-center justify-center gap-1 px-3 py-2 bg-emerald-600 text-white rounded shadow-sm text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all">
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z">
+                                        </path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                    </svg>
+                                    INIT SYSTEM
+                                </button>
+                                <button id="voiceStopBtn" onclick="stopVoiceServer()"
+                                    class="flex items-center justify-center gap-1 px-3 py-2 bg-red-600 text-white rounded shadow-sm text-xs font-bold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                                    disabled>
+                                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z">
+                                        </path>
+                                    </svg>
+                                    HALT
+                                </button>
+                            </div>
+
+                            <div class="relative group">
+                                <input type="text" id="testSpeechInput"
+                                    placeholder="Enter text to synthesize sequence..."
+                                    class="w-full pl-3 pr-16 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500 bg-gray-50 transition-colors focus:bg-white text-gray-700">
+                                <button onclick="testSpeech()"
+                                    class="absolute right-1 top-1 bottom-1 px-2 bg-gray-200 text-gray-700 rounded text-[10px] font-bold hover:bg-blue-500 hover:text-white transition-colors uppercase">TEST</button>
+                            </div>
                         </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Behavior Selection History -->
-            <div class="mt-4 p-4 border border-indigo-300 rounded bg-indigo-50">
-                <h3 class="font-bold text-sm mb-3 text-indigo-700">BEHAVIOR SELECTION HISTORY</h3>
-                <div id="behaviorHistory" class="text-xs space-y-1 max-h-64 overflow-y-auto">
-                    <div class="text-gray-500">No behaviors executed yet</div>
+                <!-- BODY & WORLD (Middle Column) -->
+                <div class="col-span-1 md:col-span-5 space-y-6">
+                    <!-- Virtual Body Visualization -->
+                    <div
+                        class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden h-full flex flex-col">
+                        <div
+                            class="bg-gradient-to-r from-blue-600 to-cyan-600 px-4 py-2 flex justify-between items-center shadow-sm">
+                            <h3 class="font-bold text-white text-xs tracking-widest uppercase">Telemetry & Diagnostics
+                            </h3>
+                        </div>
+
+                        <div class="p-5 flex-1 flex flex-col gap-5">
+                            <!-- Head Unit -->
+                            <div
+                                class="bg-slate-50 rounded-lg p-4 border border-slate-200 relative overflow-hidden group">
+                                <div
+                                    class="absolute top-0 right-0 w-16 h-16 bg-blue-100 rounded-bl-full opacity-50 transition-opacity group-hover:opacity-100">
+                                </div>
+                                <div class="flex items-center justify-between relative z-10">
+                                    <div class="flex items-center gap-4">
+                                        <div
+                                            class="p-3 bg-white rounded-full text-blue-600 shadow-sm border border-blue-50">
+                                            <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                                    d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z">
+                                                </path>
+                                            </svg>
+                                        </div>
+                                        <div>
+                                            <span
+                                                class="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-0.5">Primary
+                                                Sensors</span>
+                                            <div class="flex gap-3 text-xs">
+                                                <span class="text-slate-600">Pan: <span id="bodyHeadPan"
+                                                        class="font-mono font-bold text-blue-700">0°</span></span>
+                                                <span class="text-slate-300">|</span>
+                                                <span class="text-slate-600">Tilt: <span id="bodyHeadTilt"
+                                                        class="font-mono font-bold text-blue-700">0°</span></span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="text-right">
+                                        <span id="bodyLuminance"
+                                            class="inline-block px-2 py-1 rounded text-[10px] font-bold uppercase tracking-wide bg-yellow-100 text-yellow-700 border border-yellow-200 shadow-sm">DIM</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-4">
+                                <!-- Torso -->
+                                <div
+                                    class="p-4 border border-slate-200 rounded-lg bg-white shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+                                    <h4
+                                        class="text-[10px] font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-blue-400"></div> Chassis
+                                    </h4>
+                                    <div class="space-y-2 text-xs">
+                                        <div class="flex justify-between items-center"><span
+                                                class="text-slate-500">Posture</span> <span id="bodyPosture"
+                                                class="font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">Idle</span>
+                                        </div>
+                                        <div class="flex justify-between items-center"><span
+                                                class="text-slate-500">Rotation</span> <span id="bodyTorsoRotation"
+                                                class="font-mono text-slate-700 font-bold">0°</span></div>
+                                        <div class="flex justify-between items-center"><span
+                                                class="text-slate-500">Lean</span> <span id="bodyLeanAngle"
+                                                class="font-mono text-slate-700 font-bold">0°</span></div>
+                                    </div>
+                                </div>
+
+                                <!-- Locomotion -->
+                                <div
+                                    class="p-4 border border-slate-200 rounded-lg bg-white shadow-[0_2px_8px_rgba(0,0,0,0.02)]">
+                                    <h4
+                                        class="text-[10px] font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
+                                        <div class="w-1.5 h-1.5 rounded-full bg-green-400"></div> Locomotion
+                                    </h4>
+                                    <div class="space-y-2 text-xs">
+                                        <div class="flex justify-between items-center"><span
+                                                class="text-slate-500">Stance</span> <span id="bodyLegStance"
+                                                class="font-bold text-slate-700">Stable</span></div>
+                                        <div class="flex justify-between items-center"><span
+                                                class="text-slate-500">Balance</span> <span id="bodyBalance"
+                                                class="font-bold text-emerald-600">100%</span></div>
+                                        <div class="flex justify-between items-center"><span
+                                                class="text-slate-500">Status</span> <span id="bodyMovement"
+                                                class="font-bold text-xs uppercase bg-gray-100 px-2 py-0.5 rounded text-gray-600">STAT</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Arms -->
+                            <div class="grid grid-cols-2 gap-4">
+                                <div class="text-center bg-slate-50 p-3 rounded border border-slate-200">
+                                    <span
+                                        class="text-[10px] font-bold text-slate-400 block mb-2 uppercase tracking-wider">Left
+                                        Actuator</span>
+                                    <div id="bodyLeftHandPanel"
+                                        class="bg-white py-1.5 rounded border border-slate-200 shadow-sm">
+                                        <span id="bodyLeftHand"
+                                            class="text-xs font-bold text-slate-700 uppercase">CLOSED</span>
+                                    </div>
+                                </div>
+                                <div class="text-center bg-slate-50 p-3 rounded border border-slate-200">
+                                    <span
+                                        class="text-[10px] font-bold text-slate-400 block mb-2 uppercase tracking-wider">Right
+                                        Actuator</span>
+                                    <div id="bodyRightHandPanel"
+                                        class="bg-white py-1.5 rounded border border-slate-200 shadow-sm">
+                                        <span id="bodyRightHand"
+                                            class="text-xs font-bold text-slate-700 uppercase">CLOSED</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- World Perception -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div
+                            class="bg-emerald-50 px-4 py-2 flex justify-between items-center border-b border-emerald-100">
+                            <h3 class="font-bold text-emerald-800 text-xs tracking-widest uppercase">Environmental
+                                Sensors</h3>
+                        </div>
+                        <div class="p-4 grid grid-cols-2 gap-4 text-sm">
+                            <div
+                                class="bg-white rounded p-3 border border-emerald-100 shadow-sm flex flex-col justify-between">
+                                <span
+                                    class="text-[10px] text-emerald-600 font-bold block uppercase tracking-wider mb-1">Threat
+                                    Assessment</span>
+                                <span id="worldThreat"
+                                    class="text-xl font-bold text-emerald-800 uppercase leading-none">NONE</span>
+                            </div>
+                            <div
+                                class="bg-white rounded p-3 border border-blue-100 shadow-sm flex flex-col justify-between">
+                                <span
+                                    class="text-[10px] text-blue-600 font-bold block uppercase tracking-wider mb-1">Temporal
+                                    Data</span>
+                                <span id="worldTime"
+                                    class="text-xl font-bold text-blue-800 uppercase leading-none">--:--</span>
+                            </div>
+                            <div class="col-span-2 bg-slate-50 rounded p-3 border border-slate-200">
+                                <span
+                                    class="text-[10px] text-slate-400 font-bold block mb-1 uppercase tracking-wider">Detected
+                                    Signatures</span>
+                                <span id="worldEntities" class="text-slate-700 font-mono text-xs block break-words">No
+                                    active signatures detected.</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
 
-            <!-- State Transition History -->
-            <div class="mt-4 p-4 border border-teal-300 rounded bg-teal-50">
-                <h3 class="font-bold text-sm mb-3 text-teal-700">STATE TRANSITION HISTORY</h3>
-                <div id="stateHistory" class="text-xs space-y-1 max-h-64 overflow-y-auto">
-                    <div class="text-gray-500">No state changes yet</div>
+                <!-- LOGS & HARDWARE (Right Column) -->
+                <div class="col-span-1 md:col-span-3 space-y-6 flex flex-col h-full">
+                    <!-- Hardware Debug -->
+                    <div
+                        class="bg-gray-800 rounded-lg shadow-md overflow-hidden text-gray-300 text-xs border border-gray-700">
+                        <div class="bg-black px-3 py-2 border-b border-gray-700 flex justify-between items-center">
+                            <span class="font-mono text-orange-400 font-bold tracking-wider">HARDWARE_DEBUG</span>
+                            <div class="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
+                        </div>
+                        <div class="p-3 font-mono space-y-2">
+                            <div class="flex justify-between border-b border-gray-700 pb-1"><span>LED_INTENSITY</span>
+                                <span id="motionLED" class="text-white font-bold">0%</span>
+                            </div>
+                            <div class="flex justify-between pt-1"><span>L_SERVO_POS</span> <span id="motionLeftPos"
+                                    class="text-white">0</span></div>
+                            <div class="flex justify-between"><span>R_SERVO_POS</span> <span id="motionRightPos"
+                                    class="text-white">0</span></div>
+                            <div class="flex justify-between border-t border-gray-700 pt-1 mt-1">
+                                <span>MODE_SELECT</span> <span id="motionHandMode"
+                                    class="text-yellow-400 font-bold">IDLE</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Behavior Logs -->
+                    <div
+                        class="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-[300px]">
+                        <div class="bg-gray-50 px-3 py-2 border-b border-gray-200 flex justify-between items-center">
+                            <h3 class="font-bold text-gray-600 text-[10px] tracking-widest uppercase">Decision Log</h3>
+                            <button onclick="updateBehaviorHistory()" class="text-gray-400 hover:text-blue-500"><svg
+                                    class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15">
+                                    </path>
+                                </svg></button>
+                        </div>
+                        <div id="behaviorHistory"
+                            class="flex-1 p-0 overflow-y-auto bg-white scrollbar-thin scrollbar-thumb-gray-200">
+                            <div class="p-4 text-center text-gray-300 italic text-xs">System Initializing Sequence...
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- State Logs -->
+                    <div
+                        class="flex-1 bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden flex flex-col min-h-[200px]">
+                        <div class="bg-gray-50 px-3 py-2 border-b border-gray-200">
+                            <h3 class="font-bold text-gray-600 text-[10px] tracking-widest uppercase">State Transitions
+                            </h3>
+                        </div>
+                        <div id="stateHistory" class="flex-1 p-0 overflow-y-auto bg-gray-50/50">
+                            <div class="p-4 text-center text-gray-300 italic text-xs">Awaiting Input...</div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        
+
         <!-- Bottom Stats Section -->
         <div class="border-t border-gray-300 bg-gray-50 p-3">
             <div class="grid grid-cols-6 gap-4 text-xs">
@@ -260,10 +481,10 @@
 
         function handleResize(e) {
             if (!isResizing) return;
-            
+
             const containerWidth = window.innerWidth;
             const newWidth = (e.clientX / containerWidth) * 100;
-            
+
             if (newWidth > 20 && newWidth < 80) {
                 logsPanel.style.width = `${newWidth}%`;
             }
@@ -295,14 +516,14 @@
                 MANUAL: 'text-gray-600',
                 MEMORY: 'text-purple-400'
             };
-            
+
             const logDiv = document.createElement('div');
             logDiv.className = colors[level] || 'text-gray-600';
             logDiv.textContent = `[${timestamp}] [${level}] ${message}`;
-            
+
             systemLogs.appendChild(logDiv);
             systemLogs.scrollTop = systemLogs.scrollHeight;
-            
+
             // Keep only last 100 logs
             while (systemLogs.children.length > 100) {
                 systemLogs.removeChild(systemLogs.firstChild);
@@ -313,7 +534,7 @@
         function addChatMessage(sender, message) {
             const timestamp = new Date().toLocaleTimeString();
             const div = document.createElement('div');
-            
+
             if (sender === 'USER') {
                 div.innerHTML = `<div class="text-right"><span class="text-gray-500">[${timestamp}]</span> <span class="text-blue-600 font-bold">OPERATOR:</span> ${message}</div>`;
             } else if (sender === 'ASSAULTRON') {
@@ -321,7 +542,7 @@
             } else {
                 div.innerHTML = `<div><span class="text-gray-500">[${timestamp}]</span> <span class="text-gray-600 font-bold">${sender}:</span> ${message}</div>`;
             }
-            
+
             chatHistory.appendChild(div);
             chatHistory.scrollTop = chatHistory.scrollHeight;
         }
@@ -335,12 +556,12 @@
             chatInput.value = '';
             sendBtn.disabled = true;
             sendBtn.textContent = 'TRANSMITTING';
-            
+
             const startTime = performance.now();
-            
+
             try {
                 addLog('AI', `Sending: ${message.substring(0, 50)}...`);
-                
+
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -349,7 +570,7 @@
 
                 const endTime = performance.now();
                 const responseTime = Math.round(endTime - startTime);
-                
+
                 if (response.ok) {
                     const data = await response.json();
                     addChatMessage('ASSAULTRON', data.response);
@@ -370,7 +591,7 @@
                 } else {
                     throw new Error(`HTTP ${response.status}`);
                 }
-                
+
             } catch (error) {
                 addChatMessage('SYSTEM', `Error: ${error.message}`);
                 addLog('ERROR', `Chat failed: ${error.message}`);
@@ -383,15 +604,15 @@
 
         async function updateStats() {
             const pingStart = performance.now();
-            
+
             try {
                 const response = await fetch('/api/status');
                 const pingEnd = performance.now();
                 const ping = Math.round(pingEnd - pingStart);
-                
+
                 if (response.ok) {
                     const data = await response.json();
-                    
+
                     // Update status indicators
                     if (data.ai_active) {
                         apiStatus.textContent = 'Online';
@@ -400,18 +621,18 @@
                         apiStatus.textContent = 'Offline';
                         apiStatus.className = 'font-bold text-red-500';
                     }
-                    
+
                     pingEl.textContent = `${ping}ms`;
-                    pingEl.className = ping < 100 ? 'font-bold text-green-500' : 
-                                      ping < 500 ? 'font-bold text-yellow-500' : 'font-bold text-red-500';
-                    
+                    pingEl.className = ping < 100 ? 'font-bold text-green-500' :
+                        ping < 500 ? 'font-bold text-yellow-500' : 'font-bold text-red-500';
+
                     // Update other stats
                     messageCountEl.textContent = data.conversation_count || messageCount;
-                    
+
                 } else {
                     throw new Error('Status check failed');
                 }
-                
+
             } catch (error) {
                 apiStatus.textContent = 'Error';
                 apiStatus.className = 'font-bold text-red-500';
@@ -439,7 +660,7 @@
             const seconds = Math.floor(elapsed / 1000) % 60;
             const minutes = Math.floor(elapsed / 60000) % 60;
             const hours = Math.floor(elapsed / 3600000);
-            
+
             uptimeEl.textContent = `${hours}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
         }
 
@@ -448,7 +669,7 @@
         chatInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendMessage();
         });
-        
+
         // Voice system event listeners
         document.getElementById('testSpeechInput').addEventListener('keypress', (e) => {
             if (e.key === 'Enter') testSpeech();
@@ -545,7 +766,7 @@
                 } else {
                     throw new Error(data.error || 'Failed to stop voice system');
                 }
-                
+
             } catch (error) {
                 addLog('ERROR', `Voice system stop failed: ${error.message}`);
                 stopBtn.disabled = false;
@@ -558,16 +779,16 @@
             const statusIndicator = document.getElementById('voiceStatusIndicator');
             const serverStatusEl = document.getElementById('serverStatus');
             const modelStatusEl = document.getElementById('modelStatus');
-            
+
             // Update main status
             statusTextEl.textContent = statusText;
             statusTextEl.className = enabled ? 'text-green-500' : 'text-red-500';
-            
+
             // Update status indicator
-            statusIndicator.className = enabled ? 
-                'w-2 h-2 rounded-full bg-green-500 animate-pulse' : 
+            statusIndicator.className = enabled ?
+                'w-2 h-2 rounded-full bg-green-500 animate-pulse' :
                 'w-2 h-2 rounded-full bg-red-500';
-            
+
             // Update detailed status
             serverStatusEl.textContent = serverStatus;
             modelStatusEl.textContent = modelStatus;
@@ -576,22 +797,22 @@
         async function testSpeechInternal(text) {
             try {
                 addLog('VOICE', `Testing speech: "${text}"`);
-                
+
                 const response = await fetch('/api/voice/speak', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ text: text })
                 });
-                
+
                 const data = await response.json();
-                
+
                 if (data.success) {
                     addLog('VOICE', 'Speech synthesis started');
                     return true;
                 } else {
                     throw new Error(data.error || 'Speech synthesis failed');
                 }
-                
+
             } catch (error) {
                 addLog('ERROR', `Speech test failed: ${error.message}`);
                 return false;
@@ -601,12 +822,12 @@
         async function testSpeech() {
             const testInput = document.getElementById('testSpeechInput');
             const text = testInput.value.trim();
-            
+
             if (!text) {
                 addLog('WARNING', 'No test text provided');
                 return;
             }
-            
+
             const success = await testSpeechInternal(text);
             if (success) {
                 testInput.value = ''; // Clear input on success
@@ -618,23 +839,23 @@
                 const response = await fetch('/api/voice/status');
                 if (response.ok) {
                     const status = await response.json();
-                    
+
                     const enabled = status.voice_enabled && status.initialized && status.server_running;
-                    const statusText = enabled ? 
+                    const statusText = enabled ?
                         `Voice system online (${status.model_info?.name || 'Unknown Model'})` :
                         'Voice system offline';
-                    
+
                     const serverStatus = status.server_running ? 'Running' : 'Stopped';
-                    const modelStatus = status.model_loaded ? 
+                    const modelStatus = status.model_loaded ?
                         (status.model_info?.name ? `${status.model_info.name} (${status.model_info.type})` : 'Loaded') :
                         'Not loaded';
-                    
+
                     updateVoiceStatus(enabled, statusText, serverStatus, modelStatus);
-                    
+
                     // Update button states
                     const startBtn = document.getElementById('voiceStartBtn');
                     const stopBtn = document.getElementById('voiceStopBtn');
-                    
+
                     if (enabled) {
                         startBtn.disabled = true;
                         startBtn.textContent = '✅ VOICE ONLINE';
@@ -668,30 +889,51 @@
 
                     // Update cognitive state
                     if (data.cognitive_state) {
-                        document.getElementById('cogGoal').textContent = data.cognitive_state.goal || 'idle';
-                        document.getElementById('cogEmotion').textContent = data.cognitive_state.emotion || 'neutral';
-                        document.getElementById('cogConfidence').textContent = (data.cognitive_state.confidence || 0).toFixed(2);
-                        document.getElementById('cogUrgency').textContent = (data.cognitive_state.urgency || 0).toFixed(2);
-                        document.getElementById('cogFocus').textContent = data.cognitive_state.focus || 'null';
+                        document.getElementById('cogGoal').textContent = data.cognitive_state.goal || 'Idle';
+                        document.getElementById('cogEmotion').textContent = data.cognitive_state.emotion || 'Neutral';
+
+                        const confidence = (data.cognitive_state.confidence || 0);
+                        const urgency = (data.cognitive_state.urgency || 0);
+
+                        // Update text
+                        document.getElementById('cogConfidenceText').textContent = confidence.toFixed(2);
+                        document.getElementById('cogUrgencyText').textContent = urgency.toFixed(2);
+
+                        // Update progress bars
+                        document.getElementById('cogConfidenceBar').style.width = `${confidence * 100}%`;
+                        document.getElementById('cogUrgencyBar').style.width = `${urgency * 100}%`;
+
+                        document.getElementById('cogFocus').textContent = data.cognitive_state.focus || 'NULL';
                     }
 
                     // Update body state
                     if (data.body_state) {
-                        document.getElementById('bodyPosture').textContent = data.body_state.posture || 'idle';
-                        document.getElementById('bodyLuminance').textContent = data.body_state.luminance || 'dim';
-                        document.getElementById('bodyLeftHand').textContent = data.body_state.left_hand || 'closed';
-                        document.getElementById('bodyRightHand').textContent = data.body_state.right_hand || 'closed';
-                        document.getElementById('bodyAttention').textContent = data.body_state.attention_focus || 'null';
+                        document.getElementById('bodyPosture').textContent = data.body_state.posture || 'Idle';
+                        document.getElementById('bodyLuminance').textContent = data.body_state.luminance || 'DIM';
+                        document.getElementById('bodyLeftHand').textContent = data.body_state.left_hand || 'CLOSED';
+                        document.getElementById('bodyRightHand').textContent = data.body_state.right_hand || 'CLOSED';
+                        // Removed bodyAttention from new UI or mapped elsewhere if needed
+
+                        document.getElementById('bodyHeadPan').textContent = (data.body_state.head_pan || 0) + '°';
+                        document.getElementById('bodyHeadTilt').textContent = (data.body_state.head_tilt || 0) + '°';
+                        document.getElementById('bodyTorsoRotation').textContent = (data.body_state.torso_rotation || 0) + '°';
+                        document.getElementById('bodyLeanAngle').textContent = (data.body_state.lean_angle || 0) + '°';
+
+                        document.getElementById('bodyLegStance').textContent = data.body_state.leg_stance || 'Stable';
+                        document.getElementById('bodyBalance').textContent = (data.body_state.balance || 100) + '%';
+                        document.getElementById('bodyMovement').textContent = data.body_state.movement || 'STAT';
                     }
 
                     // Update world state
                     if (data.world_state) {
-                        document.getElementById('worldEnv').textContent = data.world_state.environment || 'normal';
-                        document.getElementById('worldThreat').textContent = data.world_state.threat_level || 'none';
-                        document.getElementById('worldEntities').textContent =
-                            (data.world_state.entities && data.world_state.entities.length > 0) ?
-                            data.world_state.entities.join(', ') : 'none';
-                        document.getElementById('worldTime').textContent = data.world_state.time_of_day || 'unknown';
+                        // worldEnv removed from main view to save space, can add back if requested
+                        document.getElementById('worldThreat').textContent = data.world_state.threat_level || 'NONE';
+
+                        const entities = data.world_state.entities || [];
+                        const entitiesText = entities.length > 0 ? entities.join(', ') : 'No active signatures detected.';
+                        document.getElementById('worldEntities').textContent = entitiesText;
+
+                        document.getElementById('worldTime').textContent = data.world_state.time_of_day || 'UNKNOWN';
                     }
 
                     // Update motion/hardware state (from last hardware state)
@@ -701,11 +943,16 @@
                         document.getElementById('motionLED').textContent = `${hwData.led_intensity}%`;
                         document.getElementById('motionLeftPos').textContent = hwData.hands.left.position;
                         document.getElementById('motionRightPos').textContent = hwData.hands.right.position;
-                        document.getElementById('motionHandMode').textContent = hwData.hands.mode || 'idle';
+                        document.getElementById('motionHandMode').textContent = hwData.hands.mode || 'IDLE';
                     }
                 }
             } catch (error) {
-                addLog('ERROR', `Failed to update embodied agent data: ${error.message}`);
+                // Use console.log instead of addLog to avoid spamming the log if tab is hidden
+                console.log(`Failed to update embodied agent data: ${error.message}`);
+                // Only add log if it's a critical error or we are in the tab
+                if (document.getElementById('embodiedTab').contains(document.activeElement)) {
+                    addLog('ERROR', `Data Sync Failed: ${error.message}`);
+                }
             }
         }
 
@@ -724,10 +971,24 @@
                             const alternatives = entry.all_utilities ? entry.all_utilities.map(([name, utility]) =>
                                 `${name}: ${utility.toFixed(2)}`
                             ).join(', ') : 'N/A';
-                            return `<div class="border-b border-indigo-200 pb-1 mb-1">
-                                <div class="font-bold text-indigo-600">[${timestamp}] ${entry.selected_behavior} (utility: ${entry.selected_utility.toFixed(2)})</div>
-                                <div class="text-gray-600">Goal: ${entry.cognitive_state.goal}, Emotion: ${entry.cognitive_state.emotion}</div>
-                                <div class="text-gray-500 text-xs">Alternatives: ${alternatives}</div>
+                            let colorClass = 'border-indigo-100 bg-indigo-50/50';
+                            let textClass = 'text-indigo-700';
+
+                            // Simple heuristic for coloring based on utility
+                            if (entry.selected_utility > 0.8) {
+                                colorClass = 'border-green-100 bg-green-50/50';
+                                textClass = 'text-green-700';
+                            }
+
+                            return `<div class="border-b ${colorClass} p-2 mb-1 rounded flex justify-between items-start group hover:bg-white hover:shadow-sm transition-all">
+                                <div>
+                                    <div class="font-bold ${textClass} text-xs">[${timestamp}] ${entry.selected_behavior}</div>
+                                    <div class="text-[10px] text-gray-500 mt-1">Goal: <span class="text-gray-700">${entry.cognitive_state.goal}</span></div>
+                                </div>
+                                <div class="text-right">
+                                    <div class="bg-indigo-100 text-indigo-800 px-1.5 rounded text-[9px] font-bold mb-1">U: ${entry.selected_utility.toFixed(2)}</div>
+                                    <div class="text-[9px] text-gray-400 group-hover:text-gray-600">Alt: ${alternatives}</div>
+                                </div>
                             </div>`;
                         }).join('');
                     }
@@ -745,24 +1006,28 @@
                     const stateDiv = document.getElementById('stateHistory');
 
                     if (data.length === 0) {
-                        stateDiv.innerHTML = '<div class="text-gray-500">No state changes yet</div>';
+                        stateDiv.innerHTML = '<div class="p-4 text-center text-gray-300 italic text-xs">No state changes yet</div>';
                     } else {
                         stateDiv.innerHTML = data.map(entry => {
                             const timestamp = new Date(entry.timestamp).toLocaleTimeString();
                             const newState = entry.new_state || {};
-                            return `<div class="border-b border-teal-200 pb-1 mb-1">
-                                <div class="font-bold text-teal-600">[${timestamp}]</div>
-                                <div class="text-gray-600">
-                                    Posture: ${newState.posture || 'N/A'},
-                                    Luminance: ${newState.luminance || 'N/A'},
-                                    Hands: ${newState.left_hand || 'N/A'}/${newState.right_hand || 'N/A'}
-                                </div>
+                            // Highlights meaningful changes
+                            let changes = [];
+                            if (newState.posture) changes.push(`Pos: ${newState.posture}`);
+                            if (newState.luminance) changes.push(`Lum: ${newState.luminance}`);
+                            if (newState.left_hand || newState.right_hand) changes.push(`H: ${newState.left_hand}/${newState.right_hand}`);
+
+                            const changeText = changes.join(', ') || 'Minor update';
+
+                            return `<div class="border-b border-gray-100 p-2 mb-1 rounded flex justify-between items-center bg-white/50 hover:bg-white hover:shadow-sm transition-all">
+                                <span class="font-mono text-[10px] text-gray-400">[${timestamp}]</span>
+                                <span class="text-xs font-bold text-gray-600">${changeText}</span>
                             </div>`;
                         }).join('');
                     }
                 }
             } catch (error) {
-                addLog('ERROR', `Failed to update state history: ${error.message}`);
+                console.log(`Failed to update state history: ${error.message}`);
             }
         }
 
@@ -782,4 +1047,5 @@
         }, 3000); // Update tab-specific data every 3 seconds
     </script>
 </body>
+
 </html>
