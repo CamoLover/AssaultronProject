@@ -351,7 +351,7 @@ def chat():
             "hardware_state": result.get("hardware_state"),
             "body_state": result.get("body_state"),
             "provider": Config.LLM_PROVIDER,
-            "model": Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL
+            "model": Config.OPENROUTER_MODEL if Config.LLM_PROVIDER == "openrouter" else (Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL)
         })
     else:
         return jsonify({
@@ -381,7 +381,7 @@ def get_status():
         cpu_percent = 0
         memory_percent = 0
 
-    current_model = Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL
+    current_model = Config.OPENROUTER_MODEL if Config.LLM_PROVIDER == "openrouter" else (Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL)
 
     return jsonify({
         "status": assaultron.status,

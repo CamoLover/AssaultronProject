@@ -5,16 +5,20 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    # LLM Choice: "ollama" or "gemini"
+    # LLM Choice: "ollama", "gemini", or "openrouter"
     LLM_PROVIDER = "gemini"
 
     # Gemini Configuration
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
     GEMINI_MODEL = "gemini-2.5-flash"
     
+    # OpenRouter Configuration
+    OPENROUTER_API_KEY = os.getenv("OPENROUTER_KEY", "")
+    OPENROUTER_MODEL = "google/gemini-2.0-flash-001"
+    
     # Ollama Configuration
     OLLAMA_URL = "http://localhost:11434"
-    AI_MODEL = "gemma3:1b"  # Backup local model
+    AI_MODEL = "gemma3:4b"  # Backup local model
     
     # xVAsynth Configuration
     XVASYNTH_PATH = "./Content/xVAsynth"

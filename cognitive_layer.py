@@ -73,9 +73,9 @@ class CognitiveEngine:
         self._warmup_model()
 
     def switch_provider(self, provider: str):
-        """Switch between 'ollama' and 'gemini' at runtime"""
-        if provider not in ["ollama", "gemini"]:
-            raise ValueError("Invalid provider. Use 'ollama' or 'gemini'")
+        """Switch between 'ollama', 'gemini', or 'openrouter' at runtime"""
+        if provider not in ["ollama", "gemini", "openrouter"]:
+            raise ValueError("Invalid provider. Use 'ollama', 'gemini', or 'openrouter'")
         
         Config.LLM_PROVIDER = provider
         
@@ -90,6 +90,12 @@ class CognitiveEngine:
                 print(f"[COGNITIVE] Switched to Gemini ({Config.GEMINI_MODEL})")
             else:
                 print("[COGNITIVE WARNING] Gemini API Key missing/invalid!")
+                return False
+        elif provider == "openrouter":
+            if Config.OPENROUTER_API_KEY and "YOUR_API_KEY" not in Config.OPENROUTER_API_KEY:
+                print(f"[COGNITIVE] Switched to OpenRouter ({Config.OPENROUTER_MODEL})")
+            else:
+                print("[COGNITIVE WARNING] OpenRouter API Key missing/invalid!")
                 return False
         else:
             print(f"[COGNITIVE] Switched to Local Ollama ({Config.AI_MODEL})")
@@ -128,10 +134,7 @@ class CognitiveEngine:
 
         # Call LLM
         try:
-            if Config.LLM_PROVIDER == "gemini":
-                response_text = self._call_gemini(messages)
-            else:
-                response_text = self._call_ollama(messages)
+            response_text = self._call_llm(messages)
         except Exception as e:
             print(f"[COGNITIVE ERROR] LLM call failed: {e}")
             # Fallback to safe neutral state
@@ -384,6 +387,8 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         """Call the selected LLM provider"""
         if Config.LLM_PROVIDER == "gemini":
             return self._call_gemini(messages)
+        elif Config.LLM_PROVIDER == "openrouter":
+            return self._call_openrouter(messages)
         else:
             return self._call_ollama(messages)
 
@@ -459,6 +464,42 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
             print(f"[COGNITIVE ERROR] Gemini Request Failed: {e}")
             if "API_KEY" in str(e) or "403" in str(e):
                 return '{"goal": "idle", "emotion": "neutral", "dialogue": "System Error: Please check my API Key."}'
+            raise
+            
+    def _call_openrouter(self, messages: List[Dict[str, str]]) -> str:
+        """Call OpenRouter API"""
+        try:
+            # Add site info for OpenRouter rankings (optional but good practice)
+            headers = {
+                "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
+                "Content-Type": "application/json",
+            }
+            
+            payload = {
+                "model": Config.OPENROUTER_MODEL,
+                "messages": messages,
+                "temperature": 0.9,
+                "response_format": { "type": "json_object" }
+            }
+            
+            response = requests.post(
+                url="https://openrouter.ai/api/v1/chat/completions",
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=120
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if "choices" in data and len(data["choices"]) > 0:
+                    return data["choices"][0]["message"]["content"]
+                else:
+                    raise Exception(f"OpenRouter returned unexpected response format: {data}")
+            else:
+                raise Exception(f"OpenRouter API returned {response.status_code}: {response.text}")
+
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] OpenRouter Request Failed: {e}")
             raise
 
     def _sanitize_dialogue(self, text: str) -> str:
