@@ -399,10 +399,18 @@ def get_status():
     })
 
 
+@app.route('/api/history/clear', methods=['POST'])
+def clear_history():
+    """Clear conversation history"""
+    assaultron.cognitive_engine.clear_history()
+    assaultron.log_event("Conversation history cleared", "SYSTEM")
+    return jsonify({"success": True})
+
+
 @app.route('/api/history')
 def get_history():
     """Get conversation history"""
-    history = assaultron.cognitive_engine.get_conversation_history(limit=10)
+    history = assaultron.cognitive_engine.get_conversation_history(limit=50) # Return more for restoration
     return jsonify(history)
 
 

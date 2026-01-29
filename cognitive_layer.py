@@ -55,7 +55,8 @@ class CognitiveEngine:
         self.base_system_prompt = system_prompt
 
         # Conversation state
-        self.conversation_history: List[Dict[str, str]] = []
+        self.history_file = "conversation_history.json"
+        self.conversation_history: List[Dict[str, str]] = self._load_history()
         
         # Configure Gemini if selected
         if Config.LLM_PROVIDER == "gemini":
@@ -611,6 +612,32 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         # Keep last 100 exchanges
         if len(self.conversation_history) > 100:
             self.conversation_history = self.conversation_history[-100:]
+        
+        self._save_history()
+
+    def _save_history(self) -> None:
+        """Save conversation history to disk"""
+        try:
+            with open(self.history_file, 'w', encoding='utf-8') as f:
+                json.dump(self.conversation_history, f, indent=2)
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] Failed to save history: {e}")
+
+    def _load_history(self) -> List[Dict[str, str]]:
+        """Load conversation history from disk"""
+        try:
+            import os
+            if os.path.exists(self.history_file):
+                with open(self.history_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] Failed to load history: {e}")
+        return []
+
+    def clear_history(self) -> None:
+        """Clear conversation history both in memory and on disk"""
+        self.conversation_history = []
+        self._save_history()
 
     def add_memory(self, memory: Dict[str, Any]) -> None:
         """

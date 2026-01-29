@@ -21,6 +21,33 @@
         .panel {
             min-width: 300px;
         }
+
+        /* Premium Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+            border: 2px solid #f1f1f1;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        /* For Firefox */
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: #cbd5e1 #f1f1f1;
+        }
     </style>
 </head>
 
@@ -56,8 +83,12 @@
 
             <!-- Chat Panel -->
             <div id="chatPanel" class="panel flex-1 flex flex-col">
-                <div class="p-3 bg-gray-100 border-b border-gray-300">
+                <div class="p-3 bg-gray-100 border-b border-gray-300 flex justify-between items-center">
                     <h2 class="text-sm font-bold">Chat</h2>
+                    <button onclick="clearConversation()"
+                        class="text-[10px] font-bold text-gray-400 hover:text-red-500 transition-colors uppercase tracking-widest border border-gray-300 px-2 py-0.5 rounded bg-white">
+                        Clear Memory
+                    </button>
                 </div>
                 <div id="chatHistory" class="flex-1 p-3 overflow-y-auto text-sm space-y-2 bg-white">
                     <div class="text-green-600 font-bold">ASSAULTRON UNIT ASR-7 ONLINE - AWAITING OPERATOR COMMANDS
@@ -714,20 +745,57 @@
         }
 
         // Chat functions
-        function addChatMessage(sender, message) {
-            const timestamp = new Date().toLocaleTimeString();
+        function addChatMessage(sender, message, timestamp) {
+            const timeStr = timestamp || new Date().toLocaleTimeString();
             const div = document.createElement('div');
 
             if (sender === 'USER') {
-                div.innerHTML = `<div class="text-right"><span class="text-gray-500">[${timestamp}]</span> <span class="text-blue-600 font-bold">OPERATOR:</span> ${message}</div>`;
+                div.innerHTML = `<div class="text-right"><span class="text-gray-500">[${timeStr}]</span> <span class="text-blue-600 font-bold">OPERATOR:</span> ${message}</div>`;
             } else if (sender === 'ASSAULTRON') {
-                div.innerHTML = `<div><span class="text-gray-500">[${timestamp}]</span> <span class="text-green-600 font-bold">ASR-7:</span> ${message}</div>`;
+                div.innerHTML = `<div><span class="text-gray-500">[${timeStr}]</span> <span class="text-green-600 font-bold">ASR-7:</span> ${message}</div>`;
             } else {
-                div.innerHTML = `<div><span class="text-gray-500">[${timestamp}]</span> <span class="text-gray-600 font-bold">${sender}:</span> ${message}</div>`;
+                div.innerHTML = `<div><span class="text-gray-500">[${timeStr}]</span> <span class="text-gray-600 font-bold">${sender}:</span> ${message}</div>`;
             }
 
             chatHistory.appendChild(div);
-            chatHistory.scrollTop = chatHistory.scrollHeight;
+            // Wait for next frame to ensure scrollHeight is updated
+            requestAnimationFrame(() => {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            });
+        }
+
+        async function loadHistory() {
+            try {
+                const response = await fetch('/api/history');
+                if (response.ok) {
+                    const history = await response.json();
+                    if (history.length > 0) {
+                        chatHistory.innerHTML = ''; // Clear the initial online message
+                        history.forEach(exchange => {
+                            const timeStr = exchange.timestamp ? new Date(exchange.timestamp).toLocaleTimeString() : null;
+                            if (exchange.user) addChatMessage('USER', exchange.user, timeStr);
+                            if (exchange.assistant) addChatMessage('ASSAULTRON', exchange.assistant, timeStr);
+                        });
+                        addLog('SYSTEM', 'Conversation history restored');
+                    }
+                }
+            } catch (error) {
+                addLog('ERROR', 'Failed to load conversation history');
+            }
+        }
+
+        async function clearConversation() {
+            if (!confirm("Are you sure you want to clear the conversation memory?")) return;
+
+            try {
+                const response = await fetch('/api/history/clear', { method: 'POST' });
+                if (response.ok) {
+                    chatHistory.innerHTML = '<div class="text-green-600 font-bold">ASSAULTRON UNIT ASR-7 ONLINE - MEMORY PURGED - AWAITING COMMANDS</div>';
+                    addLog('SYSTEM', 'Conversation history cleared');
+                }
+            } catch (error) {
+                addLog('ERROR', 'Failed to clear conversation history');
+            }
         }
 
         // API functions
@@ -1552,6 +1620,7 @@
         updateStats();
         getModelInfo();
         getProviderStatus();
+        loadHistory();
 
         // Periodic updates
         setInterval(updateStats, 2000);  // Update stats every 2 seconds
