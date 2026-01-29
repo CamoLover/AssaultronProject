@@ -57,7 +57,8 @@ class CognitiveEngine:
         user_message: str,
         world_state: WorldState,
         body_state: BodyState,
-        memory_summary: str = ""
+        memory_summary: str = "",
+        vision_context: str = ""
     ) -> CognitiveState:
         """
         Process user input and generate cognitive state.
@@ -67,6 +68,7 @@ class CognitiveEngine:
             world_state: Current world perception
             body_state: Current body configuration
             memory_summary: Summary of relevant memories
+            vision_context: Description of what vision system currently sees
 
         Returns:
             CognitiveState with goal, emotion, confidence, urgency, focus, dialogue
@@ -76,7 +78,8 @@ class CognitiveEngine:
             user_message,
             world_state,
             body_state,
-            memory_summary
+            memory_summary,
+            vision_context
         )
 
         # Call LLM
@@ -106,7 +109,8 @@ class CognitiveEngine:
         user_message: str,
         world_state: WorldState,
         body_state: BodyState,
-        memory_summary: str
+        memory_summary: str,
+        vision_context: str = ""
     ) -> List[Dict[str, str]]:
         """
         Build the message list for LLM.
@@ -115,6 +119,7 @@ class CognitiveEngine:
         - System prompt (personality + instructions)
         - World state context
         - Body state context
+        - Vision context (what you currently see)
         - Memory summary
         - Conversation history
         - Current user message
@@ -144,7 +149,14 @@ class CognitiveEngine:
                 "content": f"CURRENT BODY STATE:\n{body_context}"
             })
 
-        # 4. Memory summary
+        # 4. Vision context (what you currently see)
+        if vision_context:
+            messages.append({
+                "role": "system",
+                "content": f"CURRENT VISUAL PERCEPTION (what you see through your camera):\n{vision_context}\n\nYou can describe what you see when asked. This is your real-time vision."
+            })
+
+        # 5. Memory summary
         if memory_summary:
             messages.append({
                 "role": "system",
@@ -156,8 +168,21 @@ class CognitiveEngine:
             messages.append({"role": "user", "content": exchange["user"]})
             messages.append({"role": "assistant", "content": exchange["assistant"]})
 
-        # 6. Current user message
-        messages.append({"role": "user", "content": user_message})
+        # 6. Current user message (Enhanced with vision context for better attention)
+        final_user_content = user_message
+        
+        # KEY FIX: Inject vision data directly into the user prompt block so the model can't ignore it
+        if vision_context:
+             final_user_content = (
+                 f"INTERNAL SENSORY DATA:\n"
+                 f"[{vision_context}]\n"
+                 f"IMPORTANT: The data above is the ONLY thing you can see. "
+                 f"Do NOT invent details like clothing, colors, age, or expressions. "
+                 f"If it's not in the bracketed data, you don't see it.\n\n"
+                 f"User: {user_message}"
+             )
+
+        messages.append({"role": "user", "content": final_user_content})
 
         return messages
 
@@ -388,33 +413,54 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         Returns:
             Parsed CognitiveState
         """
-        # Try to extract JSON block
-        json_match = re.search(r'```json\s*(\{.*?\})\s*```', response_text, re.DOTALL)
+    def _parse_response(self, response_text: str) -> CognitiveState:
+        """
+        Parse LLM response into CognitiveState.
+
+        Handles both clean JSON and JSON embedded in natural language/markdown.
+        """
+        json_str = None
+        
+        # Strategy 1: Look for ```json ... ``` blocks
+        json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
         if json_match:
             json_str = json_match.group(1)
-        else:
-            # Try to find raw JSON object
-            json_match = re.search(r'\{[^{}]*"goal"[^{}]*\}', response_text, re.DOTALL)
-            if json_match:
-                json_str = json_match.group(0)
-            else:
-                # Fallback: treat entire response as dialogue
-                print(f"[COGNITIVE WARNING] Could not parse JSON from response: {response_text[:100]}")
-                return self._fallback_parse(response_text)
+        
+        # Strategy 2: If no block, look for the first outer { ... } structure
+        if not json_str:
+            # This regex finds the first { and matches until the last }
+            # It handles nested braces reasonably well for simple structures
+            try:
+                start_idx = response_text.find('{')
+                end_idx = response_text.rfind('}')
+                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                    possible_json = response_text[start_idx : end_idx + 1]
+                    # Verify it looks like our schema
+                    if '"goal"' in possible_json and '"dialogue"' in possible_json:
+                        json_str = possible_json
+            except Exception:
+                pass
+
+        # Strategy 3: Failed to find JSON
+        if not json_str:
+            print(f"[COGNITIVE WARNING] Could not extract JSON from: {response_text[:100]}...")
+            return self._fallback_parse(response_text)
 
         # Parse JSON
         try:
+            # Clean up potential comments or trailing commas if needed (basic cleanup)
+            json_str = re.sub(r'//.*', '', json_str) # Remove JS style comments
+            
             data = json.loads(json_str)
 
-            # Sanitize dialogue to remove any roleplay artifacts
+            # Sanitize dialogue
             raw_dialogue = data.get("dialogue", "")
             clean_dialogue = self._sanitize_dialogue(raw_dialogue)
-
-            # Log if sanitization removed content (indicates prompt drift)
-            if raw_dialogue != clean_dialogue:
-                print(f"[COGNITIVE WARNING] Dialogue sanitized - prompt drift detected!")
-                print(f"  Original: {raw_dialogue}")
-                print(f"  Cleaned:  {clean_dialogue}")
+            
+            # Additional check: If dialogue looks like JSON, something went wrong recursively
+            if clean_dialogue.strip().startswith('{') and clean_dialogue.strip().endswith('}'):
+                print("[COGNITIVE WARNING] Dialogue appears to be JSON. Using fallback.")
+                return self._fallback_parse(response_text)
 
             return CognitiveState(
                 goal=data.get("goal", "idle"),
@@ -426,6 +472,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
             )
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             print(f"[COGNITIVE WARNING] JSON parse error: {e}")
+            # Try to salvage dialogue from the raw text if JSON failed
             return self._fallback_parse(response_text)
 
     def _fallback_parse(self, response_text: str) -> CognitiveState:

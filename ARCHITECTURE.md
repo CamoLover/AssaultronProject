@@ -123,6 +123,48 @@ This document describes the refactored behavior-based architecture that transfor
 
 ---
 
+## Layer 0: Perception Layer (Vision System)
+
+### Responsibility
+- Webcam capture and management
+- Object/person detection using YOLO
+- Scene description generation
+- Threat assessment
+- Feeding visual data into WorldState
+
+### Components
+- **VisionSystem**: Main vision controller (`vision_system.py`)
+- **DetectedEntity**: Data structure for each detected object
+- **VisionState**: Current state of the vision system
+
+### Detection Pipeline
+1. Capture frame from webcam
+2. Run YOLO inference
+3. Extract detected entities (class, confidence, bounding box)
+4. Generate scene description (natural language)
+5. Assess threat level
+6. Update WorldState.entities
+7. Encode frame for web display
+
+### Output: VisionState
+```python
+@dataclass
+class VisionState:
+    enabled: bool           # Is vision active?
+    camera_active: bool     # Is camera streaming?
+    entities: List[DetectedEntity]  # Detected objects/people
+    scene_description: str  # "I can see a person and a laptop"
+    threat_assessment: str  # none, low, medium, high
+    fps: float              # Frame rate
+```
+
+### Integration Points
+- `WorldState.entities` ← Vision detected entities
+- `WorldState.threat_level` ← Vision threat assessment  
+- Cognitive Layer receives scene context through world state
+
+---
+
 ## Layer 1: Cognitive Layer
 
 ### Responsibility

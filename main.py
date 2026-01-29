@@ -25,6 +25,7 @@ from virtual_body import (
 from cognitive_layer import CognitiveEngine, extract_memory_from_message
 from behavioral_layer import BehaviorArbiter, describe_behavior_library
 from motion_controller import MotionController, HardwareStateValidator
+from vision_system import VisionSystem
 
 
 app = Flask(__name__)
@@ -86,6 +87,11 @@ class EmbodiedAssaultronCore:
         self.voice_enabled = False
         self.log_event("Voice Manager initialized", "SYSTEM")
 
+        # Vision system (Perception Layer)
+        self.vision_system = VisionSystem(logger=self)
+        self.vision_system.enumerate_cameras()  # Discover available cameras
+        self.log_event("Vision System initialized", "SYSTEM")
+
     def log_event(self, message, event_type="INFO"):
         """Log system events"""
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -130,6 +136,34 @@ class EmbodiedAssaultronCore:
             world_state = self.virtual_world.get_world_state()
             body_state = self.virtual_world.get_body_state()
 
+            # Step 1b: Integrate vision data into world state
+            vision_context = ""
+            if self.vision_system.state.enabled:
+                vision_entities = self.vision_system.get_entities_for_world_state()
+                vision_data = self.vision_system.get_scene_for_cognitive_layer()
+                
+                # Update world state with vision data
+                if vision_entities:
+                    self.virtual_world.update_world(entities=vision_entities)
+                    world_state = self.virtual_world.get_world_state()  # Refresh
+                
+                # Update threat level from vision
+                if vision_data.get("threat_level", "none") != "none":
+                    self.virtual_world.update_world(threat_level=vision_data["threat_level"])
+                    world_state = self.virtual_world.get_world_state()  # Refresh
+                    self.log_event(f"Vision threat assessment: {vision_data['threat_level']}", "VISION")
+                
+                # Build vision context for cognitive layer
+                vision_context = vision_data.get("scene_description", "")
+                if vision_data.get("entities"):
+                    entity_details = [f"{e['class_name']} ({e['confidence']:.0%} confidence)" 
+                                      for e in vision_data["entities"][:5]]
+                    if entity_details:
+                        vision_context += f" | Details: {', '.join(entity_details)}"
+                
+                print(f"\n[DEBUG] VISION CONTEXT SENT TO AI: '{vision_context}'\n")
+                self.log_event(f"Vision: {vision_data['scene_description']}", "VISION")
+
             # Step 2: Cognitive Layer - Generate intent
             self.log_event("Cognitive processing...", "COGNITIVE")
             memory_summary = self.cognitive_engine.get_memory_summary()
@@ -138,7 +172,8 @@ class EmbodiedAssaultronCore:
                 user_message=user_message,
                 world_state=world_state,
                 body_state=body_state,
-                memory_summary=memory_summary
+                memory_summary=memory_summary,
+                vision_context=vision_context
             )
 
             self.log_event(
@@ -576,6 +611,157 @@ def get_available_tools():
         "behaviors": describe_behavior_library(),
         "info": "The AI now reasons about goals and emotions instead of using tools"
     })
+
+
+# ============================================================================
+# VISION SYSTEM ENDPOINTS
+# ============================================================================
+
+@app.route('/api/vision/status')
+def get_vision_status():
+    """Get current vision system status"""
+    state = assaultron.vision_system.get_state()
+    return jsonify(state.to_dict())
+
+
+@app.route('/api/vision/cameras')
+def get_available_cameras():
+    """List available cameras"""
+    cameras = assaultron.vision_system.enumerate_cameras()
+    return jsonify({
+        "cameras": cameras,
+        "current_camera": assaultron.vision_system.state.camera_id
+    })
+
+
+@app.route('/api/vision/select_camera', methods=['POST'])
+def select_camera():
+    """Select a camera by ID"""
+    data = request.get_json()
+    camera_id = data.get('camera_id', 0)
+    
+    try:
+        camera_id = int(camera_id)
+        success = assaultron.vision_system.select_camera(camera_id)
+        return jsonify({
+            "success": success,
+            "camera_id": camera_id
+        })
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid camera ID: {e}"}), 400
+
+
+@app.route('/api/vision/start', methods=['POST'])
+def start_vision():
+    """Start vision capture"""
+    try:
+        success = assaultron.vision_system.start_capture()
+        if success:
+            assaultron.log_event("Vision system started", "VISION")
+            return jsonify({
+                "success": True,
+                "message": "Vision capture started"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to start vision capture"
+            }), 500
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/vision/stop', methods=['POST'])
+def stop_vision():
+    """Stop vision capture"""
+    try:
+        assaultron.vision_system.stop_capture()
+        assaultron.log_event("Vision system stopped", "VISION")
+        return jsonify({
+            "success": True,
+            "message": "Vision capture stopped"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/vision/toggle', methods=['POST'])
+def toggle_vision():
+    """Toggle vision capture on/off"""
+    try:
+        new_state = assaultron.vision_system.toggle_capture()
+        status = "started" if new_state else "stopped"
+        assaultron.log_event(f"Vision system {status}", "VISION")
+        return jsonify({
+            "success": True,
+            "enabled": new_state,
+            "message": f"Vision capture {status}"
+        })
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "error": str(e)
+        }), 500
+
+
+@app.route('/api/vision/frame')
+def get_vision_frame():
+    """Get current frame as base64 JPEG"""
+    frame_b64 = assaultron.vision_system.get_frame_b64()
+    if frame_b64:
+        return jsonify({
+            "success": True,
+            "frame": frame_b64,
+            "timestamp": datetime.now().isoformat()
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": "No frame available"
+        }), 404
+
+
+@app.route('/api/vision/entities')
+def get_vision_entities():
+    """Get currently detected entities"""
+    state = assaultron.vision_system.get_state()
+    return jsonify({
+        "entities": [e.to_dict() for e in state.entities],
+        "person_count": state.person_count,
+        "object_count": state.object_count,
+        "scene_description": state.scene_description,
+        "threat_assessment": state.threat_assessment
+    })
+
+
+@app.route('/api/vision/scene')
+def get_vision_scene():
+    """Get scene description for AI context"""
+    data = assaultron.vision_system.get_scene_for_cognitive_layer()
+    return jsonify(data)
+
+
+@app.route('/api/vision/confidence', methods=['POST'])
+def set_detection_confidence():
+    """Set detection confidence threshold"""
+    data = request.get_json()
+    confidence = data.get('confidence', 0.5)
+    
+    try:
+        confidence = float(confidence)
+        assaultron.vision_system.set_detection_confidence(confidence)
+        return jsonify({
+            "success": True,
+            "confidence": confidence
+        })
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": f"Invalid confidence value: {e}"}), 400
 
 
 # ============================================================================
