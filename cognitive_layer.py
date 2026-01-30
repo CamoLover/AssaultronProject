@@ -127,31 +127,58 @@ class CognitiveEngine:
         Returns:
             CognitiveState with goal, emotion, confidence, urgency, focus, dialogue
         """
-        # Build full prompt
-        messages = self._build_prompt(
-            user_message,
-            world_state,
-            body_state,
-            memory_summary,
-            vision_context
-        )
+        max_retries = 3
+        cognitive_state = None
 
-        # Call LLM
-        try:
-            response_text = self._call_llm(messages)
-        except Exception as e:
-            print(f"[COGNITIVE ERROR] LLM call failed: {e}")
-            # Fallback to safe neutral state
-            return CognitiveState(
-                goal="idle",
-                emotion="neutral",
-                confidence=0.0,
-                urgency=0.0,
-                dialogue="System error. Give me a moment."
+        for attempt in range(max_retries):
+            # Build full prompt
+            messages = self._build_prompt(
+                user_message,
+                world_state,
+                body_state,
+                memory_summary,
+                vision_context
             )
 
-        # Parse response into CognitiveState
-        cognitive_state = self._parse_response(response_text)
+            # Add anti-duplicate instruction on retry attempts
+            if attempt > 0:
+                # Modify the last user message to explicitly request variety
+                messages.append({
+                    "role": "system",
+                    "content": f"IMPORTANT: Your previous response was identical to a recent message. You MUST generate a completely different response this time. Be creative and varied in your dialogue. Attempt {attempt + 1}/{max_retries}."
+                })
+                print(f"[COGNITIVE] Duplicate detected, regenerating response (attempt {attempt + 1}/{max_retries})...")
+
+            # Call LLM
+            try:
+                response_text = self._call_llm(messages)
+            except Exception as e:
+                print(f"[COGNITIVE ERROR] LLM call failed: {e}")
+                # Fallback to safe neutral state
+                return CognitiveState(
+                    goal="idle",
+                    emotion="neutral",
+                    confidence=0.0,
+                    urgency=0.0,
+                    dialogue="System error. Give me a moment."
+                )
+
+            # Parse response into CognitiveState
+            cognitive_state = self._parse_response(response_text)
+
+            # Check if response is a duplicate
+            if self._is_duplicate_response(cognitive_state.dialogue):
+                if attempt < max_retries - 1:
+                    # Try again with modified prompt
+                    continue
+                else:
+                    # Last attempt - log warning but accept it
+                    print(f"[COGNITIVE WARNING] Duplicate response detected after {max_retries} attempts. Accepting anyway.")
+            else:
+                # Response is unique, break out of retry loop
+                if attempt > 0:
+                    print(f"[COGNITIVE] Successfully generated unique response on attempt {attempt + 1}")
+                break
 
         # Update conversation history
         self._update_history(user_message, cognitive_state.dialogue)
@@ -653,6 +680,34 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
             dialogue=response_text.strip()
         )
 
+    def _is_duplicate_response(self, response: str, check_last_n: int = 5) -> bool:
+        """
+        Check if response is a duplicate of any recent responses.
+
+        Args:
+            response: The response to check
+            check_last_n: Number of recent exchanges to check against
+
+        Returns:
+            True if response is identical to any of the last N responses
+        """
+        if not self.conversation_history:
+            return False
+
+        # Get last N assistant responses
+        recent_responses = [
+            exchange["assistant"]
+            for exchange in self.conversation_history[-check_last_n:]
+        ]
+
+        # Check for exact match
+        response_stripped = response.strip()
+        for recent in recent_responses:
+            if recent.strip() == response_stripped:
+                return True
+
+        return False
+
     def _update_history(self, user_message: str, assistant_response: str) -> None:
         """Update conversation history"""
         self.conversation_history.append({
@@ -664,7 +719,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         # Keep last 100 exchanges
         if len(self.conversation_history) > 100:
             self.conversation_history = self.conversation_history[-100:]
-        
+
         self._save_history()
 
     def _save_history(self) -> None:
