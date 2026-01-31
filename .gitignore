@@ -209,3 +209,6 @@ __marimo__/
 Content/xVAsynth/
 Content/Ollama/
 audio_output/
+memories.json
+conversation_history.json
+Content/xVAsynth.zip
