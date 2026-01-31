@@ -65,9 +65,11 @@ class VoiceManager:
             self.logger.log_event(message, "VOICE")
     
     def start_server(self):
-        """Start the xVAsynth server"""
-        if self.server_running:
-            self.log("Server already running")
+        """Start the xVAsynth server executable"""
+        self.stop_server() # Force stop any existing instances
+        
+        if self.check_server_status():
+            self.log("Server already running (failed to stop?)")
             return True
         
         try:
@@ -337,22 +339,29 @@ class VoiceManager:
                 # Try graceful shutdown first
                 try:
                     requests.post(f"{self.server_url}/stopServer", timeout=5)
-                    time.sleep(2)
+                    time.sleep(1)
                 except:
                     pass
                 
                 # Force terminate if still running
                 if self.server_process.poll() is None:
                     self.server_process.terminate()
-                    time.sleep(2)
+                    time.sleep(1)
                     
                     # Force kill if still running
                     if self.server_process.poll() is None:
                         self.server_process.kill()
                 
                 self.server_process = None
-                self.log("xVAsynth server stopped")
             
+            # Global cleanup on Windows
+            if os.name == 'nt':
+                try:
+                    subprocess.call(['taskkill', '/F', '/IM', 'server.exe', '/T'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                except:
+                    pass
+
+            self.log("xVAsynth server stopped")
             self.server_running = False
             self.model_loaded = False
             self.is_initialized = False
@@ -744,7 +753,7 @@ class VoiceManager:
                 pass
             
             # Wait for file generation (file may be written despite server error)
-            time.sleep(2)
+            time.sleep(0.2)
             
             # Check if file was created with .wav extension
             expected_file = Path(output_filename)
