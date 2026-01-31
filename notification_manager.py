@@ -107,8 +107,27 @@ class NotificationManager:
         self.send_notification(title, message, color=0x9b59b6, force=True)  # Purple
 
     def notify_scheduled_checkin(self, message: str):
-        """Notification for scheduled check-ins during inactivity"""
+        """
+        Notification for scheduled check-ins during inactivity.
+        Also adds the question to conversation history so AI has context when user responds.
+        """
         title = "👋 Check-In"
+
+        # Add the AI's question to conversation history BEFORE sending notification
+        if self.cognitive_engine:
+            try:
+                # Add as an AI message in the conversation history
+                self.cognitive_engine.conversation_history.append({
+                    "user": "",  # Empty user field indicates AI initiated
+                    "assistant": message,
+                    "timestamp": datetime.now().isoformat(),
+                    "notification": True  # Flag this as a notification message
+                })
+                self.cognitive_engine._save_history()
+                print(f"[NOTIFICATION] Added check-in question to conversation history")
+            except Exception as e:
+                print(f"[NOTIFICATION] Failed to add question to history: {e}")
+
         self.send_notification(title, message, color=0x2ecc71)  # Green
 
     def update_user_activity(self):

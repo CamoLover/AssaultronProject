@@ -37,7 +37,9 @@ class VoiceManager:
         # Status tracking
         self.is_initialized = False
         self.last_synthesis_file = None
-        
+        self.is_playing = False
+        self.playback_start_time = None
+
         # Audio playback
         pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
         
@@ -71,7 +73,7 @@ class VoiceManager:
         try:
             # Path to xVAsynth server executable - exact path from your working command
             app_dir = Path("Content/xVAsynth/resources/app")
-            server_exe = app_dir / "cpython_cpu" / "server.exe"
+            server_exe = app_dir / "cpython_gpu" / "server.exe"
 
             # If the port is already in use, try to free it first
             try:
@@ -142,12 +144,12 @@ class VoiceManager:
             # If starting the absolute path immediately failed, try fallback
             if not self.server_process:
                 # Try launching from the cpython_cpu folder using the exe name
-                cpu_dir = app_dir / 'cpython_cpu'
+                cpu_dir = app_dir / 'cpython_gpu'
                 if cpu_dir.exists():
                     self.log(f"Primary start failed; attempting fallback in {cpu_dir}")
                     self.server_process = _start_process(server_exe.name, cpu_dir)
                 else:
-                    self.log(f"Fallback cpu dir not found: {cpu_dir}", "ERROR")
+                    self.log(f"Fallback gpu dir not found: {cpu_dir}", "ERROR")
             
             # Wait for server to start (up to 45 seconds - xVAsynth takes time to initialize)
             for i in range(45):
@@ -769,18 +771,24 @@ class VoiceManager:
             if not Path(file_path).exists():
                 self.log(f"Audio file not found: {file_path}", "ERROR")
                 return False
-            
+
             # Load and play audio
+            self.is_playing = True
+            self.playback_start_time = time.time()
             pygame.mixer.music.load(file_path)
             pygame.mixer.music.play()
-            
+
             # Wait for playback to finish
             while pygame.mixer.music.get_busy():
                 time.sleep(0.1)
-            
+
+            self.is_playing = False
+            self.playback_start_time = None
             return True
-            
+
         except Exception as e:
+            self.is_playing = False
+            self.playback_start_time = None
             self.log(f"Audio playback failed: {e}", "ERROR")
             return False
     
@@ -806,7 +814,9 @@ class VoiceManager:
                 "author": self.model_info.get('author') if self.model_info else None
             },
             "last_synthesis": self.last_synthesis_file,
-            "audio_output_dir": str(self.audio_output_dir)
+            "audio_output_dir": str(self.audio_output_dir),
+            "is_playing": self.is_playing,
+            "playback_duration": time.time() - self.playback_start_time if self.playback_start_time else 0
         }
     
     def cleanup_old_files(self, keep_last=10):

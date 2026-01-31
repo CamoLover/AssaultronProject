@@ -450,7 +450,8 @@ def chat():
             "hardware_state": result.get("hardware_state"),
             "body_state": result.get("body_state"),
             "provider": Config.LLM_PROVIDER,
-            "model": Config.OPENROUTER_MODEL if Config.LLM_PROVIDER == "openrouter" else (Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL)
+            "model": Config.OPENROUTER_MODEL if Config.LLM_PROVIDER == "openrouter" else (Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL),
+            "voice_enabled": assaultron.voice_enabled
         })
     else:
         return jsonify({
@@ -777,6 +778,22 @@ def toggle_background_monitoring():
         "message": message,
         "enabled": enable
     })
+
+
+@app.route('/api/notifications/user_active', methods=['POST'])
+def mark_user_active():
+    """
+    Endpoint for frontend to call when user is actively using the chat.
+    This prevents notifications from being sent while user is engaged.
+
+    Frontend should call this when:
+    - User focuses the chat input
+    - User scrolls through messages
+    - User sends a message (already handled)
+    - User is viewing the chat window
+    """
+    assaultron.notification_manager.update_user_activity()
+    return jsonify({"success": True})
 
 
 @app.route('/api/embodied/world_state', methods=['POST'])
