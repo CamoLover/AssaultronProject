@@ -26,6 +26,7 @@ from cognitive_layer import CognitiveEngine, extract_memory_from_message
 from behavioral_layer import BehaviorArbiter, describe_behavior_library
 from motion_controller import MotionController, HardwareStateValidator
 from vision_system import VisionSystem
+from notification_manager import NotificationManager
 
 
 app = Flask(__name__)
@@ -92,6 +93,23 @@ class EmbodiedAssaultronCore:
         self.vision_system = VisionSystem(logger=self)
         self.vision_system.enumerate_cameras()  # Discover available cameras
         self.log_event("Vision System initialized", "SYSTEM")
+
+        # Notification system (pass cognitive_engine for smart questions)
+        self.notification_manager = NotificationManager(
+            app_name="Assaultron AI",
+            cognitive_engine=self.cognitive_engine
+        )
+        self.notification_manager.configure(
+            min_interval=30,  # 30 seconds between notifications
+            inactivity_threshold_min=300,  # 5 minutes minimum
+            inactivity_threshold_max=1800  # 30 minutes maximum
+        )
+        self.notification_manager.start_inactivity_monitoring(check_interval=60)
+        self.log_event("Notification Manager initialized (AI-powered check-ins: 5-30min)", "SYSTEM")
+
+        # Background monitoring for proactive notifications
+        self.background_monitoring_enabled = False
+        self.background_thread = None
 
     def log_event(self, message, event_type="INFO"):
         """Log system events"""
@@ -224,7 +242,10 @@ class EmbodiedAssaultronCore:
 
             self.log_event(f"Response generated in {response_time}ms", "SYSTEM")
 
-            # Step 7: Voice synthesis (if enabled)
+            # Step 7: Check for notification triggers
+            self._check_and_send_notifications(cognitive_state, world_state)
+
+            # Step 8: Voice synthesis (if enabled)
             if self.voice_enabled:
                 self.voice_system.synthesize_async(cognitive_state.dialogue)
 
@@ -313,6 +334,84 @@ class EmbodiedAssaultronCore:
             return "pointing"
         else:
             return "open"
+
+    def _check_and_send_notifications(self, cognitive_state: CognitiveState, world_state: WorldState):
+        """
+        Check if notifications should be sent based on cognitive state and world state.
+
+        IMPORTANT: This function is called during active conversation (when user is talking).
+        Notifications should NOT be sent during active chat - user already has full attention on AI.
+
+        This function only updates activity timestamp to prevent inactivity check-ins.
+
+        Real notifications should only come from:
+        - Background monitoring thread (not implemented yet)
+        - Vision system detecting threats when idle (not implemented yet)
+        """
+        # Update user activity timestamp to prevent check-in notifications
+        self.notification_manager.update_user_activity()
+
+        # NOTE: We intentionally DO NOT send notifications here because:
+        # - User is actively talking to the AI (already paying attention)
+        # - Notifications during conversation would be redundant and annoying
+        # - The response is already being displayed in the chat interface
+
+        # Future: Background monitoring thread will check these conditions when user is NOT talking
+
+    def start_background_monitoring(self, check_interval: int = 30):
+        """
+        Start background monitoring thread that checks for issues when user is NOT actively talking.
+
+        This thread will:
+        - Monitor vision system for threats (only when vision is enabled)
+        - Check system health
+        - Send notifications only when user is IDLE (not in active conversation)
+
+        Args:
+            check_interval: How often to check (seconds)
+        """
+        if self.background_thread and self.background_thread.is_alive():
+            return  # Already running
+
+        self.background_monitoring_enabled = True
+
+        def monitoring_loop():
+            while self.background_monitoring_enabled:
+                time.sleep(check_interval)
+
+                if not self.background_monitoring_enabled:
+                    break
+
+                # Check if user has been inactive (not talking)
+                time_since_activity = (datetime.now() - self.notification_manager.last_user_interaction).total_seconds()
+
+                # Only check for issues if user hasn't talked in at least 60 seconds
+                # (This means they're not actively in conversation)
+                if time_since_activity < 60:
+                    continue  # User is actively chatting, skip monitoring
+
+                # Check vision system for threats (only if enabled)
+                if self.vision_system.state.enabled:
+                    world_state = self.virtual_world.get_world_state()
+                    threat_level = world_state.threat_level
+
+                    # Send notification for medium/high threats
+                    if threat_level in ["medium", "high"]:
+                        entity_count = len(world_state.entities)
+                        self.notification_manager.notify_threat_detected(
+                            threat_level=threat_level,
+                            entity_count=entity_count
+                        )
+                        self.log_event(f"Background: Threat detected ({threat_level})", "SYSTEM")
+
+        self.background_thread = threading.Thread(target=monitoring_loop, daemon=True)
+        self.background_thread.start()
+        self.log_event("Background monitoring started", "SYSTEM")
+
+    def stop_background_monitoring(self):
+        """Stop the background monitoring thread"""
+        self.background_monitoring_enabled = False
+        self.log_event("Background monitoring stopped", "SYSTEM")
 
 
 # ============================================================================
@@ -564,6 +663,120 @@ def get_state_history():
     """Get virtual body state transition history"""
     history = assaultron.virtual_world.get_history(limit=20)
     return jsonify(history)
+
+
+# ============================================================================
+# NOTIFICATION SYSTEM ENDPOINTS
+# ============================================================================
+
+@app.route('/api/notifications/test', methods=['POST'])
+def test_notification():
+    """Send a test notification"""
+    data = request.get_json()
+    title = data.get('title', 'Assaultron AI - Test')
+    message = data.get('message', 'Discord notification system is working!')
+
+    success = assaultron.notification_manager.send_notification(
+        title=title,
+        message=message,
+        color=0x3498db,  # Blue
+        force=True
+    )
+
+    return jsonify({
+        "success": success,
+        "message": "Discord notification sent! Check your channel." if success else "Failed to send notification"
+    })
+
+
+@app.route('/api/notifications/request_attention', methods=['POST'])
+def request_attention():
+    """Manually trigger an attention request notification"""
+    data = request.get_json()
+    reason = data.get('reason', 'The AI wants your attention')
+    dialogue = data.get('dialogue')
+
+    assaultron.notification_manager.notify_attention_request(
+        reason=reason,
+        dialogue=dialogue
+    )
+    assaultron.log_event(f"Manual attention request: {reason}", "SYSTEM")
+
+    return jsonify({
+        "success": True,
+        "message": "Attention notification sent"
+    })
+
+
+@app.route('/api/notifications/config', methods=['GET', 'POST'])
+def notification_config():
+    """Get or update notification configuration"""
+    if request.method == 'GET':
+        return jsonify({
+            "min_interval": assaultron.notification_manager.min_notification_interval,
+            "inactivity_threshold_min": assaultron.notification_manager.inactivity_threshold_min,
+            "inactivity_threshold_max": assaultron.notification_manager.inactivity_threshold_max,
+            "inactivity_monitoring": assaultron.notification_manager.inactivity_check_enabled
+        })
+    else:
+        data = request.get_json()
+        min_interval = data.get('min_interval')
+        inactivity_threshold_min = data.get('inactivity_threshold_min')
+        inactivity_threshold_max = data.get('inactivity_threshold_max')
+
+        assaultron.notification_manager.configure(
+            min_interval=min_interval,
+            inactivity_threshold_min=inactivity_threshold_min,
+            inactivity_threshold_max=inactivity_threshold_max
+        )
+
+        return jsonify({
+            "success": True,
+            "message": "Notification settings updated"
+        })
+
+
+@app.route('/api/notifications/inactivity/toggle', methods=['POST'])
+def toggle_inactivity_monitoring():
+    """Start or stop inactivity monitoring"""
+    data = request.get_json()
+    enable = data.get('enable', True)
+
+    if enable:
+        assaultron.notification_manager.start_inactivity_monitoring()
+        message = "Inactivity monitoring started"
+    else:
+        assaultron.notification_manager.stop_inactivity_monitoring()
+        message = "Inactivity monitoring stopped"
+
+    assaultron.log_event(message, "SYSTEM")
+
+    return jsonify({
+        "success": True,
+        "message": message,
+        "enabled": enable
+    })
+
+
+@app.route('/api/notifications/background/toggle', methods=['POST'])
+def toggle_background_monitoring():
+    """Start or stop background threat monitoring (vision system)"""
+    data = request.get_json()
+    enable = data.get('enable', True)
+
+    if enable:
+        check_interval = data.get('check_interval', 30)
+        assaultron.start_background_monitoring(check_interval=check_interval)
+        message = f"Background monitoring started (checks every {check_interval}s)"
+    else:
+        assaultron.stop_background_monitoring()
+        message = "Background monitoring stopped"
+
+    return jsonify({
+        "success": True,
+        "message": message,
+        "enabled": enable
+    })
 
 
 @app.route('/api/embodied/world_state', methods=['POST'])

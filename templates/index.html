@@ -263,6 +263,84 @@
                             </div>
                         </div>
                     </div>
+
+                    <!-- Notification System Control -->
+                    <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+                        <div class="bg-gray-800 px-4 py-2 flex justify-between items-center">
+                            <h3 class="font-bold text-white text-xs tracking-widest uppercase">Alert System</h3>
+                            <div id="notificationStatusIndicator" class="h-2 w-2 rounded-full bg-green-500"></div>
+                        </div>
+                        <div class="p-4 space-y-4">
+                            <!-- Status Display -->
+                            <div class="bg-blue-50 border border-blue-100 rounded p-2 text-xs space-y-1">
+                                <div class="flex justify-between">
+                                    <span class="text-gray-500 text-[10px] uppercase">Inactivity Monitor</span>
+                                    <span id="inactivityStatus" class="font-bold text-green-600">ACTIVE</span>
+                                </div>
+                                <div class="flex justify-between">
+                                    <span class="text-gray-500 text-[10px] uppercase">Threat Monitor</span>
+                                    <span id="backgroundStatus" class="font-bold text-gray-400">INACTIVE</span>
+                                </div>
+                            </div>
+
+                            <!-- Toggle Controls -->
+                            <div class="space-y-3">
+                                <div class="flex items-center justify-between">
+                                    <label class="text-xs font-medium text-gray-700">Check-In Alerts</label>
+                                    <button id="toggleInactivity" onclick="toggleInactivityMonitoring()"
+                                        class="px-3 py-1 bg-green-600 text-white rounded text-[10px] font-bold hover:bg-green-700 transition-colors">
+                                        ENABLED
+                                    </button>
+                                </div>
+                                <div class="flex items-center justify-between">
+                                    <label class="text-xs font-medium text-gray-700">Threat Alerts</label>
+                                    <button id="toggleBackground" onclick="toggleBackgroundMonitoring()"
+                                        class="px-3 py-1 bg-gray-400 text-white rounded text-[10px] font-bold hover:bg-gray-500 transition-colors">
+                                        DISABLED
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Configuration -->
+                            <div class="space-y-3 pt-3 border-t border-gray-100">
+                                <div>
+                                    <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Min Interval (sec)</label>
+                                    <input type="number" id="minInterval" value="30" min="10" max="300"
+                                        class="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Check-In Min (sec)</label>
+                                    <input type="number" id="inactivityThresholdMin" value="300" min="60" max="3600"
+                                        class="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                </div>
+                                <div>
+                                    <label class="text-[10px] font-bold text-gray-500 uppercase block mb-1">Check-In Max (sec)</label>
+                                    <input type="number" id="inactivityThresholdMax" value="1800" min="300" max="3600"
+                                        class="w-full px-2 py-1 border border-gray-300 rounded text-xs focus:outline-none focus:ring-1 focus:ring-blue-500">
+                                </div>
+                                <div class="text-[9px] text-gray-400 italic">
+                                    AI will check in randomly between min-max interval with personalized questions
+                                </div>
+                                <button onclick="updateNotificationConfig()"
+                                    class="w-full px-3 py-2 bg-blue-600 text-white rounded text-xs font-bold hover:bg-blue-700 transition-colors">
+                                    APPLY CONFIG
+                                </button>
+                            </div>
+
+                            <!-- Test Button -->
+                            <div class="pt-3 border-t border-gray-100">
+                                <button onclick="testNotification()"
+                                    class="w-full flex items-center justify-center gap-2 px-3 py-2 bg-orange-500 text-white rounded shadow-sm text-xs font-bold hover:bg-orange-600 transition-all">
+                                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9">
+                                        </path>
+                                    </svg>
+                                    SEND TEST ALERT
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- BODY & WORLD (Middle Column) -->
@@ -1778,11 +1856,158 @@
         // Load history on startup
         loadHistory();
 
+        // ============================================================================
+        // NOTIFICATION SYSTEM FUNCTIONS
+        // ============================================================================
+
+        let inactivityMonitoringEnabled = true;
+        let backgroundMonitoringEnabled = false;
+
+        async function toggleInactivityMonitoring() {
+            try {
+                inactivityMonitoringEnabled = !inactivityMonitoringEnabled;
+                const response = await fetch('/api/notifications/inactivity/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ enable: inactivityMonitoringEnabled })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    updateNotificationUI();
+                    addLog('INFO', data.message);
+                }
+            } catch (error) {
+                addLog('ERROR', `Failed to toggle inactivity monitoring: ${error.message}`);
+            }
+        }
+
+        async function toggleBackgroundMonitoring() {
+            try {
+                backgroundMonitoringEnabled = !backgroundMonitoringEnabled;
+                const response = await fetch('/api/notifications/background/toggle', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        enable: backgroundMonitoringEnabled,
+                        check_interval: 30
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    updateNotificationUI();
+                    addLog('INFO', data.message);
+                }
+            } catch (error) {
+                addLog('ERROR', `Failed to toggle background monitoring: ${error.message}`);
+            }
+        }
+
+        async function updateNotificationConfig() {
+            try {
+                const minInterval = parseInt(document.getElementById('minInterval').value);
+                const inactivityThresholdMin = parseInt(document.getElementById('inactivityThresholdMin').value);
+                const inactivityThresholdMax = parseInt(document.getElementById('inactivityThresholdMax').value);
+
+                const response = await fetch('/api/notifications/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        min_interval: minInterval,
+                        inactivity_threshold_min: inactivityThresholdMin,
+                        inactivity_threshold_max: inactivityThresholdMax
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    addLog('SUCCESS', `AI check-ins now every ${inactivityThresholdMin/60}-${inactivityThresholdMax/60} min`);
+                }
+            } catch (error) {
+                addLog('ERROR', `Failed to update config: ${error.message}`);
+            }
+        }
+
+        async function testNotification() {
+            try {
+                const response = await fetch('/api/notifications/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        title: 'Assaultron AI - Test',
+                        message: 'Windows notification system is working!'
+                    })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    addLog('SUCCESS', 'Test notification sent - check your desktop!');
+                } else {
+                    addLog('WARNING', 'Failed to send notification');
+                }
+            } catch (error) {
+                addLog('ERROR', `Notification test failed: ${error.message}`);
+            }
+        }
+
+        function updateNotificationUI() {
+            // Update status display
+            const inactivityStatusEl = document.getElementById('inactivityStatus');
+            const backgroundStatusEl = document.getElementById('backgroundStatus');
+            const inactivityBtnEl = document.getElementById('toggleInactivity');
+            const backgroundBtnEl = document.getElementById('toggleBackground');
+
+            if (inactivityMonitoringEnabled) {
+                inactivityStatusEl.textContent = 'ACTIVE';
+                inactivityStatusEl.className = 'font-bold text-green-600';
+                inactivityBtnEl.textContent = 'ENABLED';
+                inactivityBtnEl.className = 'px-3 py-1 bg-green-600 text-white rounded text-[10px] font-bold hover:bg-green-700 transition-colors';
+            } else {
+                inactivityStatusEl.textContent = 'INACTIVE';
+                inactivityStatusEl.className = 'font-bold text-gray-400';
+                inactivityBtnEl.textContent = 'DISABLED';
+                inactivityBtnEl.className = 'px-3 py-1 bg-gray-400 text-white rounded text-[10px] font-bold hover:bg-gray-500 transition-colors';
+            }
+
+            if (backgroundMonitoringEnabled) {
+                backgroundStatusEl.textContent = 'ACTIVE';
+                backgroundStatusEl.className = 'font-bold text-green-600';
+                backgroundBtnEl.textContent = 'ENABLED';
+                backgroundBtnEl.className = 'px-3 py-1 bg-green-600 text-white rounded text-[10px] font-bold hover:bg-green-700 transition-colors';
+            } else {
+                backgroundStatusEl.textContent = 'INACTIVE';
+                backgroundStatusEl.className = 'font-bold text-gray-400';
+                backgroundBtnEl.textContent = 'DISABLED';
+                backgroundBtnEl.className = 'px-3 py-1 bg-gray-400 text-white rounded text-[10px] font-bold hover:bg-gray-500 transition-colors';
+            }
+        }
+
+        async function loadNotificationConfig() {
+            try {
+                const response = await fetch('/api/notifications/config');
+                if (response.ok) {
+                    const config = await response.json();
+                    document.getElementById('minInterval').value = config.min_interval;
+                    document.getElementById('inactivityThresholdMin').value = config.inactivity_threshold_min || 300;
+                    document.getElementById('inactivityThresholdMax').value = config.inactivity_threshold_max || 1800;
+                    inactivityMonitoringEnabled = config.inactivity_monitoring;
+                    updateNotificationUI();
+                }
+            } catch (error) {
+                console.log('Failed to load notification config:', error.message);
+            }
+        }
+
+        // Load notification config on startup
+        loadNotificationConfig();
+
         // Additional periodic updates (kept from original)
         setInterval(() => {
             if (currentTab === 'embodied') {
                 updateEmbodiedAgentData();
                 updateVoiceSystemStatus();
+                loadNotificationConfig(); // Refresh notification status
             }
             if (currentTab === 'vision' && visionEnabled) {
                 updateVisionData();

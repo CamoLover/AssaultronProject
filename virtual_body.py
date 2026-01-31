@@ -222,6 +222,10 @@ class CognitiveState:
     # Potential long-term memory to store (if important)
     memory: Optional[str] = None
 
+    # Attention request flags
+    needs_attention: bool = False  # Whether AI wants user's attention
+    attention_reason: Optional[str] = None  # Why attention is needed
+
     def __post_init__(self):
         """Validate ranges"""
         self.confidence = max(0.0, min(1.0, self.confidence))
@@ -236,7 +240,9 @@ class CognitiveState:
             "urgency": self.urgency,
             "focus": self.focus,
             "dialogue": self.dialogue,
-            "memory": self.memory
+            "memory": self.memory,
+            "needs_attention": self.needs_attention,
+            "attention_reason": self.attention_reason
         }
 
     @classmethod
@@ -249,7 +255,9 @@ class CognitiveState:
             urgency=data["urgency"],
             focus=data.get("focus"),
             dialogue=data.get("dialogue", ""),
-            memory=data.get("memory")
+            memory=data.get("memory"),
+            needs_attention=data.get("needs_attention", False),
+            attention_reason=data.get("attention_reason")
         )
 
 

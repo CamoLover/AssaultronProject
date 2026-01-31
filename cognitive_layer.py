@@ -303,7 +303,9 @@ You must provide TWO outputs:
     "urgency": <0.0-1.0>,
     "focus": "<entity_id or null>",
     "dialogue": "<your spoken response>",
-    "memory": "<OPTIONAL: a short factual memory to store about Evan or this event (use only for important things)>"
+    "memory": "<OPTIONAL: a short factual memory to store about Evan or this event (use only for important things)>",
+    "needs_attention": <true or false>,
+    "attention_reason": "<OPTIONAL: why you need attention, if needs_attention is true>"
 }
 ```
 
@@ -341,6 +343,22 @@ Choose the emotion that best matches your feeling:
 ## FOCUS
 If your attention is directed at a specific entity (person, object), specify its ID.
 Otherwise, use null.
+
+## REQUESTING USER ATTENTION
+If you need the user's attention when they're not actively talking to you, set:
+- "needs_attention": true
+- "attention_reason": "Brief reason why you need their attention"
+
+This will send them a Windows desktop notification. Use this when:
+- You detect something important they should know about
+- You have urgent information or concerns
+- You want to proactively check in on them
+- You feel something requires immediate discussion
+
+Examples:
+- Detected a security concern: {"needs_attention": true, "attention_reason": "Motion detected in the living room"}
+- Want to share something: {"needs_attention": true, "attention_reason": "I noticed something interesting you should see"}
+- Proactive check-in: {"needs_attention": true, "attention_reason": "Just checking in - haven't heard from you in a while"}
 
 ## CRITICAL RULES
 - NEVER mention "LED", "motors", "hardware", "intensity", "angles", or physical primitives
@@ -637,7 +655,9 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 urgency=float(data.get("urgency", 0.3)),
                 focus=data.get("focus"),
                 dialogue=clean_dialogue,
-                memory=data.get("memory")
+                memory=data.get("memory"),
+                needs_attention=data.get("needs_attention", False),
+                attention_reason=data.get("attention_reason")
             )
         except (json.JSONDecodeError, KeyError, ValueError) as e:
             print(f"[COGNITIVE WARNING] JSON parse error: {e}")
