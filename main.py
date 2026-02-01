@@ -155,6 +155,20 @@ class EmbodiedAssaultronCore:
             world_state = self.virtual_world.get_world_state()
             body_state = self.virtual_world.get_body_state()
 
+            # Step 1a: Update mood based on interaction
+            is_question = "?" in user_message
+            self.virtual_world.update_mood(
+                user_message=user_message,
+                is_question=is_question,
+                message_length=len(user_message)
+            )
+            mood_state = self.virtual_world.get_mood_state()
+            self.log_event(
+                f"Mood: curiosity={mood_state.curiosity:.2f}, irritation={mood_state.irritation:.2f}, "
+                f"boredom={mood_state.boredom:.2f}, attachment={mood_state.attachment:.2f}",
+                "MOOD"
+            )
+
             # Step 1b: Integrate vision data into world state
             vision_context = ""
             if self.vision_system.state.enabled:
@@ -192,6 +206,7 @@ class EmbodiedAssaultronCore:
                 user_message=user_message,
                 world_state=world_state,
                 body_state=body_state,
+                mood_state=mood_state,
                 memory_summary=memory_summary,
                 vision_context=vision_context
             )
@@ -663,6 +678,19 @@ def get_available_behaviors():
 def get_state_history():
     """Get virtual body state transition history"""
     history = assaultron.virtual_world.get_history(limit=20)
+    return jsonify(history)
+
+
+@app.route('/api/embodied/mood_state')
+def get_mood_state():
+    """Get current internal mood state (read-only)"""
+    return jsonify(assaultron.virtual_world.get_mood_state().to_dict())
+
+
+@app.route('/api/embodied/mood_history')
+def get_mood_history():
+    """Get mood state history over time"""
+    history = assaultron.virtual_world.get_mood_history(limit=50)
     return jsonify(history)
 
 

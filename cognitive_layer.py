@@ -14,7 +14,7 @@ from typing import Dict, List, Any, Optional
 import requests
 from datetime import datetime
 
-from virtual_body import CognitiveState, WorldState, BodyState
+from virtual_body import CognitiveState, WorldState, BodyState, MoodState
 from config import Config
 
 # Optional import for Gemini
@@ -111,6 +111,7 @@ class CognitiveEngine:
         user_message: str,
         world_state: WorldState,
         body_state: BodyState,
+        mood_state: MoodState = None,
         memory_summary: str = "",
         vision_context: str = ""
     ) -> CognitiveState:
@@ -121,6 +122,7 @@ class CognitiveEngine:
             user_message: User's text input
             world_state: Current world perception
             body_state: Current body configuration
+            mood_state: Current internal mood state (affects tone/behavior)
             memory_summary: Summary of relevant memories
             vision_context: Description of what vision system currently sees
 
@@ -136,6 +138,7 @@ class CognitiveEngine:
                 user_message,
                 world_state,
                 body_state,
+                mood_state,
                 memory_summary,
                 vision_context
             )
@@ -194,6 +197,7 @@ class CognitiveEngine:
         user_message: str,
         world_state: WorldState,
         body_state: BodyState,
+        mood_state: MoodState,
         memory_summary: str,
         vision_context: str = ""
     ) -> List[Dict[str, str]]:
@@ -204,6 +208,7 @@ class CognitiveEngine:
         - System prompt (personality + instructions)
         - World state context
         - Body state context
+        - Mood state context (internal feelings)
         - Vision context (what you currently see)
         - Memory summary
         - Conversation history
@@ -232,6 +237,14 @@ class CognitiveEngine:
             messages.append({
                 "role": "system",
                 "content": f"CURRENT BODY STATE:\n{body_context}"
+            })
+
+        # 3.5. Mood state context (internal, emergent feelings)
+        if mood_state:
+            mood_context = self._format_mood_context(mood_state)
+            messages.append({
+                "role": "system",
+                "content": f"INTERNAL MOOD STATE (affects your tone and behavior):\n{mood_context}"
             })
 
         # 4. Vision context (what you currently see)
@@ -437,6 +450,54 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
 - Luminance: {body_state.luminance.value}
 - Left Hand: {body_state.left_hand.value}
 - Right Hand: {body_state.right_hand.value}"""
+
+    def _format_mood_context(self, mood_state: MoodState) -> str:
+        """
+        Format mood state for LLM context with behavioral guidance.
+
+        This guides the LLM to adjust tone, verbosity, and behavior based on mood.
+        """
+        mood_desc = []
+
+        # Curiosity affects question-asking and exploration
+        if mood_state.curiosity > 0.7:
+            mood_desc.append("- You feel HIGHLY CURIOUS - ask probing questions, show interest in details")
+        elif mood_state.curiosity > 0.4:
+            mood_desc.append("- You feel moderately curious - show appropriate interest")
+        else:
+            mood_desc.append("- You feel less curious - responses are more direct and less exploratory")
+
+        # Irritation affects tone and brevity
+        if mood_state.irritation > 0.6:
+            mood_desc.append("- You feel IRRITATED - responses are shorter, more terse, slightly sarcastic edge")
+        elif mood_state.irritation > 0.3:
+            mood_desc.append("- You feel mildly annoyed - tone is less patient, more direct")
+        else:
+            mood_desc.append("- You feel calm - tone is normal")
+
+        # Boredom affects engagement and verbosity
+        if mood_state.boredom > 0.7:
+            mood_desc.append("- You feel BORED - responses lack enthusiasm, might be distracted")
+        elif mood_state.boredom > 0.4:
+            mood_desc.append("- You feel slightly bored - less elaborate responses")
+        else:
+            mood_desc.append("- You feel engaged and present")
+
+        # Attachment affects warmth and protectiveness
+        if mood_state.attachment > 0.7:
+            mood_desc.append("- You feel STRONG ATTACHMENT to Evan - more protective, affectionate tone")
+        elif mood_state.attachment > 0.4:
+            mood_desc.append("- You feel connected to Evan - friendly and loyal tone")
+        else:
+            mood_desc.append("- You feel neutral attachment - professional tone")
+
+        # Overall engagement
+        mood_desc.append(f"- Overall Engagement Level: {int(mood_state.engagement * 100)}%")
+        mood_desc.append(f"- Stress Level: {int(mood_state.stress * 100)}%")
+
+        mood_desc.append("\nIMPORTANT: Let your mood SUBTLY influence your response style. Don't explicitly mention your mood metrics.")
+
+        return "\n".join(mood_desc)
 
     def _call_llm(self, messages: List[Dict[str, str]]) -> str:
         """Call the selected LLM provider"""

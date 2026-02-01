@@ -193,6 +193,65 @@ class BodyCommand:
 
 
 @dataclass
+class MoodState:
+    """
+    Internal mood/emotional state that evolves over time.
+
+    This is INTERNAL ONLY - displayed in UI but cannot be directly controlled.
+    Mood subtly affects behavior tone, verbosity, and responsiveness.
+    """
+    # Core mood dimensions (0.0 - 1.0)
+    curiosity: float = 0.5          # Interest in surroundings and questions
+    irritation: float = 0.0         # Frustration or annoyance
+    boredom: float = 0.0            # Lack of stimulation
+    attachment: float = 0.3         # Emotional bond to operator
+
+    # Derived states
+    engagement: float = 0.5         # How interested/present the agent is
+    stress: float = 0.0             # Anxiety or tension level
+
+    # Temporal tracking
+    last_interaction: datetime = field(default_factory=datetime.now)
+    interaction_count: int = 0
+
+    def __post_init__(self):
+        """Validate all ranges"""
+        self.curiosity = max(0.0, min(1.0, self.curiosity))
+        self.irritation = max(0.0, min(1.0, self.irritation))
+        self.boredom = max(0.0, min(1.0, self.boredom))
+        self.attachment = max(0.0, min(1.0, self.attachment))
+        self.engagement = max(0.0, min(1.0, self.engagement))
+        self.stress = max(0.0, min(1.0, self.stress))
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serialize to dictionary"""
+        return {
+            "curiosity": round(self.curiosity, 2),
+            "irritation": round(self.irritation, 2),
+            "boredom": round(self.boredom, 2),
+            "attachment": round(self.attachment, 2),
+            "engagement": round(self.engagement, 2),
+            "stress": round(self.stress, 2),
+            "last_interaction": self.last_interaction.isoformat(),
+            "interaction_count": self.interaction_count
+        }
+
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'MoodState':
+        """Deserialize from dictionary"""
+        return cls(
+            curiosity=data.get("curiosity", 0.5),
+            irritation=data.get("irritation", 0.0),
+            boredom=data.get("boredom", 0.0),
+            attachment=data.get("attachment", 0.3),
+            engagement=data.get("engagement", 0.5),
+            stress=data.get("stress", 0.0),
+            last_interaction=datetime.fromisoformat(data["last_interaction"]) if "last_interaction" in data else datetime.now(),
+            interaction_count=data.get("interaction_count", 0)
+        )
+
+
+@dataclass
 class CognitiveState:
     """
     Output from the cognitive layer (LLM).
@@ -272,13 +331,16 @@ class VirtualWorld:
     This is the "simulation" the agent exists within. It tracks:
     - The agent's body state
     - The world state (environment, entities)
+    - Internal mood state (read-only, emergent)
     - State history (for debugging)
     """
 
     def __init__(self):
         self.body_state = BodyState()
         self.world_state = WorldState()
+        self.mood_state = MoodState()
         self.state_history: List[Dict[str, Any]] = []
+        self.mood_history: List[Dict[str, Any]] = []
         self.max_history = 100
 
     def update_body(self, command: BodyCommand) -> None:
@@ -325,6 +387,90 @@ class VirtualWorld:
         """Get current world state"""
         return self.world_state
 
+    def get_mood_state(self) -> MoodState:
+        """Get current internal mood state"""
+        return self.mood_state
+
+    def update_mood(self,
+                    user_message: str = "",
+                    is_question: bool = False,
+                    message_length: int = 0) -> None:
+        """
+        Update internal mood based on interaction patterns.
+
+        Mood evolves based on:
+        - Time since last interaction (boredom increases)
+        - Interaction frequency (attachment changes)
+        - Question asking (curiosity increases)
+        - Repeated short messages (irritation increases)
+        """
+        now = datetime.now()
+        time_since_last = (now - self.mood_state.last_interaction).total_seconds()
+
+        # Boredom increases over time without interaction
+        if time_since_last > 300:  # 5 minutes
+            self.mood_state.boredom = min(1.0, self.mood_state.boredom + 0.1)
+        elif time_since_last > 600:  # 10 minutes
+            self.mood_state.boredom = min(1.0, self.mood_state.boredom + 0.2)
+
+        # New interaction - reset boredom, increase engagement
+        if user_message:
+            self.mood_state.boredom = max(0.0, self.mood_state.boredom - 0.15)
+            self.mood_state.engagement = min(1.0, self.mood_state.engagement + 0.1)
+            self.mood_state.interaction_count += 1
+            self.mood_state.last_interaction = now
+
+            # Questions increase curiosity
+            if is_question:
+                self.mood_state.curiosity = min(1.0, self.mood_state.curiosity + 0.05)
+
+            # Very short messages can be irritating if repeated
+            if message_length < 10 and self.mood_state.interaction_count % 5 == 0:
+                self.mood_state.irritation = min(1.0, self.mood_state.irritation + 0.03)
+
+            # Longer meaningful interactions reduce irritation
+            if message_length > 50:
+                self.mood_state.irritation = max(0.0, self.mood_state.irritation - 0.05)
+
+            # Attachment grows slowly with interactions
+            if self.mood_state.interaction_count % 10 == 0:
+                self.mood_state.attachment = min(1.0, self.mood_state.attachment + 0.02)
+
+        # Calculate derived states
+        self.mood_state.engagement = max(0.0, min(1.0,
+            (self.mood_state.curiosity * 0.5) +
+            ((1.0 - self.mood_state.boredom) * 0.5)
+        ))
+
+        self.mood_state.stress = max(0.0, min(1.0,
+            (self.mood_state.irritation * 0.7) +
+            (self.mood_state.boredom * 0.3)
+        ))
+
+        # Natural decay over time
+        self.mood_state.curiosity = max(0.3, self.mood_state.curiosity - 0.01)
+        self.mood_state.irritation = max(0.0, self.mood_state.irritation - 0.02)
+
+        # Log mood changes
+        self._log_mood_transition()
+
+    def _log_mood_transition(self) -> None:
+        """Log mood state changes for history tracking"""
+        mood_entry = {
+            "timestamp": datetime.now().isoformat(),
+            "mood": self.mood_state.to_dict()
+        }
+
+        self.mood_history.append(mood_entry)
+
+        # Limit mood history size
+        if len(self.mood_history) > self.max_history:
+            self.mood_history.pop(0)
+
+    def get_mood_history(self, limit: int = 20) -> List[Dict[str, Any]]:
+        """Get recent mood history"""
+        return self.mood_history[-limit:]
+
     def _log_transition(self, old_state: Dict, new_state: Dict, command: BodyCommand) -> None:
         """Log state transitions for debugging"""
         transition = {
@@ -349,7 +495,9 @@ class VirtualWorld:
         return {
             "body_state": self.body_state.to_dict(),
             "world_state": self.world_state.to_dict(),
-            "history_size": len(self.state_history)
+            "mood_state": self.mood_state.to_dict(),
+            "history_size": len(self.state_history),
+            "mood_history_size": len(self.mood_history)
         }
 
 

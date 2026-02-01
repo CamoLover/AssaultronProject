@@ -375,6 +375,92 @@
                         </div>
                     </div>
 
+                    <!-- Mood State Card (Read-Only Internal State) -->
+                    <div
+                        class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden transition-all hover:shadow-md">
+                        <div
+                            class="bg-gradient-to-r from-pink-600 to-rose-600 px-4 py-2 flex justify-between items-center">
+                            <h3 class="font-bold text-white text-xs tracking-widest uppercase">Internal Mood State</h3>
+                            <span class="h-2 w-2 rounded-full bg-pink-300 animate-pulse"></span>
+                        </div>
+                        <div class="p-4 space-y-3">
+                            <div class="text-[10px] text-pink-600 font-bold uppercase tracking-wide mb-2 border-b border-pink-100 pb-2">
+                                🔒 Read-Only Emergent State
+                            </div>
+
+                            <!-- Mood Meters -->
+                            <div class="space-y-3">
+                                <!-- Curiosity -->
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="font-bold text-gray-500 uppercase text-[10px]">Curiosity</span>
+                                        <span id="moodCuriosityText" class="text-blue-600 font-mono font-bold">0.50</span>
+                                    </div>
+                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                        <div id="moodCuriosityBar"
+                                            class="h-full bg-blue-500 transition-all duration-1000 ease-out"
+                                            style="width: 50%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Irritation -->
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="font-bold text-gray-500 uppercase text-[10px]">Irritation</span>
+                                        <span id="moodIrritationText" class="text-orange-600 font-mono font-bold">0.00</span>
+                                    </div>
+                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                        <div id="moodIrritationBar"
+                                            class="h-full bg-orange-500 transition-all duration-1000 ease-out"
+                                            style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Boredom -->
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="font-bold text-gray-500 uppercase text-[10px]">Boredom</span>
+                                        <span id="moodBoredomText" class="text-gray-600 font-mono font-bold">0.00</span>
+                                    </div>
+                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                        <div id="moodBoredomBar"
+                                            class="h-full bg-gray-500 transition-all duration-1000 ease-out"
+                                            style="width: 0%"></div>
+                                    </div>
+                                </div>
+
+                                <!-- Attachment -->
+                                <div>
+                                    <div class="flex justify-between text-xs mb-1">
+                                        <span class="font-bold text-gray-500 uppercase text-[10px]">Attachment</span>
+                                        <span id="moodAttachmentText" class="text-pink-600 font-mono font-bold">0.30</span>
+                                    </div>
+                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                        <div id="moodAttachmentBar"
+                                            class="h-full bg-pink-500 transition-all duration-1000 ease-out"
+                                            style="width: 30%"></div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Derived States -->
+                            <div class="flex justify-between pt-3 border-t border-gray-100 text-[10px]">
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-gray-400 uppercase font-bold">Engagement</span>
+                                    <span id="moodEngagement" class="text-indigo-600 font-mono font-bold text-xs">50%</span>
+                                </div>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-gray-400 uppercase font-bold">Stress</span>
+                                    <span id="moodStress" class="text-red-600 font-mono font-bold text-xs">0%</span>
+                                </div>
+                                <div class="flex flex-col gap-1">
+                                    <span class="text-gray-400 uppercase font-bold">Interactions</span>
+                                    <span id="moodInteractionCount" class="text-gray-700 font-mono font-bold text-xs">0</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- Voice Control -->
                     <div class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
                         <div class="bg-gray-800 px-4 py-2 flex justify-between items-center">
@@ -1585,6 +1671,32 @@
                         document.getElementById('worldEntities').textContent = entitiesText;
 
                         document.getElementById('worldTime').textContent = data.world_state.time_of_day || 'UNKNOWN';
+                    }
+
+                    // Update mood state (internal, emergent)
+                    if (data.mood_state) {
+                        const mood = data.mood_state;
+
+                        // Update curiosity
+                        document.getElementById('moodCuriosityText').textContent = mood.curiosity.toFixed(2);
+                        document.getElementById('moodCuriosityBar').style.width = `${mood.curiosity * 100}%`;
+
+                        // Update irritation
+                        document.getElementById('moodIrritationText').textContent = mood.irritation.toFixed(2);
+                        document.getElementById('moodIrritationBar').style.width = `${mood.irritation * 100}%`;
+
+                        // Update boredom
+                        document.getElementById('moodBoredomText').textContent = mood.boredom.toFixed(2);
+                        document.getElementById('moodBoredomBar').style.width = `${mood.boredom * 100}%`;
+
+                        // Update attachment
+                        document.getElementById('moodAttachmentText').textContent = mood.attachment.toFixed(2);
+                        document.getElementById('moodAttachmentBar').style.width = `${mood.attachment * 100}%`;
+
+                        // Update derived states
+                        document.getElementById('moodEngagement').textContent = `${Math.round(mood.engagement * 100)}%`;
+                        document.getElementById('moodStress').textContent = `${Math.round(mood.stress * 100)}%`;
+                        document.getElementById('moodInteractionCount').textContent = mood.interaction_count || 0;
                     }
 
                     // Update motion/hardware state (from last hardware state)
