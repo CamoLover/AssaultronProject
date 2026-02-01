@@ -25,6 +25,7 @@ class NotificationManager:
         self.check_in_thread = None
         self.cognitive_engine = cognitive_engine  # Reference to AI for generating questions
         self.next_checkin_time = None
+        self.waiting_for_response = False  # Track if we sent a notification and are waiting for user response
 
     def send_notification(self, title: str, message: str, color: int = 0x3498db, force: bool = False) -> bool:
         """
@@ -133,6 +134,10 @@ class NotificationManager:
     def update_user_activity(self):
         """Call this when user interacts with the system"""
         self.last_user_interaction = datetime.now()
+        # Clear waiting flag when user responds
+        if self.waiting_for_response:
+            self.waiting_for_response = False
+            print("[NOTIFICATION] User responded, will resume check-ins after next inactivity period")
 
     def _generate_ai_question(self) -> str:
         """
@@ -234,19 +239,33 @@ Just return the question, nothing else. Don't use asterisks or formatting."""
                 check_in_threshold = random.randint(self.inactivity_threshold_min, self.inactivity_threshold_max)
 
                 if time_since_interaction >= check_in_threshold:
+                    # Double-check enabled flag before doing any work
+                    if not self.inactivity_check_enabled:
+                        break
+
+                    # Skip if we already sent a notification and are waiting for response
+                    if self.waiting_for_response:
+                        print(f"[NOTIFICATION] Already waiting for user response, skipping check-in")
+                        continue
+
                     print(f"[NOTIFICATION] {time_since_interaction:.0f}s of inactivity, generating AI question...")
 
                     # Generate AI question
                     question = self._generate_ai_question()
                     print(f"[NOTIFICATION] AI question: {question}")
 
-                    # Send it
+                    # Check flag again before sending notification
+                    if not self.inactivity_check_enabled:
+                        break
+
+                    # Send it and mark that we're waiting for response
                     self.notify_scheduled_checkin(question)
+                    self.waiting_for_response = True
 
                     # Reset with new random interval
                     self.last_user_interaction = datetime.now()
                     next_wait = random.randint(self.inactivity_threshold_min, self.inactivity_threshold_max)
-                    print(f"[NOTIFICATION] Next check-in in {next_wait/60:.1f} minutes")
+                    print(f"[NOTIFICATION] Next check-in in {next_wait/60:.1f} minutes (waiting for response)")
 
         self.check_in_thread = threading.Thread(target=inactivity_loop, daemon=True)
         self.check_in_thread.start()
@@ -255,6 +274,7 @@ Just return the question, nothing else. Don't use asterisks or formatting."""
     def stop_inactivity_monitoring(self):
         """Stop the inactivity monitoring thread"""
         self.inactivity_check_enabled = False
+        self.waiting_for_response = False  # Clear waiting flag when stopping
 
     def configure(self, min_interval: int = None, inactivity_threshold_min: int = None, inactivity_threshold_max: int = None, webhook_url: str = None):
         """
