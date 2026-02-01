@@ -713,11 +713,19 @@ def request_attention():
 def notification_config():
     """Get or update notification configuration"""
     if request.method == 'GET':
+        last_notif_time = assaultron.notification_manager.last_notification_sent_time
+        time_since_last_notif = None
+        if last_notif_time:
+            time_since_last_notif = (datetime.now() - last_notif_time).total_seconds()
+
         return jsonify({
             "min_interval": assaultron.notification_manager.min_notification_interval,
             "inactivity_threshold_min": assaultron.notification_manager.inactivity_threshold_min,
             "inactivity_threshold_max": assaultron.notification_manager.inactivity_threshold_max,
-            "inactivity_monitoring": assaultron.notification_manager.inactivity_check_enabled
+            "inactivity_monitoring": assaultron.notification_manager.inactivity_check_enabled,
+            "waiting_for_response": assaultron.notification_manager.waiting_for_response,
+            "notification_timeout": assaultron.notification_manager.notification_timeout,
+            "time_since_last_notification": time_since_last_notif
         })
     else:
         data = request.get_json()
@@ -755,7 +763,23 @@ def toggle_inactivity_monitoring():
     return jsonify({
         "success": True,
         "message": message,
-        "enabled": enable
+        "enabled": enable,
+        "waiting_for_response": assaultron.notification_manager.waiting_for_response
+    })
+
+
+@app.route('/api/notifications/reset_waiting', methods=['POST'])
+def reset_waiting_flag():
+    """Manually reset the waiting_for_response flag (for debugging/recovery)"""
+    old_value = assaultron.notification_manager.waiting_for_response
+    assaultron.notification_manager.waiting_for_response = False
+    assaultron.log_event(f"Manually reset waiting_for_response flag (was: {old_value})", "SYSTEM")
+
+    return jsonify({
+        "success": True,
+        "message": f"Reset waiting flag from {old_value} to False",
+        "old_value": old_value,
+        "new_value": False
     })
 
 

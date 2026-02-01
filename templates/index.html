@@ -250,6 +250,10 @@
                             class="text-[10px] font-bold text-gray-600 hover:text-blue-500 transition-colors uppercase tracking-widest border border-gray-300 px-2 py-0.5 rounded bg-white">
                             Immersion Mode
                         </button>
+                        <button onclick="reloadConversation()"
+                            class="text-[10px] font-bold text-gray-600 hover:text-green-500 transition-colors uppercase tracking-widest border border-gray-300 px-2 py-0.5 rounded bg-white">
+                            Reload Chat
+                        </button>
                         <button onclick="clearConversation()"
                             class="text-[10px] font-bold text-gray-400 hover:text-red-500 transition-colors uppercase tracking-widest border border-gray-300 px-2 py-0.5 rounded bg-white">
                             Clear Memory
@@ -1085,6 +1089,29 @@
                 }
             } catch (error) {
                 addLog('ERROR', 'Failed to load conversation history');
+            }
+        }
+
+        async function reloadConversation() {
+            try {
+                addLog('INFO', 'Reloading conversation from file...');
+                const response = await fetch('/api/history');
+                if (response.ok) {
+                    const history = await response.json();
+                    chatHistory.innerHTML = ''; // Clear current chat display
+                    if (history.length > 0) {
+                        history.forEach(exchange => {
+                            const timeStr = exchange.timestamp ? new Date(exchange.timestamp).toLocaleTimeString() : null;
+                            if (exchange.user) addChatMessage('USER', exchange.user, timeStr);
+                            if (exchange.assistant) addChatMessage('ASSAULTRON', exchange.assistant, timeStr);
+                        });
+                        addLog('SUCCESS', `Conversation reloaded (${history.length} messages)`);
+                    } else {
+                        addLog('INFO', 'No conversation history found');
+                    }
+                }
+            } catch (error) {
+                addLog('ERROR', `Failed to reload conversation: ${error.message}`);
             }
         }
 

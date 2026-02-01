@@ -8,6 +8,7 @@ import time
 import requests
 from datetime import datetime
 from typing import Optional
+import logging
 
 
 class NotificationManager:
@@ -26,6 +27,9 @@ class NotificationManager:
         self.cognitive_engine = cognitive_engine  # Reference to AI for generating questions
         self.next_checkin_time = None
         self.waiting_for_response = False  # Track if we sent a notification and are waiting for user response
+        self.last_notification_sent_time = None  # Track when last notification was sent
+        self.notification_timeout = 3600  # After 1 hour, assume no response is coming and allow new notifications
+        self._notification_lock = threading.Lock()  # Thread safety for notification sending
 
     def send_notification(self, title: str, message: str, color: int = 0x3498db, force: bool = False) -> bool:
         """
@@ -189,8 +193,23 @@ Just return the question, nothing else. Don't use asterisks or formatting."""
             # Call the LLM
             response = self.cognitive_engine._call_llm(messages)
 
-            # Clean up the response
-            question = response.strip().strip('"').strip("'")
+            # Clean up the response - handle JSON arrays and quotes
+            question = response.strip()
+
+            # Remove JSON array brackets if present
+            if question.startswith('[') and question.endswith(']'):
+                # Extract content from array, remove quotes
+                import json
+                try:
+                    parsed = json.loads(question)
+                    if isinstance(parsed, list) and len(parsed) > 0:
+                        question = str(parsed[0])
+                except:
+                    # If JSON parsing fails, just strip the brackets
+                    question = question.strip('[]').strip()
+
+            # Remove any remaining quotes
+            question = question.strip('"').strip("'").strip()
 
             # Validate it's actually a question
             if not question.endswith('?'):
@@ -215,9 +234,11 @@ Just return the question, nothing else. Don't use asterisks or formatting."""
             check_interval: How often to check for inactivity (seconds)
         """
         if self.check_in_thread and self.check_in_thread.is_alive():
+            print("[NOTIFICATION] Monitoring thread already running, skipping start")
             return  # Already running
 
         self.inactivity_check_enabled = True
+        self.waiting_for_response = False  # Reset waiting flag when starting fresh
 
         # Set initial random check-in time
         import random
@@ -243,29 +264,47 @@ Just return the question, nothing else. Don't use asterisks or formatting."""
                     if not self.inactivity_check_enabled:
                         break
 
-                    # Skip if we already sent a notification and are waiting for response
-                    if self.waiting_for_response:
-                        print(f"[NOTIFICATION] Already waiting for user response, skipping check-in")
-                        continue
+                    # Use lock to ensure only one notification is sent at a time
+                    with self._notification_lock:
+                        # Check if we're still waiting for a response
+                        if self.waiting_for_response:
+                            # Check if the notification has timed out (user probably isn't responding)
+                            if self.last_notification_sent_time:
+                                time_since_notification = (datetime.now() - self.last_notification_sent_time).total_seconds()
+                                if time_since_notification > self.notification_timeout:
+                                    print(f"[NOTIFICATION] Previous notification timed out after {time_since_notification/60:.1f} minutes, allowing new notification")
+                                    self.waiting_for_response = False
+                                else:
+                                    print(f"[NOTIFICATION] Already waiting for user response ({time_since_notification/60:.1f} min ago), skipping check-in")
+                                    continue
+                            else:
+                                # Flag is set but no timestamp - this is an error state, reset it
+                                print(f"[NOTIFICATION] WARNING: waiting_for_response=True but no timestamp found. Resetting flag (likely from old session)")
+                                self.waiting_for_response = False
 
-                    print(f"[NOTIFICATION] {time_since_interaction:.0f}s of inactivity, generating AI question...")
+                        print(f"[NOTIFICATION] {time_since_interaction:.0f}s of inactivity detected")
+                        print(f"[NOTIFICATION] waiting_for_response={self.waiting_for_response}, proceeding with notification")
+                        print(f"[NOTIFICATION] Generating AI question...")
 
-                    # Generate AI question
-                    question = self._generate_ai_question()
-                    print(f"[NOTIFICATION] AI question: {question}")
+                        # Generate AI question
+                        question = self._generate_ai_question()
+                        print(f"[NOTIFICATION] AI question: {question}")
 
-                    # Check flag again before sending notification
-                    if not self.inactivity_check_enabled:
-                        break
+                        # Check flag again before sending notification
+                        if not self.inactivity_check_enabled:
+                            break
 
-                    # Send it and mark that we're waiting for response
-                    self.notify_scheduled_checkin(question)
-                    self.waiting_for_response = True
+                        # Send it and mark that we're waiting for response
+                        print(f"[NOTIFICATION] Sending notification and setting waiting_for_response=True")
+                        self.notify_scheduled_checkin(question)
+                        self.waiting_for_response = True
+                        self.last_notification_sent_time = datetime.now()
+                        print(f"[NOTIFICATION] Notification sent at {self.last_notification_sent_time.strftime('%H:%M:%S')}, waiting_for_response is now: {self.waiting_for_response}")
 
-                    # Reset with new random interval
-                    self.last_user_interaction = datetime.now()
-                    next_wait = random.randint(self.inactivity_threshold_min, self.inactivity_threshold_max)
-                    print(f"[NOTIFICATION] Next check-in in {next_wait/60:.1f} minutes (waiting for response)")
+                        # Reset with new random interval
+                        self.last_user_interaction = datetime.now()
+                        next_wait = random.randint(self.inactivity_threshold_min, self.inactivity_threshold_max)
+                        print(f"[NOTIFICATION] Next check will be in {next_wait/60:.1f} minutes (but will skip if still waiting for response)")
 
         self.check_in_thread = threading.Thread(target=inactivity_loop, daemon=True)
         self.check_in_thread.start()
