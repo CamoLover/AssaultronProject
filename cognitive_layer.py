@@ -16,6 +16,7 @@ from datetime import datetime
 
 from virtual_body import CognitiveState, WorldState, BodyState, MoodState
 from config import Config
+from time_awareness import get_time_context, format_time_context_for_prompt
 
 # Optional import for Gemini
 try:
@@ -210,6 +211,7 @@ class CognitiveEngine:
         - Body state context
         - Mood state context (internal feelings)
         - Vision context (what you currently see)
+        - Time awareness context (current time, patterns, gaps)
         - Memory summary
         - Conversation history
         - Current user message
@@ -247,6 +249,14 @@ class CognitiveEngine:
                 "content": f"INTERNAL MOOD STATE (affects your tone and behavior):\n{mood_context}"
             })
 
+        # 3.7. Time awareness context (current time, patterns, gaps between messages)
+        time_context = get_time_context(self.conversation_history, mood_state.__dict__ if mood_state else None)
+        time_context_str = format_time_context_for_prompt(time_context)
+        messages.append({
+            "role": "system",
+            "content": f"TIME AWARENESS:\n{time_context_str}\n\nYou may casually reference timing if relevant (e.g., late nights, long gaps, patterns). Keep it natural and in-character."
+        })
+
         # 4. Vision context (what you currently see)
         if vision_context:
             messages.append({
@@ -269,7 +279,7 @@ class CognitiveEngine:
 
         # 6. Current user message (Enhanced with vision context for better attention)
         final_user_content = user_message
-        
+
         # KEY FIX: Inject vision data directly into the user prompt block so the model can't ignore it
         if vision_context:
              final_user_content = (
