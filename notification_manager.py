@@ -303,8 +303,9 @@ Just return the question, nothing else. Don't use asterisks or formatting."""
                         self.last_notification_sent_time = datetime.now()
                         self.logger.info(f"Notification sent at {self.last_notification_sent_time.strftime('%H:%M:%S')}, waiting_for_response is now: {self.waiting_for_response}")
 
-                        # Reset with new random interval
-                        self.last_user_interaction = datetime.now()
+                        # DO NOT reset last_user_interaction here!
+                        # It should only be updated when user actually interacts (via update_user_activity)
+                        # This was causing notifications to be sent even while user was actively chatting
                         next_wait = random.randint(self.inactivity_threshold_min, self.inactivity_threshold_max)
                         self.logger.debug(f"Next check will be in {next_wait/60:.1f} minutes (but will skip if still waiting for response)")
 

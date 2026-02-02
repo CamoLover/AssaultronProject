@@ -338,10 +338,11 @@ class VirtualWorld:
     def __init__(self):
         self.body_state = BodyState()
         self.world_state = WorldState()
-        self.mood_state = MoodState()
+        self.mood_state = self._load_mood_state()
         self.state_history: List[Dict[str, Any]] = []
         self.mood_history: List[Dict[str, Any]] = []
         self.max_history = 100
+        self.mood_file = "mood_state.json"
 
     def update_body(self, command: BodyCommand) -> None:
         """
@@ -454,6 +455,9 @@ class VirtualWorld:
         # Log mood changes
         self._log_mood_transition()
 
+        # Save mood state to disk
+        self._save_mood_state()
+
     def _log_mood_transition(self) -> None:
         """Log mood state changes for history tracking"""
         mood_entry = {
@@ -499,6 +503,57 @@ class VirtualWorld:
             "history_size": len(self.state_history),
             "mood_history_size": len(self.mood_history)
         }
+
+    def _save_mood_state(self) -> None:
+        """Save mood state to disk"""
+        try:
+            import json
+            with open(self.mood_file, 'w', encoding='utf-8') as f:
+                json.dump(self.mood_state.to_dict(), f, indent=2)
+        except Exception as e:
+            print(f"[MOOD ERROR] Failed to save mood state: {e}")
+
+    def _load_mood_state(self) -> MoodState:
+        """Load mood state from disk"""
+        try:
+            import os
+            import json
+            if os.path.exists("mood_state.json"):
+                with open("mood_state.json", 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                    return MoodState.from_dict(data)
+        except Exception as e:
+            print(f"[MOOD ERROR] Failed to load mood state: {e}")
+        return MoodState()
+
+    def set_mood_manually(self, **kwargs) -> None:
+        """
+        Manually set mood parameters (for UI control).
+
+        Accepts: curiosity, irritation, boredom, attachment
+        """
+        if "curiosity" in kwargs:
+            self.mood_state.curiosity = max(0.0, min(1.0, float(kwargs["curiosity"])))
+        if "irritation" in kwargs:
+            self.mood_state.irritation = max(0.0, min(1.0, float(kwargs["irritation"])))
+        if "boredom" in kwargs:
+            self.mood_state.boredom = max(0.0, min(1.0, float(kwargs["boredom"])))
+        if "attachment" in kwargs:
+            self.mood_state.attachment = max(0.0, min(1.0, float(kwargs["attachment"])))
+
+        # Recalculate derived states
+        self.mood_state.engagement = max(0.0, min(1.0,
+            (self.mood_state.curiosity * 0.5) +
+            ((1.0 - self.mood_state.boredom) * 0.5)
+        ))
+
+        self.mood_state.stress = max(0.0, min(1.0,
+            (self.mood_state.irritation * 0.7) +
+            (self.mood_state.boredom * 0.3)
+        ))
+
+        # Save to disk
+        self._save_mood_state()
 
 
 # ============================================================================

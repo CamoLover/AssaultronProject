@@ -282,7 +282,7 @@
 
             <div class="flex-1 overflow-y-auto p-4 lg:p-6 grid grid-cols-1 md:grid-cols-12 gap-6">
 
-                <!-- COGNITIVE & VOICE (Left Column) -->
+                <!-- LEFT COLUMN: COGNITIVE & SETTINGS -->
                 <div class="col-span-1 md:col-span-4 space-y-6">
 
                     <!-- Brain Source (Toggle) -->
@@ -375,7 +375,7 @@
                         </div>
                     </div>
 
-                    <!-- Mood State Card (Read-Only Internal State) -->
+                    <!-- Mood State Card (Editable Internal State) -->
                     <div
                         class="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden transition-all hover:shadow-md">
                         <div
@@ -384,11 +384,12 @@
                             <span class="h-2 w-2 rounded-full bg-pink-300 animate-pulse"></span>
                         </div>
                         <div class="p-4 space-y-3">
-                            <div class="text-[10px] text-pink-600 font-bold uppercase tracking-wide mb-2 border-b border-pink-100 pb-2">
-                                🔒 Read-Only Emergent State
+                            <div class="text-[10px] text-pink-600 font-bold uppercase tracking-wide mb-2 border-b border-pink-100 pb-2 flex justify-between items-center">
+                                <span>💭 Emotional State</span>
+                                <span class="text-gray-400 text-[9px]">Persistent</span>
                             </div>
 
-                            <!-- Mood Meters -->
+                            <!-- Mood Meters with Controls -->
                             <div class="space-y-3">
                                 <!-- Curiosity -->
                                 <div>
@@ -396,10 +397,15 @@
                                         <span class="font-bold text-gray-500 uppercase text-[10px]">Curiosity</span>
                                         <span id="moodCuriosityText" class="text-blue-600 font-mono font-bold">0.50</span>
                                     </div>
-                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                                        <div id="moodCuriosityBar"
-                                            class="h-full bg-blue-500 transition-all duration-1000 ease-out"
-                                            style="width: 50%"></div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="range" id="moodCuriositySlider" min="0" max="100" value="50"
+                                            class="flex-1 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-blue-500"
+                                            onchange="updateMoodFromSlider('curiosity', this.value)">
+                                        <div class="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                            <div id="moodCuriosityBar"
+                                                class="h-full bg-blue-500 transition-all duration-300"
+                                                style="width: 50%"></div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -409,10 +415,15 @@
                                         <span class="font-bold text-gray-500 uppercase text-[10px]">Irritation</span>
                                         <span id="moodIrritationText" class="text-orange-600 font-mono font-bold">0.00</span>
                                     </div>
-                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                                        <div id="moodIrritationBar"
-                                            class="h-full bg-orange-500 transition-all duration-1000 ease-out"
-                                            style="width: 0%"></div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="range" id="moodIrritationSlider" min="0" max="100" value="0"
+                                            class="flex-1 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-orange-500"
+                                            onchange="updateMoodFromSlider('irritation', this.value)">
+                                        <div class="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                            <div id="moodIrritationBar"
+                                                class="h-full bg-orange-500 transition-all duration-300"
+                                                style="width: 0%"></div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -422,10 +433,15 @@
                                         <span class="font-bold text-gray-500 uppercase text-[10px]">Boredom</span>
                                         <span id="moodBoredomText" class="text-gray-600 font-mono font-bold">0.00</span>
                                     </div>
-                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                                        <div id="moodBoredomBar"
-                                            class="h-full bg-gray-500 transition-all duration-1000 ease-out"
-                                            style="width: 0%"></div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="range" id="moodBoredomSlider" min="0" max="100" value="0"
+                                            class="flex-1 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-gray-500"
+                                            onchange="updateMoodFromSlider('boredom', this.value)">
+                                        <div class="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                            <div id="moodBoredomBar"
+                                                class="h-full bg-gray-500 transition-all duration-300"
+                                                style="width: 0%"></div>
+                                        </div>
                                     </div>
                                 </div>
 
@@ -435,10 +451,15 @@
                                         <span class="font-bold text-gray-500 uppercase text-[10px]">Attachment</span>
                                         <span id="moodAttachmentText" class="text-pink-600 font-mono font-bold">0.30</span>
                                     </div>
-                                    <div class="h-1.5 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
-                                        <div id="moodAttachmentBar"
-                                            class="h-full bg-pink-500 transition-all duration-1000 ease-out"
-                                            style="width: 30%"></div>
+                                    <div class="flex items-center gap-2">
+                                        <input type="range" id="moodAttachmentSlider" min="0" max="100" value="30"
+                                            class="flex-1 h-1.5 bg-gray-200 rounded-full appearance-none cursor-pointer accent-pink-500"
+                                            onchange="updateMoodFromSlider('attachment', this.value)">
+                                        <div class="h-1.5 w-16 bg-gray-100 rounded-full overflow-hidden border border-gray-200">
+                                            <div id="moodAttachmentBar"
+                                                class="h-full bg-pink-500 transition-all duration-300"
+                                                style="width: 30%"></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -1216,7 +1237,20 @@
         }
 
         // Mark user as active to prevent notifications during chat
+        // Throttled to max once per 10 seconds to avoid excessive API calls
+        let lastUserActiveCall = 0;
+        const USER_ACTIVE_THROTTLE_MS = 10000; // 10 seconds
+
         async function markUserActive() {
+            const now = Date.now();
+
+            // Throttle: only call if enough time has passed since last call
+            if (now - lastUserActiveCall < USER_ACTIVE_THROTTLE_MS) {
+                return; // Skip this call
+            }
+
+            lastUserActiveCall = now;
+
             try {
                 await fetch('/api/notifications/user_active', {
                     method: 'POST',
@@ -1697,6 +1731,12 @@
                         document.getElementById('moodEngagement').textContent = `${Math.round(mood.engagement * 100)}%`;
                         document.getElementById('moodStress').textContent = `${Math.round(mood.stress * 100)}%`;
                         document.getElementById('moodInteractionCount').textContent = mood.interaction_count || 0;
+
+                        // Update sliders without triggering onchange
+                        document.getElementById('moodCuriositySlider').value = Math.round(mood.curiosity * 100);
+                        document.getElementById('moodIrritationSlider').value = Math.round(mood.irritation * 100);
+                        document.getElementById('moodBoredomSlider').value = Math.round(mood.boredom * 100);
+                        document.getElementById('moodAttachmentSlider').value = Math.round(mood.attachment * 100);
                     }
 
                     // Update motion/hardware state (from last hardware state)
@@ -1791,6 +1831,58 @@
                 }
             } catch (error) {
                 console.log(`Failed to update state history: ${error.message}`);
+            }
+        }
+
+        // ============================================================================
+        // MOOD CONTROL FUNCTIONS
+        // ============================================================================
+
+        async function updateMoodFromSlider(moodParam, sliderValue) {
+            const moodValue = parseFloat(sliderValue) / 100.0;
+
+            try {
+                const response = await fetch('/api/embodied/mood_state', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ [moodParam]: moodValue })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.mood_state) {
+                        const mood = data.mood_state;
+
+                        // Update all mood displays
+                        document.getElementById('moodCuriosityText').textContent = mood.curiosity.toFixed(2);
+                        document.getElementById('moodCuriosityBar').style.width = `${mood.curiosity * 100}%`;
+
+                        document.getElementById('moodIrritationText').textContent = mood.irritation.toFixed(2);
+                        document.getElementById('moodIrritationBar').style.width = `${mood.irritation * 100}%`;
+
+                        document.getElementById('moodBoredomText').textContent = mood.boredom.toFixed(2);
+                        document.getElementById('moodBoredomBar').style.width = `${mood.boredom * 100}%`;
+
+                        document.getElementById('moodAttachmentText').textContent = mood.attachment.toFixed(2);
+                        document.getElementById('moodAttachmentBar').style.width = `${mood.attachment * 100}%`;
+
+                        // Update derived states
+                        document.getElementById('moodEngagement').textContent = `${Math.round(mood.engagement * 100)}%`;
+                        document.getElementById('moodStress').textContent = `${Math.round(mood.stress * 100)}%`;
+
+                        // Update all sliders
+                        document.getElementById('moodCuriositySlider').value = Math.round(mood.curiosity * 100);
+                        document.getElementById('moodIrritationSlider').value = Math.round(mood.irritation * 100);
+                        document.getElementById('moodBoredomSlider').value = Math.round(mood.boredom * 100);
+                        document.getElementById('moodAttachmentSlider').value = Math.round(mood.attachment * 100);
+
+                        addLog('MOOD', `${moodParam} updated to ${moodValue.toFixed(2)}`);
+                    }
+                } else {
+                    addLog('ERROR', `Failed to update mood: ${response.statusText}`);
+                }
+            } catch (error) {
+                addLog('ERROR', `Mood update error: ${error.message}`);
             }
         }
 

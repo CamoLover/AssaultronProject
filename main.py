@@ -679,11 +679,11 @@ assaultron_voice_active {1 if assaultron.voice_enabled else 0}
 
 
 @app.route('/api/chat', methods=['POST'])
-@limiter.limit("30 per minute")  # Rate limit: 30 messages per minute
+@limiter.limit("100 per minute")  # Rate limit: 100 messages per minute (reasonable for active conversation)
 def chat():
     """
     Main chat endpoint - processes user message through embodied agent pipeline.
-    Rate limited to 30 requests per minute to prevent abuse.
+    Rate limited to 100 requests per minute to prevent abuse while allowing natural conversation.
     """
     data = request.get_json()
     message = data.get('message', '').strip()
@@ -936,6 +936,26 @@ def get_mood_history():
     return jsonify(history)
 
 
+@app.route('/api/embodied/mood_state', methods=['POST'])
+def update_mood_state():
+    """
+    Manually update mood state parameters (for UI control).
+
+    Accepts: curiosity, irritation, boredom, attachment (0.0-1.0)
+    """
+    data = request.get_json()
+
+    try:
+        assaultron.virtual_world.set_mood_manually(**data)
+        assaultron.log_event(f"Mood state manually updated: {data}", "MANUAL")
+        return jsonify({
+            "success": True,
+            "mood_state": assaultron.virtual_world.get_mood_state().to_dict()
+        })
+    except Exception as e:
+        return jsonify({"error": str(e)}), 400
+
+
 # ============================================================================
 # NOTIFICATION SYSTEM ENDPOINTS
 # ============================================================================
@@ -1075,6 +1095,7 @@ def toggle_background_monitoring():
 
 
 @app.route('/api/notifications/user_active', methods=['POST'])
+@limiter.exempt  # Exempt from rate limiting - this is a heartbeat endpoint
 def mark_user_active():
     """
     Endpoint for frontend to call when user is actively using the chat.
@@ -1085,6 +1106,9 @@ def mark_user_active():
     - User scrolls through messages
     - User sends a message (already handled)
     - User is viewing the chat window
+
+    IMPORTANT: This endpoint is exempt from rate limiting because it's a
+    critical heartbeat mechanism that prevents false inactivity notifications.
     """
     assaultron.notification_manager.update_user_activity()
     return jsonify({"success": True})
