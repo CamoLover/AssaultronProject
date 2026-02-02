@@ -7,3 +7,7 @@ mediapipe>=0.10.9
 numpy>=1.24.0
 google-generativeai>=0.3.0
 python-dotenv>=1.0.0
+
+# Security & Monitoring
+flask-httpauth>=4.8.0
+flask-limiter>=3.5.0

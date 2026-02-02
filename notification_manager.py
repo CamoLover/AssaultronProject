@@ -9,6 +9,7 @@ import requests
 from datetime import datetime
 from typing import Optional
 import logging
+import os
 
 
 class NotificationManager:
@@ -16,7 +17,7 @@ class NotificationManager:
 
     def __init__(self, app_name: str = "Assaultron AI", webhook_url: Optional[str] = None, cognitive_engine=None):
         self.app_name = app_name
-        self.webhook_url = webhook_url or "https://discord.com/api/webhooks/1467091114715648205/yJvMsXpwioSTGZXWiUDm0eVGh-uIQm71-jPNMF-t7zuKDbb0b8xZNOOdd4Mrp-2jKk8V"
+        self.webhook_url = webhook_url or os.getenv("DISCORD_WEBHOOK_URL", "")
         self.last_notification_time = None
         self.min_notification_interval = 30  # Minimum seconds between notifications
         self.inactivity_check_enabled = False
@@ -30,6 +31,7 @@ class NotificationManager:
         self.last_notification_sent_time = None  # Track when last notification was sent
         self.notification_timeout = 3600  # After 1 hour, assume no response is coming and allow new notifications
         self._notification_lock = threading.Lock()  # Thread safety for notification sending
+        self.logger = logging.getLogger('assaultron.notification')
 
     def send_notification(self, title: str, message: str, color: int = 0x3498db, force: bool = False) -> bool:
         """
@@ -77,11 +79,11 @@ class NotificationManager:
                 self.last_notification_time = datetime.now()
                 return True
             else:
-                print(f"[NOTIFICATION ERROR] Discord webhook failed: {response.status_code}")
+                self.logger.error(f"Discord webhook failed: {response.status_code}")
                 return False
 
         except Exception as e:
-            print(f"[NOTIFICATION ERROR] Failed to send Discord notification: {e}")
+            self.logger.exception(f"Failed to send Discord notification: {e}")
             return False
 
     def notify_high_urgency(self, emotion: str, goal: str, urgency: float):
@@ -129,9 +131,9 @@ class NotificationManager:
                     "notification": True  # Flag this as a notification message
                 })
                 self.cognitive_engine._save_history()
-                print(f"[NOTIFICATION] Added check-in question to conversation history")
+                self.logger.info("Added check-in question to conversation history")
             except Exception as e:
-                print(f"[NOTIFICATION] Failed to add question to history: {e}")
+                self.logger.error(f"Failed to add question to history: {e}")
 
         self.send_notification(title, message, color=0x2ecc71)  # Green
 
@@ -141,7 +143,7 @@ class NotificationManager:
         # Clear waiting flag when user responds
         if self.waiting_for_response:
             self.waiting_for_response = False
-            print("[NOTIFICATION] User responded, will resume check-ins after next inactivity period")
+            self.logger.info("User responded, will resume check-ins after next inactivity period")
 
     def _generate_ai_question(self) -> str:
         """
@@ -218,7 +220,7 @@ Just return the question, nothing else. Don't use asterisks or formatting."""
             return question
 
         except Exception as e:
-            print(f"[NOTIFICATION] Failed to generate AI question: {e}")
+            self.logger.error(f"Failed to generate AI question: {e}")
             import random
             return random.choice([
                 "Hey! Been thinking about you. How's everything going?",
@@ -234,7 +236,7 @@ Just return the question, nothing else. Don't use asterisks or formatting."""
             check_interval: How often to check for inactivity (seconds)
         """
         if self.check_in_thread and self.check_in_thread.is_alive():
-            print("[NOTIFICATION] Monitoring thread already running, skipping start")
+            self.logger.warning("Monitoring thread already running, skipping start")
             return  # Already running
 
         self.inactivity_check_enabled = True
@@ -272,43 +274,43 @@ Just return the question, nothing else. Don't use asterisks or formatting."""
                             if self.last_notification_sent_time:
                                 time_since_notification = (datetime.now() - self.last_notification_sent_time).total_seconds()
                                 if time_since_notification > self.notification_timeout:
-                                    print(f"[NOTIFICATION] Previous notification timed out after {time_since_notification/60:.1f} minutes, allowing new notification")
+                                    self.logger.info(f"Previous notification timed out after {time_since_notification/60:.1f} minutes, allowing new notification")
                                     self.waiting_for_response = False
                                 else:
-                                    print(f"[NOTIFICATION] Already waiting for user response ({time_since_notification/60:.1f} min ago), skipping check-in")
+                                    self.logger.debug(f"Already waiting for user response ({time_since_notification/60:.1f} min ago), skipping check-in")
                                     continue
                             else:
                                 # Flag is set but no timestamp - this is an error state, reset it
-                                print(f"[NOTIFICATION] WARNING: waiting_for_response=True but no timestamp found. Resetting flag (likely from old session)")
+                                self.logger.warning("waiting_for_response=True but no timestamp found. Resetting flag (likely from old session)")
                                 self.waiting_for_response = False
 
-                        print(f"[NOTIFICATION] {time_since_interaction:.0f}s of inactivity detected")
-                        print(f"[NOTIFICATION] waiting_for_response={self.waiting_for_response}, proceeding with notification")
-                        print(f"[NOTIFICATION] Generating AI question...")
+                        self.logger.info(f"{time_since_interaction:.0f}s of inactivity detected")
+                        self.logger.debug(f"waiting_for_response={self.waiting_for_response}, proceeding with notification")
+                        self.logger.info("Generating AI question...")
 
                         # Generate AI question
                         question = self._generate_ai_question()
-                        print(f"[NOTIFICATION] AI question: {question}")
+                        self.logger.info(f"AI question: {question}")
 
                         # Check flag again before sending notification
                         if not self.inactivity_check_enabled:
                             break
 
                         # Send it and mark that we're waiting for response
-                        print(f"[NOTIFICATION] Sending notification and setting waiting_for_response=True")
+                        self.logger.info("Sending notification and setting waiting_for_response=True")
                         self.notify_scheduled_checkin(question)
                         self.waiting_for_response = True
                         self.last_notification_sent_time = datetime.now()
-                        print(f"[NOTIFICATION] Notification sent at {self.last_notification_sent_time.strftime('%H:%M:%S')}, waiting_for_response is now: {self.waiting_for_response}")
+                        self.logger.info(f"Notification sent at {self.last_notification_sent_time.strftime('%H:%M:%S')}, waiting_for_response is now: {self.waiting_for_response}")
 
                         # Reset with new random interval
                         self.last_user_interaction = datetime.now()
                         next_wait = random.randint(self.inactivity_threshold_min, self.inactivity_threshold_max)
-                        print(f"[NOTIFICATION] Next check will be in {next_wait/60:.1f} minutes (but will skip if still waiting for response)")
+                        self.logger.debug(f"Next check will be in {next_wait/60:.1f} minutes (but will skip if still waiting for response)")
 
         self.check_in_thread = threading.Thread(target=inactivity_loop, daemon=True)
         self.check_in_thread.start()
-        print(f"[NOTIFICATION] Inactivity monitoring started (check-ins every {self.inactivity_threshold_min/60:.0f}-{self.inactivity_threshold_max/60:.0f} min)")
+        self.logger.info(f"Inactivity monitoring started (check-ins every {self.inactivity_threshold_min/60:.0f}-{self.inactivity_threshold_max/60:.0f} min)")
 
     def stop_inactivity_monitoring(self):
         """Stop the inactivity monitoring thread"""

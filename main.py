@@ -16,6 +16,13 @@ import requests
 from config import Config
 import psutil
 from voicemanager import VoiceManager
+import logging
+from logging.handlers import RotatingFileHandler
+import os
+from flask_httpauth import HTTPBasicAuth
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+from functools import wraps
 
 # Import new embodied agent layers
 from virtual_body import (
@@ -31,6 +38,101 @@ from notification_manager import NotificationManager
 
 app = Flask(__name__)
 config = Config()
+
+
+# ============================================================================
+# SECURITY CONFIGURATION
+# ============================================================================
+
+# HTTP Basic Authentication
+auth = HTTPBasicAuth()
+
+# API credentials (should be in .env in production)
+API_USERNAME = os.getenv("API_USERNAME", "admin")
+API_PASSWORD = os.getenv("API_PASSWORD", "assaultron_dev_2026")
+
+@auth.verify_password
+def verify_password(username, password):
+    """Verify API credentials"""
+    if username == API_USERNAME and password == API_PASSWORD:
+        return username
+    return None
+
+@auth.error_handler
+def auth_error(status):
+    """Return JSON error for auth failures"""
+    return jsonify({"error": "Unauthorized access"}), status
+
+# Rate Limiting
+limiter = Limiter(
+    app=app,
+    key_func=get_remote_address,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+    strategy="fixed-window"
+)
+
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+
+def setup_logging():
+    """Configure application-wide logging with rotation and proper formatting"""
+    # Create logs directory if it doesn't exist
+    if not os.path.exists('logs'):
+        os.makedirs('logs')
+
+    # Configure root logger
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
+
+    # Remove existing handlers
+    logger.handlers.clear()
+
+    # Console handler with colored output-like formatting
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.INFO)
+    console_formatter = logging.Formatter(
+        '[%(asctime)s] %(levelname)s - %(name)s: %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    console_handler.setFormatter(console_formatter)
+
+    # File handler with rotation (10MB max, keep 5 backups)
+    file_handler = RotatingFileHandler(
+        'logs/assaultron.log',
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=5,
+        encoding='utf-8'
+    )
+    file_handler.setLevel(logging.DEBUG)
+    file_formatter = logging.Formatter(
+        '[%(asctime)s] %(levelname)s - %(name)s - %(filename)s:%(lineno)d - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    file_handler.setFormatter(file_formatter)
+
+    # Error file handler (errors only)
+    error_handler = RotatingFileHandler(
+        'logs/assaultron_errors.log',
+        maxBytes=10*1024*1024,
+        backupCount=3,
+        encoding='utf-8'
+    )
+    error_handler.setLevel(logging.ERROR)
+    error_handler.setFormatter(file_formatter)
+
+    # Add handlers
+    logger.addHandler(console_handler)
+    logger.addHandler(file_handler)
+    logger.addHandler(error_handler)
+
+    return logger
+
+# Initialize logging
+app_logger = setup_logging()
+logger = logging.getLogger('assaultron.main')
 
 
 # ============================================================================
@@ -125,7 +227,10 @@ class EmbodiedAssaultronCore:
         if len(self.system_logs) > 1000:
             self.system_logs = self.system_logs[-1000:]
 
-        print(f"[{timestamp}] {event_type}: {message}")
+        # Use proper logging instead of print
+        log_level = getattr(logging, event_type, logging.INFO)
+        logger = logging.getLogger(f'assaultron.{event_type.lower()}')
+        logger.log(log_level, message)
 
     def process_message(self, user_message: str) -> dict:
         """
@@ -189,12 +294,12 @@ class EmbodiedAssaultronCore:
                 # Build vision context for cognitive layer
                 vision_context = vision_data.get("scene_description", "")
                 if vision_data.get("entities"):
-                    entity_details = [f"{e['class_name']} ({e['confidence']:.0%} confidence)" 
+                    entity_details = [f"{e['class_name']} ({e['confidence']:.0%} confidence)"
                                       for e in vision_data["entities"][:5]]
                     if entity_details:
                         vision_context += f" | Details: {', '.join(entity_details)}"
-                
-                print(f"\n[DEBUG] VISION CONTEXT SENT TO AI: '{vision_context}'\n")
+
+                logging.getLogger('assaultron.vision').debug(f"VISION CONTEXT SENT TO AI: '{vision_context}'")
                 self.log_event(f"Vision: {vision_data['scene_description']}", "VISION")
 
             # Step 2: Cognitive Layer - Generate intent
@@ -283,7 +388,7 @@ class EmbodiedAssaultronCore:
             self.log_event(error_msg, "ERROR")
 
             import traceback
-            traceback.print_exc()
+            logging.getLogger('assaultron.error').exception("Exception during message processing:")
 
             return {
                 "success": False,
@@ -442,16 +547,153 @@ def index():
     return render_template('index.html')
 
 
+# ============================================================================
+# HEALTH CHECK & METRICS ENDPOINTS
+# ============================================================================
+
+@app.route('/health')
+@app.route('/api/health')
+def health_check():
+    """
+    Health check endpoint for monitoring systems.
+    Returns system health status and metrics.
+    """
+    try:
+        # Check AI connectivity
+        ai_status = "healthy" if assaultron.ai_active else "unhealthy"
+
+        # Check vision system
+        vision_status = "enabled" if assaultron.vision_system.state.enabled else "disabled"
+
+        # Check voice system
+        voice_status = "enabled" if assaultron.voice_enabled else "disabled"
+
+        # System metrics
+        cpu_percent = psutil.cpu_percent(interval=0.1)
+        memory = psutil.virtual_memory()
+        disk = psutil.disk_usage('.')
+
+        # Uptime
+        uptime_seconds = (datetime.now() - assaultron.start_time).total_seconds()
+
+        # Overall health determination
+        overall_status = "healthy"
+        issues = []
+
+        if not assaultron.ai_active:
+            overall_status = "degraded"
+            issues.append("AI connection unavailable")
+
+        if cpu_percent > 90:
+            overall_status = "degraded"
+            issues.append(f"High CPU usage: {cpu_percent}%")
+
+        if memory.percent > 90:
+            overall_status = "degraded"
+            issues.append(f"High memory usage: {memory.percent}%")
+
+        if disk.percent > 90:
+            overall_status = "degraded"
+            issues.append(f"Low disk space: {disk.percent}% used")
+
+        return jsonify({
+            "status": overall_status,
+            "timestamp": datetime.now().isoformat(),
+            "uptime_seconds": int(uptime_seconds),
+            "checks": {
+                "ai_engine": ai_status,
+                "vision_system": vision_status,
+                "voice_system": voice_status
+            },
+            "metrics": {
+                "cpu_percent": round(cpu_percent, 2),
+                "memory_percent": round(memory.percent, 2),
+                "memory_available_mb": round(memory.available / 1024 / 1024, 2),
+                "disk_percent": round(disk.percent, 2),
+                "disk_free_gb": round(disk.free / 1024 / 1024 / 1024, 2),
+                "total_requests": assaultron.performance_stats["total_requests"],
+                "avg_response_time_ms": assaultron.performance_stats["avg_response_time"],
+                "last_response_time_ms": assaultron.performance_stats["last_response_time"]
+            },
+            "issues": issues,
+            "version": "2.0-embodied"
+        }), 200 if overall_status == "healthy" else 503
+
+    except Exception as e:
+        logger.exception("Health check failed")
+        return jsonify({
+            "status": "error",
+            "error": str(e),
+            "timestamp": datetime.now().isoformat()
+        }), 500
+
+
+@app.route('/api/metrics')
+def metrics():
+    """
+    Prometheus-compatible metrics endpoint.
+    Returns metrics in plain text format.
+    """
+    try:
+        cpu_percent = psutil.cpu_percent()
+        memory = psutil.virtual_memory()
+        uptime_seconds = (datetime.now() - assaultron.start_time).total_seconds()
+
+        metrics_text = f"""# HELP assaultron_uptime_seconds Total uptime in seconds
+# TYPE assaultron_uptime_seconds counter
+assaultron_uptime_seconds {int(uptime_seconds)}
+
+# HELP assaultron_requests_total Total number of chat requests processed
+# TYPE assaultron_requests_total counter
+assaultron_requests_total {assaultron.performance_stats["total_requests"]}
+
+# HELP assaultron_response_time_ms Average response time in milliseconds
+# TYPE assaultron_response_time_ms gauge
+assaultron_response_time_ms {assaultron.performance_stats["avg_response_time"]}
+
+# HELP assaultron_cpu_percent CPU usage percentage
+# TYPE assaultron_cpu_percent gauge
+assaultron_cpu_percent {cpu_percent}
+
+# HELP assaultron_memory_percent Memory usage percentage
+# TYPE assaultron_memory_percent gauge
+assaultron_memory_percent {memory.percent}
+
+# HELP assaultron_ai_active AI engine status (1=active, 0=inactive)
+# TYPE assaultron_ai_active gauge
+assaultron_ai_active {1 if assaultron.ai_active else 0}
+
+# HELP assaultron_vision_active Vision system status (1=active, 0=inactive)
+# TYPE assaultron_vision_active gauge
+assaultron_vision_active {1 if assaultron.vision_system.state.enabled else 0}
+
+# HELP assaultron_voice_active Voice system status (1=active, 0=inactive)
+# TYPE assaultron_voice_active gauge
+assaultron_voice_active {1 if assaultron.voice_enabled else 0}
+"""
+        return metrics_text, 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
+    except Exception as e:
+        logger.exception("Metrics generation failed")
+        return f"# ERROR: {str(e)}", 500, {'Content-Type': 'text/plain; charset=utf-8'}
+
+
 @app.route('/api/chat', methods=['POST'])
+@limiter.limit("30 per minute")  # Rate limit: 30 messages per minute
 def chat():
     """
     Main chat endpoint - processes user message through embodied agent pipeline.
+    Rate limited to 30 requests per minute to prevent abuse.
     """
     data = request.get_json()
     message = data.get('message', '').strip()
 
     if not message:
         return jsonify({"error": "Empty message"}), 400
+
+    # Input validation
+    if len(message) > 5000:
+        return jsonify({"error": "Message too long (max 5000 characters)"}), 400
 
     # Process through embodied agent pipeline
     result = assaultron.process_message(message)

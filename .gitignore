@@ -212,3 +212,7 @@ audio_output/
 memories.json
 conversation_history.json
 Content/xVAsynth.zip
+
+# Application logs
+logs/
+*.log
