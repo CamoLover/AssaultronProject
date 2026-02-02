@@ -212,6 +212,7 @@ audio_output/
 memories.json
 conversation_history.json
 Content/xVAsynth.zip
+mood_state.json
 
 # Application logs
 logs/
