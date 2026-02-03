@@ -2513,21 +2513,30 @@
             const mainHistory = document.getElementById('chatHistory');
 
             // Copy chat history to immersion mode
-            const messages = mainHistory.querySelectorAll('div');
+            // Only select direct children to avoid nested divs
+            const messages = Array.from(mainHistory.children);
             immersionHistory.innerHTML = '';
 
             messages.forEach(msg => {
-                const clone = msg.cloneNode(true);
-                clone.classList.add('immersion-chat-message');
+                // Create a new div instead of cloning to avoid nested structure issues
+                const div = document.createElement('div');
+                div.classList.add('immersion-chat-message');
 
-                // Add appropriate class based on content
-                if (clone.textContent.includes('OPERATOR:')) {
-                    clone.classList.add('user');
-                } else if (clone.textContent.includes('ASR-7:')) {
-                    clone.classList.add('ai');
+                const textContent = msg.textContent;
+
+                // Add appropriate class and copy content based on sender
+                if (textContent.includes('OPERATOR:')) {
+                    div.classList.add('user');
+                    div.innerHTML = msg.innerHTML;
+                } else if (textContent.includes('ASR-7:')) {
+                    div.classList.add('ai');
+                    div.innerHTML = msg.innerHTML;
+                } else {
+                    // System or other messages
+                    div.innerHTML = msg.innerHTML;
                 }
 
-                immersionHistory.appendChild(clone);
+                immersionHistory.appendChild(div);
             });
 
             // Scroll to bottom

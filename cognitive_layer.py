@@ -635,8 +635,10 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         This is a security measure to ensure the LLM hasn't drifted into
         narration mode. Removes:
         - Asterisk-wrapped stage directions (*like this*)
-        - Parenthetical meta-commentary (like this)
+        - Parenthetical stage directions with verbs (smiles), (laughs), (sighs)
         - Square bracket annotations [like this]
+
+        Preserves dialogue-relevant parentheses like qualifiers or clarifications.
 
         Args:
             text: Raw dialogue text
@@ -647,11 +649,12 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         # Remove square brackets and contents
         text = re.sub(r'\[.*?\]', '', text)
 
-        # Remove parentheses and contents
-        text = re.sub(r'\([^)]*\)', '', text)
-
         # Remove asterisks and contents (stage directions)
         text = re.sub(r'\*[^*]*\*', '', text)
+
+        # Only remove parentheses that look like stage directions/actions
+        # Pattern matches common action verbs in present tense
+        text = re.sub(r'\(\s*(smiles|laughs|chuckles|grins|sighs|nods|shrugs|winks|frowns|scoffs|pauses|gestures|leans|looks|glances|turns|walks|steps).*?\)', '', text, flags=re.IGNORECASE)
 
         # Clean up multiple spaces and strip
         text = re.sub(r'\s+', ' ', text).strip()
