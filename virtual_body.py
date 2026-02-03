@@ -285,6 +285,9 @@ class CognitiveState:
     needs_attention: bool = False  # Whether AI wants user's attention
     attention_reason: Optional[str] = None  # Why attention is needed
 
+    # Debug: raw LLM response before parsing/sanitization
+    raw_response: Optional[str] = None
+
     def __post_init__(self):
         """Validate ranges"""
         self.confidence = max(0.0, min(1.0, self.confidence))
@@ -301,7 +304,8 @@ class CognitiveState:
             "dialogue": self.dialogue,
             "memory": self.memory,
             "needs_attention": self.needs_attention,
-            "attention_reason": self.attention_reason
+            "attention_reason": self.attention_reason,
+            "raw_response": self.raw_response
         }
 
     @classmethod

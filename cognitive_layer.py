@@ -130,8 +130,9 @@ class CognitiveEngine:
         Returns:
             CognitiveState with goal, emotion, confidence, urgency, focus, dialogue
         """
-        max_retries = 3
+        max_retries = 10  # Increased to ensure we get a unique response
         cognitive_state = None
+        last_generated_state = None  # Track the last attempt in case all fail
 
         for attempt in range(max_retries):
             # Build full prompt
@@ -156,6 +157,8 @@ class CognitiveEngine:
             # Call LLM
             try:
                 response_text = self._call_llm(messages)
+                # Log raw LLM response for debugging
+                print(f"[COGNITIVE DEBUG] Raw LLM response: {response_text[:500]}")
             except Exception as e:
                 print(f"[COGNITIVE ERROR] LLM call failed: {e}")
                 # Fallback to safe neutral state
@@ -168,21 +171,43 @@ class CognitiveEngine:
                 )
 
             # Parse response into CognitiveState
-            cognitive_state = self._parse_response(response_text)
+            current_cognitive_state = self._parse_response(response_text)
+            # Store raw response for debugging
+            current_cognitive_state.raw_response = response_text
+            # Track this as the last attempt
+            last_generated_state = current_cognitive_state
+            # Log parsed dialogue for comparison
+            print(f"[COGNITIVE DEBUG] Parsed dialogue: {current_cognitive_state.dialogue}")
 
             # Check if response is a duplicate
-            if self._is_duplicate_response(cognitive_state.dialogue):
-                if attempt < max_retries - 1:
-                    # Try again with modified prompt
-                    continue
-                else:
-                    # Last attempt - log warning but accept it
-                    print(f"[COGNITIVE WARNING] Duplicate response detected after {max_retries} attempts. Accepting anyway.")
+            if self._is_duplicate_response(current_cognitive_state.dialogue):
+                # Duplicate detected - regenerate by continuing loop
+                print(f"[COGNITIVE DEBUG] Duplicate detected (attempt {attempt + 1}/{max_retries}): '{current_cognitive_state.dialogue[:100]}'")
+                # DON'T accept it - keep trying
+                continue
             else:
-                # Response is unique, break out of retry loop
+                # Response is unique, accept it!
+                cognitive_state = current_cognitive_state
                 if attempt > 0:
                     print(f"[COGNITIVE] Successfully generated unique response on attempt {attempt + 1}")
                 break
+
+        # Safety check: If all retries failed without setting cognitive_state (all were duplicates)
+        if cognitive_state is None:
+            print(f"[COGNITIVE ERROR] All {max_retries} attempts produced duplicate responses!")
+            if last_generated_state:
+                # Use the last generated state even though it's a duplicate - better than nothing
+                print(f"[COGNITIVE WARNING] Using last generated response despite it being a duplicate")
+                cognitive_state = last_generated_state
+            else:
+                # Complete failure - return error state
+                cognitive_state = CognitiveState(
+                    goal="idle",
+                    emotion="confused",
+                    confidence=0.0,
+                    urgency=0.0,
+                    dialogue="I seem to be having trouble formulating a unique response. Could you try rephrasing that?"
+                )
 
         # Update conversation history
         self._update_history(user_message, cognitive_state.dialogue)
@@ -277,7 +302,14 @@ class CognitiveEngine:
             messages.append({"role": "user", "content": exchange["user"]})
             messages.append({"role": "assistant", "content": exchange["assistant"]})
 
-        # 6. Current user message (Enhanced with vision context for better attention)
+        # 6.5. Explicit separator to prevent response repetition
+        if self.conversation_history:
+            messages.append({
+                "role": "system",
+                "content": "The conversation above is HISTORY. The next user message is NEW and requires a UNIQUE response. DO NOT repeat any previous responses."
+            })
+
+        # 7. Current user message (Enhanced with vision context for better attention)
         final_user_content = user_message
 
         # KEY FIX: Inject vision data directly into the user prompt block so the model can't ignore it
@@ -680,25 +712,40 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         Handles both clean JSON and JSON embedded in natural language/markdown.
         """
         json_str = None
-        
-        # Strategy 1: Look for ```json ... ``` blocks
+
+        # Strategy 1: Look for ```json ... ``` blocks (single object only)
         json_match = re.search(r'```(?:json)?\s*(\{.*?\})\s*```', response_text, re.DOTALL)
         if json_match:
             json_str = json_match.group(1)
-        
-        # Strategy 2: If no block, look for the first outer { ... } structure
+
+        # Strategy 2: If no block, look for JSON structure
         if not json_str:
-            # This regex finds the first { and matches until the last }
-            # It handles nested braces reasonably well for simple structures
             try:
-                start_idx = response_text.find('{')
-                end_idx = response_text.rfind('}')
-                if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
-                    possible_json = response_text[start_idx : end_idx + 1]
-                    # Verify it looks like our schema
-                    if '"goal"' in possible_json and '"dialogue"' in possible_json:
-                        json_str = possible_json
-            except Exception:
+                # Check if response starts with an array '[' - handle this case
+                if response_text.strip().startswith('['):
+                    # LLM returned an array instead of object - parse the array and take first element
+                    data_array = json.loads(response_text.strip())
+                    if isinstance(data_array, list) and len(data_array) > 0:
+                        # Find the first object with dialogue
+                        for item in data_array:
+                            if isinstance(item, dict) and "dialogue" in item:
+                                data = item
+                                print(f"[COGNITIVE WARNING] LLM returned array instead of object. Using first valid entry.")
+                                # Skip to the processing section below
+                                json_str = json.dumps(data)  # Convert back to string for consistency
+                                break
+
+                # Original logic: find first { to last }
+                if not json_str:
+                    start_idx = response_text.find('{')
+                    end_idx = response_text.rfind('}')
+                    if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+                        possible_json = response_text[start_idx : end_idx + 1]
+                        # Verify it looks like our schema
+                        if '"goal"' in possible_json and '"dialogue"' in possible_json:
+                            json_str = possible_json
+            except Exception as e:
+                print(f"[COGNITIVE WARNING] JSON array parsing failed: {e}")
                 pass
 
         # Strategy 3: Failed to find JSON
@@ -710,13 +757,13 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         try:
             # Clean up potential comments or trailing commas if needed (basic cleanup)
             json_str = re.sub(r'//.*', '', json_str) # Remove JS style comments
-            
+
             data = json.loads(json_str)
 
             # Sanitize dialogue
             raw_dialogue = data.get("dialogue", "")
             clean_dialogue = self._sanitize_dialogue(raw_dialogue)
-            
+
             # Additional check: If dialogue looks like JSON, something went wrong recursively
             if clean_dialogue.strip().startswith('{') and clean_dialogue.strip().endswith('}'):
                 print("[COGNITIVE WARNING] Dialogue appears to be JSON. Using fallback.")
@@ -766,12 +813,21 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         elif any(word in text_lower for word in ["curious", "interesting", "wonder"]):
             emotion = "curious"
 
+        # Clean dialogue: don't return JSON structures as dialogue
+        dialogue = response_text.strip()
+
+        # If dialogue is JSON-like, provide error message instead
+        if (dialogue.startswith('{') and dialogue.endswith('}')) or \
+           (dialogue.startswith('[') and dialogue.endswith(']')):
+            print(f"[COGNITIVE ERROR] Fallback received JSON structure: {dialogue[:100]}...")
+            dialogue = "I'm having trouble formulating a response. Could you rephrase that?"
+
         return CognitiveState(
             goal=goal,
             emotion=emotion,
             confidence=0.5,
             urgency=0.3,
-            dialogue=response_text.strip()
+            dialogue=dialogue
         )
 
     def _is_duplicate_response(self, response: str, check_last_n: int = 5) -> bool:

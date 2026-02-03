@@ -535,6 +535,12 @@ class EmbodiedAssaultronCore:
 
 
 # ============================================================================
+# CONVERSATION LOGGING HELPER
+# ============================================================================
+# Conversation logging disabled - logs are only kept in main assaultron.log
+
+
+# ============================================================================
 # FLASK APPLICATION
 # ============================================================================
 
@@ -694,6 +700,9 @@ def chat():
     # Input validation
     if len(message) > 5000:
         return jsonify({"error": "Message too long (max 5000 characters)"}), 400
+
+    # Log received input
+    assaultron.log_event(f"INPUT RECEIVED: '{message}'", "CHAT")
 
     # Process through embodied agent pipeline
     result = assaultron.process_message(message)
