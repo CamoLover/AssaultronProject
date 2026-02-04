@@ -18,7 +18,7 @@
 ## 🔒 Private Personal Project
 This repository hosts the **Assaultron Project ASR-7**, a personal development endeavor focused on creating a fully embodied agent inspired by the Assaultron unit. This code is intended for my own use and future reference.
 
-> **Note to Future Me:** Keep the personality intact. ASR-7 is not just a bot; it's a character.
+> **Note to Future Me:** Keep the personality intact. ASR-7 is not just a bot; it's a character. it's asr
 
 ---
 
