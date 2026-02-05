@@ -949,7 +949,7 @@ def get_memory():
 @app.route('/api/embodied/long_term_memories')
 def get_long_term_memories():
     """Get AI core memories"""
-    return jsonify(assaultron.cognitive_engine.long_term_memories)
+    return jsonify(assaultron.cognitive_engine.memory_context)
 
 
 @app.route('/api/embodied/long_term_memories/delete', methods=['POST'])
@@ -958,9 +958,9 @@ def delete_long_term_memory():
     data = request.get_json()
     index = data.get('index')
     
-    if index is not None and 0 <= index < len(assaultron.cognitive_engine.long_term_memories):
-        content = assaultron.cognitive_engine.long_term_memories.pop(index)["content"]
-        assaultron.cognitive_engine._save_long_term_memories()
+    if index is not None and 0 <= index < len(assaultron.cognitive_engine.memory_context):
+        content = assaultron.cognitive_engine.memory_context.pop(index)["content"]
+        assaultron.cognitive_engine._save_memories()
         assaultron.log_event(f"Core memory deleted: {content}", "MEMORY")
         return jsonify({"success": True})
     
@@ -976,14 +976,14 @@ def add_long_term_memory():
     if not content:
         return jsonify({"error": "Content required"}), 400
         
-    if len(assaultron.cognitive_engine.long_term_memories) >= 10:
-        return jsonify({"error": "Memory limit reached (max 10)"}), 400
+    if len(assaultron.cognitive_engine.memory_context) >= 50:
+        return jsonify({"error": "Memory limit reached (max 50)"}), 400
         
-    assaultron.cognitive_engine.long_term_memories.append({
+    assaultron.cognitive_engine.memory_context.append({
         "content": content,
         "timestamp": datetime.now().isoformat()
     })
-    assaultron.cognitive_engine._save_long_term_memories()
+    assaultron.cognitive_engine._save_memories()
     assaultron.log_event(f"Core memory manually added: {content}", "MEMORY")
     return jsonify({"success": True})
 
@@ -995,10 +995,10 @@ def edit_long_term_memory():
     index = data.get('index')
     content = data.get('content', '').strip()
     
-    if index is not None and 0 <= index < len(assaultron.cognitive_engine.long_term_memories) and content:
-        old_content = assaultron.cognitive_engine.long_term_memories[index]["content"]
-        assaultron.cognitive_engine.long_term_memories[index]["content"] = content
-        assaultron.cognitive_engine._save_long_term_memories()
+    if index is not None and 0 <= index < len(assaultron.cognitive_engine.memory_context) and content:
+        old_content = assaultron.cognitive_engine.memory_context[index]["content"]
+        assaultron.cognitive_engine.memory_context[index]["content"] = content
+        assaultron.cognitive_engine._save_memories()
         assaultron.log_event(f"Core memory edited: {old_content} -> {content}", "MEMORY")
         return jsonify({"success": True})
     

@@ -61,8 +61,10 @@ class CognitiveEngine:
         
         # Long-term memories
         self.memory_file = "memories.json"
-        self.long_term_memories: List[Dict[str, Any]] = self._load_long_term_memories()
         
+        # Load memories into context from disk
+        self.memory_context: List[Dict[str, Any]] = self._load_long_term_memories()
+
         # Configure Gemini if selected
         if Config.LLM_PROVIDER == "gemini":
             if not GEMINI_AVAILABLE:
@@ -72,8 +74,7 @@ class CognitiveEngine:
                 print(f"[COGNITIVE] Gemini configured with model {Config.GEMINI_MODEL}")
             else:
                 print("[COGNITIVE WARNING] Gemini API Key not set! Update config.py")
-        self.memory_context: List[Dict[str, Any]] = []
-
+        
         # Warmup: preload model to avoid timeout on first request
         self._warmup_model()
 
@@ -304,8 +305,9 @@ class CognitiveEngine:
             })
 
         # 5. Long-term Memories (Persistent across sessions, max 10)
-        if self.long_term_memories:
-            memory_list = "\n".join([f"- {m['content']}" for m in self.long_term_memories])
+        # 5. Long-term Memories (Persistent across sessions, max 10)
+        if self.memory_context:
+            memory_list = "\n".join([f"- {m['content']}" for m in self.memory_context[-15:]])
             messages.append({
                 "role": "system",
                 "content": f"CORE MEMORIES ABOUT THE OPERATOR (EVAN):\n{memory_list}\n\nThese are important facts you must never forget."
@@ -1004,7 +1006,7 @@ RESPOND ONLY WITH THIS JSON:
 
     def add_memory(self, memory: Dict[str, Any]) -> None:
         """
-        Add a memory to context.
+        Add a memory to context and persist it.
 
         Args:
             memory: Memory entry with keys like 'type', 'content', 'timestamp'
@@ -1014,6 +1016,17 @@ RESPOND ONLY WITH THIS JSON:
         # Keep last 50 memories
         if len(self.memory_context) > 50:
             self.memory_context = self.memory_context[-50:]
+            
+        # Persist memory to disk
+        self._save_memories()
+
+    def _save_memories(self) -> None:
+        """Save memories to JSON file."""
+        try:
+            with open(self.memory_file, 'w', encoding='utf-8') as f:
+                json.dump(self.memory_context, f, indent=2)
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] Failed to save memories: {e}")
 
     def get_memory_summary(self, limit: int = 10) -> str:
         """
