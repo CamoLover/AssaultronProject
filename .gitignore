@@ -213,6 +213,7 @@ memories.json
 conversation_history.json
 Content/xVAsynth.zip
 mood_state.json
+/sandbox
 
 # Application logs
 logs/

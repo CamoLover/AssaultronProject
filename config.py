@@ -14,7 +14,7 @@ class Config:
     
     # OpenRouter Configuration
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_KEY", "")
-    OPENROUTER_MODEL = "google/gemini-2.0-flash-001"
+    OPENROUTER_MODEL = "google/gemini-2.5-flash"
     
     # Ollama Configuration
     OLLAMA_URL = "http://localhost:11434"

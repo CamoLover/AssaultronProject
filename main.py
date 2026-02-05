@@ -35,6 +35,11 @@ from motion_controller import MotionController, HardwareStateValidator
 from vision_system import VisionSystem
 from notification_manager import NotificationManager
 
+# Import autonomous agent components
+from sandbox_manager import SandboxManager
+from agent_logic import AgentLogic
+import agent_ai_helpers
+
 
 app = Flask(__name__)
 config = Config()
@@ -212,6 +217,13 @@ class EmbodiedAssaultronCore:
         # Background monitoring for proactive notifications
         self.background_monitoring_enabled = False
         self.background_thread = None
+        
+        # Autonomous Agent System
+        sandbox_path = os.getenv("SANDBOX_PATH", "./sandbox")
+        self.sandbox_manager = SandboxManager(sandbox_path)
+        self.agent_logic = AgentLogic(self.cognitive_engine, self.sandbox_manager)
+        self.agent_tasks = {}  # Track running agent tasks
+        self.log_event(f"Autonomous Agent initialized with sandbox: {sandbox_path}", "SYSTEM")
 
     def log_event(self, message, event_type="INFO"):
         """Log system events"""
@@ -274,6 +286,61 @@ class EmbodiedAssaultronCore:
                 "MOOD"
             )
 
+            # Step 1c: Detect if this is an actionable task for the agent
+            task_detected, task_description = self._detect_agent_task(user_message)
+            agent_context = ""
+            
+            if task_detected:
+                self.log_event(f"Task detected: {task_description}", "AGENT")
+                
+                # Generate immediate acknowledgment from AI
+                acknowledgment = agent_ai_helpers.generate_task_acknowledgment(
+                    self.cognitive_engine,
+                    task_description,
+                    mood_state
+                )
+                
+                # Enhance task with personality
+                enhanced_task = agent_ai_helpers.enhance_task_with_personality(task_description)
+                
+                # Start agent in background
+                task_id = f"task_{int(time.time())}_{len(self.agent_tasks)}"
+                
+                agent_ai_helpers.run_agent_in_background(
+                    agent_logic=self.agent_logic,
+                    agent_tasks=self.agent_tasks,
+                    task_id=task_id,
+                    enhanced_task=enhanced_task,
+                    original_task=task_description,
+                    cognitive_engine=self.cognitive_engine,
+                    voice_system=self.voice_system,
+                    voice_enabled=self.voice_enabled,
+                    log_callback=self.log_event
+                )
+                
+                # Queue voice message for acknowledgment if enabled
+                if self.voice_enabled:
+                    self.voice_system.synthesize_async(acknowledgment)
+                # Manually save to history (since helper doesn't)
+                try:
+                    self.cognitive_engine._update_history(user_message, acknowledgment)
+                except Exception as e:
+                    self.log_event(f"Error updating history: {e}", "ERROR")
+
+                return {
+                    "success": True,
+                    "dialogue": acknowledgment,
+                    "timestamp": datetime.now().isoformat(),
+                    "cognitive_state": {"emotion": mood_state.dominant_emotion, "thought": "Starting autonomous task"},
+                    "hardware_state": self.get_hardware_state(),
+                    "body_state": {"posture": "alert", "gesture": "nod"},
+                    "mood": mood_state.__dict__,
+                    "metadata": {
+                        "task_started": True,
+                        "task_id": task_id
+                    }
+                }
+
             # Step 1b: Integrate vision data into world state
             vision_context = ""
             if self.vision_system.state.enabled:
@@ -313,7 +380,8 @@ class EmbodiedAssaultronCore:
                 body_state=body_state,
                 mood_state=mood_state,
                 memory_summary=memory_summary,
-                vision_context=vision_context
+                vision_context=vision_context,
+                agent_context=agent_context
             )
 
             self.log_event(
@@ -417,6 +485,91 @@ class EmbodiedAssaultronCore:
     def get_hardware_state(self):
         """Get current hardware state (backward compatible)"""
         return self.motion_controller.get_hardware_state()
+    
+    def _detect_agent_task(self, message: str) -> tuple:
+        """
+        Detect if the user message is a task for the autonomous agent using LLM.
+        
+        Args:
+            message: User message
+            
+        Returns:
+            Tuple (is_task, task_description)
+        """
+        # Quick check for obvious non-tasks to save LLM calls
+        if len(message.split()) < 2:
+            return False, ""
+            
+        # Use LLM to classify intent
+        prompt = f"""Analyze the following user message and determine if it is a request for the autonomous agent to perform a specific task (like creating files, writing code, researching, etc.) or just a conversational statement/question.
+
+User Message: "{message}"
+
+Rules:
+1. "Create a website", "Write a poem", "Research python" -> ACTIVE_TASK
+2. "I need to fix this", "I want to learn python", "How are you?" -> CONVERSATIONAL
+3. "Fix the footer", "Update the file" -> ACTIVE_TASK (if it implies YOU should do it)
+4. "I will fix it", "I am coding" -> CONVERSATIONAL
+
+Respond with JSON only:
+{{
+    "is_task": true/false,
+    "task_description": "extracted task if true, else empty string",
+    "reasoning": "brief explanation"
+}}"""
+
+        try:
+            # We use a direct LLM call here for speed and specific formatting
+            # This bypasses the full cognitive layer processing
+            response = self.cognitive_engine._call_llm([
+                {"role": "system", "content": "You are an intent classifier. Respond with valid JSON only."},
+                {"role": "user", "content": prompt}
+            ])
+            
+            import json
+            import re
+            
+            # extract JSON
+            json_match = re.search(r'\{.*\}', response, re.DOTALL)
+            if json_match:
+                result = json.loads(json_match.group(0))
+                return result.get("is_task", False), result.get("task_description", "")
+            
+        except Exception as e:
+            self.log_event(f"Intent detection failed: {e}. Falling back to keyword search.", "ERROR")
+            
+        # Fallback to keyword matching if LLM fails
+        message_lower = message.lower()
+        
+        action_verbs = [
+            'create', 'make', 'build', 'write', 'generate', 'develop',
+            'code', 'program', 'design', 'implement', 'construct',
+            'research', 'find', 'search', 'look up', 'investigate',
+            'analyze', 'test', 'run', 'execute', 'deploy'
+        ]
+        
+        creation_indicators = [
+            'website', 'web page', 'html', 'css', 'javascript', 'php',
+            'file', 'folder', 'directory', 'script', 'program',
+            'app', 'application', 'project', 'code', 'document',
+            'poem', 'story', 'article', 'report', 'summary'
+        ]
+        
+        has_action = any(verb in message_lower for verb in action_verbs)
+        has_creation = any(indicator in message_lower for indicator in creation_indicators)
+        
+        if has_action and has_creation:
+            # Extract task description (remove greetings)
+            task = message
+            greetings = ['hello', 'hi', 'hey', 'greetings']
+            for greeting in greetings:
+                # Remove greeting at start of message
+                if task.lower().startswith(greeting):
+                    task = task[len(greeting):].strip(' ,')
+            
+            return True, task
+        
+        return False, ""
 
     def set_hardware_manual(self, led_intensity=None, hand_left=None, hand_right=None):
         """
@@ -1419,6 +1572,142 @@ def handle_provider_settings():
         "provider": Config.LLM_PROVIDER,
         "model": Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL
     })
+
+
+# ============================================================================
+# AUTONOMOUS AGENT ENDPOINTS
+# ============================================================================
+
+@app.route('/api/agent/task', methods=['POST'])
+@limiter.limit("10 per minute")
+def agent_task():
+    """
+    Submit a task to the autonomous agent.
+    The agent will execute the task in the background.
+    """
+    data = request.get_json()
+    task = data.get('task', '').strip()
+    
+    if not task:
+        return jsonify({"error": "Empty task"}), 400
+    
+    # Generate task ID
+    task_id = f"task_{int(time.time())}_{len(assaultron.agent_tasks)}"
+    
+    # Progress callback for updates
+    progress_updates = []
+    
+    def progress_callback(update):
+        progress_updates.append(update)
+        assaultron.log_event(f"Agent [{task_id}]: {update.get('type', 'update')}", "AGENT")
+    
+    # Start agent task in background thread
+    def run_agent_task():
+        try:
+            assaultron.log_event(f"Starting agent task: {task}", "AGENT")
+            result = assaultron.agent_logic.execute_task(task, callback=progress_callback)
+            
+            # Store result
+            assaultron.agent_tasks[task_id] = {
+                "task": task,
+                "status": "completed" if result.get("success") else "failed",
+                "result": result,
+                "progress": progress_updates,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+            
+            # Send final message to user
+            if result.get("success"):
+                final_message = f"Task completed: {result.get('result', 'Done')}"
+            else:
+                final_message = f"Task failed: {result.get('error', 'Unknown error')}"
+            
+            # Queue voice message if enabled
+            if assaultron.voice_enabled:
+                assaultron.voice_system.synthesize_async(final_message)
+            
+            assaultron.log_event(f"Agent task completed: {task_id}", "AGENT")
+            
+        except Exception as e:
+            assaultron.log_event(f"Agent task error: {e}", "ERROR")
+            assaultron.agent_tasks[task_id] = {
+                "task": task,
+                "status": "error",
+                "error": str(e),
+                "progress": progress_updates,
+                "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            }
+    
+    # Start background thread
+    thread = threading.Thread(target=run_agent_task, daemon=True)
+    thread.start()
+    
+    # Initialize task tracking
+    assaultron.agent_tasks[task_id] = {
+        "task": task,
+        "status": "running",
+        "progress": progress_updates,
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    }
+    
+    return jsonify({
+        "success": True,
+        "task_id": task_id,
+        "message": "Agent task started"
+    })
+
+
+@app.route('/api/agent/status/<task_id>')
+def agent_status(task_id):
+    """Get the status of an agent task."""
+    if task_id not in assaultron.agent_tasks:
+        return jsonify({"error": "Task not found"}), 404
+    
+    task_info = assaultron.agent_tasks[task_id]
+    
+    return jsonify({
+        "task_id": task_id,
+        "task": task_info["task"],
+        "status": task_info["status"],
+        "progress": task_info.get("progress", []),
+        "result": task_info.get("result"),
+        "error": task_info.get("error"),
+        "timestamp": task_info["timestamp"]
+    })
+
+
+@app.route('/api/agent/tasks')
+def agent_tasks():
+    """List all agent tasks."""
+    tasks = []
+    for task_id, task_info in assaultron.agent_tasks.items():
+        tasks.append({
+            "task_id": task_id,
+            "task": task_info["task"],
+            "status": task_info["status"],
+            "timestamp": task_info["timestamp"]
+        })
+    
+    return jsonify({"tasks": tasks, "count": len(tasks)})
+
+
+@app.route('/api/agent/stop/<task_id>', methods=['POST'])
+def agent_stop(task_id):
+    """Stop a running agent task."""
+    if task_id not in assaultron.agent_tasks:
+        return jsonify({"error": "Task not found"}), 404
+    
+    task_info = assaultron.agent_tasks[task_id]
+    
+    if task_info["status"] != "running":
+        return jsonify({"error": "Task is not running"}), 400
+    
+    # Stop the agent
+    assaultron.agent_logic.stop()
+    task_info["status"] = "stopped"
+    
+    return jsonify({"success": True, "message": "Agent task stopped"})
+
 
 
 # ============================================================================

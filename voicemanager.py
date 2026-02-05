@@ -12,6 +12,8 @@ import os
 import pygame
 from pathlib import Path
 from datetime import datetime
+from queue import Queue
+import logging
 
 
 class VoiceManager:
@@ -42,6 +44,11 @@ class VoiceManager:
 
         # Audio playback
         pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+        
+        # Message queue for sequential synthesis
+        self.message_queue = Queue()
+        self.queue_thread = None
+        self.queue_running = False
         
         self.log("VoiceManager initialized")
     
@@ -800,6 +807,58 @@ class VoiceManager:
             self.playback_start_time = None
             self.log(f"Audio playback failed: {e}", "ERROR")
             return False
+    
+    def enqueue_message(self, text, play_audio=True):
+        """
+        Add a message to the synthesis queue.
+        Messages will be synthesized and played sequentially.
+        
+        Args:
+            text: Text to synthesize
+            play_audio: Whether to play the audio after synthesis
+        """
+        self.message_queue.put((text, play_audio))
+        self.log(f"Message queued: '{text[:50]}...' (queue size: {self.message_queue.qsize()})")
+        
+        # Start queue processor if not running
+        if not self.queue_running:
+            self.start_queue_processor()
+    
+    def start_queue_processor(self):
+        """Start the queue processor thread."""
+        if self.queue_running:
+            return
+        
+        self.queue_running = True
+        
+        def process_queue():
+            """Process messages from the queue sequentially."""
+            while self.queue_running:
+                try:
+                    # Get message from queue (blocks until available)
+                    text, play_audio = self.message_queue.get(timeout=1)
+                    
+                    # Synthesize and play
+                    self.log(f"Processing queued message: '{text[:50]}...'")
+                    self.synthesize_voice(text, play_audio=play_audio)
+                    
+                    # Mark task as done
+                    self.message_queue.task_done()
+                    
+                except Exception as e:
+                    if "Empty" not in str(e):  # Ignore timeout exceptions
+                        self.log(f"Queue processor error: {e}", "ERROR")
+        
+        self.queue_thread = threading.Thread(target=process_queue, daemon=True)
+        self.queue_thread.start()
+        self.log("Queue processor started")
+    
+    def stop_queue_processor(self):
+        """Stop the queue processor thread."""
+        self.queue_running = False
+        if self.queue_thread:
+            self.queue_thread.join(timeout=2)
+        self.log("Queue processor stopped")
     
     def synthesize_async(self, text, play_audio=True):
         """Synthesize voice asynchronously"""

@@ -114,7 +114,9 @@ class CognitiveEngine:
         body_state: BodyState,
         mood_state: MoodState = None,
         memory_summary: str = "",
-        vision_context: str = ""
+        vision_context: str = "",
+        agent_context: str = "",
+        record_history: bool = True
     ) -> CognitiveState:
         """
         Process user input and generate cognitive state.
@@ -126,6 +128,8 @@ class CognitiveEngine:
             mood_state: Current internal mood state (affects tone/behavior)
             memory_summary: Summary of relevant memories
             vision_context: Description of what vision system currently sees
+            agent_context: Context from agent tasks
+            record_history: Whether to save this interaction to conversation history (default: True)
 
         Returns:
             CognitiveState with goal, emotion, confidence, urgency, focus, dialogue
@@ -142,7 +146,8 @@ class CognitiveEngine:
                 body_state,
                 mood_state,
                 memory_summary,
-                vision_context
+                vision_context,
+                agent_context
             )
 
             # Add anti-duplicate instruction on retry attempts
@@ -210,7 +215,8 @@ class CognitiveEngine:
                 )
 
         # Update conversation history
-        self._update_history(user_message, cognitive_state.dialogue)
+        if record_history:
+            self._update_history(user_message, cognitive_state.dialogue)
 
         # Handle long-term memory extraction if suggested by the AI
         if cognitive_state.memory:
@@ -225,7 +231,8 @@ class CognitiveEngine:
         body_state: BodyState,
         mood_state: MoodState,
         memory_summary: str,
-        vision_context: str = ""
+        vision_context: str = "",
+        agent_context: str = ""
     ) -> List[Dict[str, str]]:
         """
         Build the message list for LLM.
@@ -287,6 +294,13 @@ class CognitiveEngine:
             messages.append({
                 "role": "system",
                 "content": f"CURRENT VISUAL PERCEPTION (what you see through your camera):\n{vision_context}\n\nYou can describe what you see when asked. This is your real-time vision."
+            })
+        
+        # 4.5. Agent context (what autonomous tasks you just completed)
+        if agent_context:
+            messages.append({
+                "role": "system",
+                "content": agent_context
             })
 
         # 5. Long-term Memories (Persistent across sessions, max 10)
@@ -637,7 +651,8 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 "model": Config.OPENROUTER_MODEL,
                 "messages": messages,
                 "temperature": 0.9,
-                "response_format": { "type": "json_object" }
+                "response_format": { "type": "json_object" },
+                "max_tokens": 4096  # Lowered to preventing 402 errors on low credit accounts
             }
             
             response = requests.post(
