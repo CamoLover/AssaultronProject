@@ -16,6 +16,7 @@ import requests
 from config import Config
 import os
 from pathlib import Path
+from agent_tools import get_tool_functions
 
 logger = logging.getLogger('assaultron.agent')
 
@@ -43,8 +44,9 @@ class AgentLogic:
         self.sandbox = sandbox_manager
         self.max_iterations = 30  # Increased from 15 to allow for longer chains
         
-        # Tool registry
+        # Tool registry - includes sandbox, web search, email, and git tools
         self.tools = {
+            # Sandbox file operations
             "create_folder": self.sandbox.create_folder,
             "create_file": self.sandbox.create_file,
             "edit_file": self.sandbox.edit_file,
@@ -53,7 +55,12 @@ class AgentLogic:
             "check_file_exists": self.sandbox.check_file_exists,
             "list_files": self.sandbox.list_files,
             "run_command": self.sandbox.run_command,
-            "web_search": self._web_search
+
+            # Web search
+            "web_search": self._web_search,
+
+            # Email and Git tools
+            **get_tool_functions()
         }
         
         # Agent state
@@ -174,6 +181,8 @@ class AgentLogic:
 TASK: {task}
 
 AVAILABLE TOOLS:
+
+File Operations:
 1. create_folder(name: str) - Create a folder in the sandbox
 2. create_file(name: str, content: str) - Create a file with content
 3. edit_file(name: str, edits: str) - Edit/replace file content
@@ -181,8 +190,28 @@ AVAILABLE TOOLS:
 5. delete_file(name: str) - Delete a file
 6. check_file_exists(name: str) - Check if file/folder exists
 7. list_files(directory: str) - List files in a directory
-8. run_command(cmd: str) - Run a system command (e.g., "php -v", "php -S localhost:8000")
+8. run_command(cmd: str) - Run a system command (e.g., "php -v", "python script.py")
+
+Web & Communication:
 9. web_search(query: str) - Search the web using Brave Search API
+10. send_email(to: str, subject: str, body: str, body_html: str = None) - Send an email
+11. read_emails(folder: str = "INBOX", limit: int = 5, unread_only: bool = True) - Read emails
+12. get_email_status() - Get email manager status
+
+Git Operations (Multi-Repository Support):
+13. list_git_repositories() - List all git repos in sandbox with their info
+14. git_clone(repo_url: str, repo_path: str, use_ssh: bool = True) - Clone a repo into sandbox folder (e.g., repo_path="my-project")
+15. git_status(repo_path: str) - Get repo status (e.g., repo_path="my-project")
+16. git_commit(repo_path: str, message: str, files: list = None) - Create commit in specific repo (conventional format required)
+17. git_push(repo_path: str, branch: str = "main") - Push commits from specific repo
+18. git_pull(repo_path: str, branch: str = "main") - Pull changes to specific repo
+19. get_git_config() - Get git configuration status
+
+IMPORTANT GIT NOTES:
+- You can work on multiple git projects simultaneously in different folders
+- All repos must be within the sandbox directory
+- Specify repo_path for git operations (e.g., "my-project", "projects/webapp", etc.)
+- Use list_git_repositories() to see all available repos
 
 REASONING LOOP:
 You must follow this pattern:

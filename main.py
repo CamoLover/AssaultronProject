@@ -1709,6 +1709,277 @@ def agent_stop(task_id):
     return jsonify({"success": True, "message": "Agent task stopped"})
 
 
+# ============================================================================
+# EMAIL & GIT MANAGEMENT ENDPOINTS
+# ============================================================================
+
+@app.route('/api/email/send', methods=['POST'])
+@auth.login_required
+def send_email():
+    """Send an email"""
+    from email_manager import get_email_manager
+
+    data = request.get_json()
+    to = data.get('to')
+    subject = data.get('subject')
+    body = data.get('body')
+    body_html = data.get('body_html')
+
+    if not to or not subject or not body:
+        return jsonify({"error": "Missing required fields: to, subject, body"}), 400
+
+    email_manager = get_email_manager()
+    success, error = email_manager.send_email(to, subject, body, body_html)
+
+    if success:
+        return jsonify({
+            "success": True,
+            "message": "Email sent successfully",
+            "to": to,
+            "subject": subject
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": error
+        }), 400
+
+
+@app.route('/api/email/read', methods=['GET'])
+@auth.login_required
+def read_emails():
+    """Read emails from inbox"""
+    from email_manager import get_email_manager
+
+    folder = request.args.get('folder', 'INBOX')
+    limit = int(request.args.get('limit', 5))
+    unread_only = request.args.get('unread_only', 'true').lower() == 'true'
+
+    email_manager = get_email_manager()
+    emails, error = email_manager.read_emails(folder, limit, unread_only)
+
+    if error:
+        return jsonify({
+            "success": False,
+            "error": error
+        }), 400
+
+    return jsonify({
+        "success": True,
+        "count": len(emails),
+        "emails": emails,
+        "folder": folder
+    })
+
+
+@app.route('/api/email/status', methods=['GET'])
+@auth.login_required
+def get_email_status():
+    """Get email manager status"""
+    from email_manager import get_email_manager
+
+    email_manager = get_email_manager()
+    status = email_manager.get_status()
+
+    return jsonify(status)
+
+
+@app.route('/api/git/repositories', methods=['GET'])
+@auth.login_required
+def list_git_repositories():
+    """List all git repositories in sandbox"""
+    from git_manager import get_git_manager
+
+    git_manager = get_git_manager()
+    repos = git_manager.list_repositories()
+
+    return jsonify({
+        "success": True,
+        "count": len(repos),
+        "repositories": repos
+    })
+
+
+@app.route('/api/git/status', methods=['GET'])
+@auth.login_required
+def get_git_status():
+    """Get git repository status"""
+    from git_manager import get_git_manager
+    from pathlib import Path
+
+    # Get repo_path from query parameter
+    repo_path = request.args.get('repo_path')
+    if not repo_path:
+        return jsonify({"error": "Missing repo_path parameter"}), 400
+
+    git_manager = get_git_manager()
+
+    # Construct full path
+    full_path = str(Path(git_manager.sandbox_base) / repo_path)
+    status, error = git_manager.get_status(full_path)
+
+    if error:
+        return jsonify({
+            "success": False,
+            "error": error
+        }), 400
+
+    return jsonify(status)
+
+
+@app.route('/api/git/commit', methods=['POST'])
+@auth.login_required
+def git_commit():
+    """Create a git commit"""
+    from git_manager import get_git_manager
+    from pathlib import Path
+
+    data = request.get_json()
+    repo_path = data.get('repo_path')
+    message = data.get('message')
+    files = data.get('files')  # Optional list of files
+
+    if not repo_path:
+        return jsonify({"error": "Missing repo_path"}), 400
+    if not message:
+        return jsonify({"error": "Missing commit message"}), 400
+
+    git_manager = get_git_manager()
+
+    # Construct full path
+    full_path = str(Path(git_manager.sandbox_base) / repo_path)
+    success, error = git_manager.commit(full_path, message, files)
+
+    if success:
+        return jsonify({
+            "success": True,
+            "repo_path": repo_path,
+            "message": error if error else "Commit created successfully"
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": error
+        }), 400
+
+
+@app.route('/api/git/push', methods=['POST'])
+@auth.login_required
+def git_push():
+    """Push commits to remote repository"""
+    from git_manager import get_git_manager
+    from pathlib import Path
+
+    data = request.get_json() or {}
+    repo_path = data.get('repo_path')
+    branch = data.get('branch', 'main')
+
+    if not repo_path:
+        return jsonify({"error": "Missing repo_path"}), 400
+
+    git_manager = get_git_manager()
+
+    # Construct full path
+    full_path = str(Path(git_manager.sandbox_base) / repo_path)
+    success, error = git_manager.push(full_path, branch)
+
+    if success:
+        return jsonify({
+            "success": True,
+            "repo_path": repo_path,
+            "branch": branch,
+            "message": f"Pushed to {branch}"
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": error
+        }), 400
+
+
+@app.route('/api/git/pull', methods=['POST'])
+@auth.login_required
+def git_pull():
+    """Pull latest changes from remote repository"""
+    from git_manager import get_git_manager
+    from pathlib import Path
+
+    data = request.get_json() or {}
+    repo_path = data.get('repo_path')
+    branch = data.get('branch', 'main')
+
+    if not repo_path:
+        return jsonify({"error": "Missing repo_path"}), 400
+
+    git_manager = get_git_manager()
+
+    # Construct full path
+    full_path = str(Path(git_manager.sandbox_base) / repo_path)
+    success, error = git_manager.pull(full_path, branch)
+
+    if success:
+        return jsonify({
+            "success": True,
+            "repo_path": repo_path,
+            "branch": branch,
+            "message": f"Pulled from {branch}"
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": error
+        }), 400
+
+
+@app.route('/api/git/clone', methods=['POST'])
+@auth.login_required
+def git_clone():
+    """Clone a repository into sandbox"""
+    from git_manager import get_git_manager
+    from pathlib import Path
+
+    data = request.get_json() or {}
+    repo_url = data.get('repo_url')
+    repo_path = data.get('repo_path')
+    use_ssh = data.get('use_ssh', True)
+
+    if not repo_url:
+        return jsonify({"error": "Missing repo_url"}), 400
+    if not repo_path:
+        return jsonify({"error": "Missing repo_path"}), 400
+
+    git_manager = get_git_manager()
+
+    # Construct full path
+    full_path = str(Path(git_manager.sandbox_base) / repo_path)
+    success, error = git_manager.clone_repo(repo_url, full_path, use_ssh)
+
+    if success:
+        return jsonify({
+            "success": True,
+            "repo_url": repo_url,
+            "repo_path": repo_path,
+            "message": "Repository cloned successfully"
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": error
+        }), 400
+
+
+@app.route('/api/git/config', methods=['GET'])
+@auth.login_required
+def get_git_config():
+    """Get git manager configuration"""
+    from git_manager import get_git_manager
+
+    git_manager = get_git_manager()
+    config = git_manager.get_config_status()
+
+    return jsonify(config)
+
+
 
 # ============================================================================
 # MAIN
