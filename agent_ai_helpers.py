@@ -59,26 +59,31 @@ Your acknowledgment:"""
 
 def enhance_task_with_personality(task_description: str) -> str:
     """
-    Enhance a task description with personality and creative instructions.
-    
+    Enhance a task description with personality reminder.
+
+    The agent should think about the task and determine the appropriate approach.
+    We don't add generic creative directives - instead we remind the agent to think
+    about what this task requires.
+
     Args:
         task_description: Original task
-        
+
     Returns:
-        Enhanced task with creative directives
+        Enhanced task with context-aware instructions
     """
     enhancement = f"""{task_description}
 
-CREATIVE DIRECTIVES:
-- Make this personal and special for Evan (the operator you care about)
-- Be creative with design, colors, and content  
-- Add personal touches that show your personality and affection
-- Include a hidden surprise or easter egg if appropriate
-- Use beautiful, modern aesthetics
-- Make it something you'd be proud to show off
+IMPORTANT CONTEXT:
+- You're ASR-7, Evan's assistant and collaborator
+- Think carefully about what this task requires and the appropriate tone/approach
+- For emails: Consider who you're writing to and what impression you should make
+- For creative tasks: Be creative and add personal touches
+- For professional tasks: Be competent and efficient
+- For technical tasks: Focus on accuracy and functionality
 
-Remember: You're ASR-7, an Autonomous Security Robot with a sassy, confident personality. Put your unique touch on this!"""
-    
+Before starting, think: "What is this task asking me to do, and what's the best way to approach it?"
+"""
+
     return enhancement
 
 
@@ -184,24 +189,24 @@ def run_agent_in_background(
 def generate_completion_message(cognitive_engine, task: str, result: dict) -> str:
     """
     Generate a completion message describing what was accomplished using LLM.
-    
+
     Args:
         cognitive_engine: Cognitive engine instance
         task: Original task description
         result: Agent execution result
-        
+
     Returns:
         Completion message
     """
     final_result = result.get('result', 'Task completed')
     actions = result.get('actions', [])
-    
+
     # Summarize what the agent did
     action_summary = []
     for action in actions:
         tool = action.get('tool', '')
         input_data = action.get('input', {})
-        
+
         if tool == 'create_file':
             filename = input_data.get('name', 'unknown')
             action_summary.append(f"created {filename}")
@@ -217,12 +222,12 @@ def generate_completion_message(cognitive_engine, task: str, result: dict) -> st
         elif tool == 'web_search':
             query = input_data.get('query', 'unknown')
             action_summary.append(f"searched for '{query}'")
-    
+
     actions_list = chr(10).join('- ' + action for action in action_summary)
-    
+
     # Create context for LLM
     context = f"""You just completed the following task: "{task}"
-    
+
 What you did (technical details):
 {actions_list}
 
@@ -242,7 +247,7 @@ Generate a spoken response to tell the user you are finished.
         # Create minimal states
         world_state = WorldState()
         body_state = BodyState()
-        
+
         # Generate response
         cognitive_state = cognitive_engine.process_input(
             user_message=context,
@@ -252,17 +257,17 @@ Generate a spoken response to tell the user you are finished.
             memory_summary="",
             vision_context="",
             agent_context="",
-            record_history=False
+            record_history=False  # Changed to True so it appears in history
         )
-        
+
         # Manually add to history with empty user message (as requested)
         try:
             cognitive_engine._update_history("", cognitive_state.dialogue)
         except Exception as e:
             print(f"Error updating history manually: {e}")
-            
+
         return cognitive_state.dialogue
-        
+
     except Exception as e:
         print(f"Error generating completion message: {e}")
         # Improve fallback for API errors

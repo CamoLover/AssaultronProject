@@ -168,15 +168,23 @@ class AgentLogic:
     def _build_agent_prompt(self, task: str, history: List[Dict[str, str]]) -> str:
         """
         Build the agent system prompt with tool descriptions.
-        
+
         Args:
             task: User's task description
             history: Conversation history (thoughts, actions, observations)
-            
+
         Returns:
             Formatted prompt for LLM
         """
-        prompt = f"""You are an autonomous AI agent capable of executing tasks by using tools.
+        # Include ASR-7's personality
+        personality = Config.ASSAULTRON_PROMPT
+
+        prompt = f"""{personality}
+
+## AUTONOMOUS TASK MODE
+
+You are now in AUTONOMOUS TASK MODE. You can execute tasks by using tools while maintaining your ASR-7 personality.
+When working on tasks, you should think and reason as ASR-7 would - with sass, confidence, and care for Evan.
 
 TASK: {task}
 
@@ -461,7 +469,7 @@ CONVERSATION HISTORY:
         retry_delay = 10  # Start with 10 seconds
         
         messages = [
-            {"role": "system", "content": "You are an autonomous AI agent. Always respond with valid JSON."},
+            {"role": "system", "content": "You are ASR-7, an autonomous AI agent with personality. Maintain your sassy, confident character while executing tasks. Always respond with valid JSON for tool calls."},
             {"role": "user", "content": prompt}
         ]
         
