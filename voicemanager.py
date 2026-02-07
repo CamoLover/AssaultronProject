@@ -846,7 +846,7 @@ class VoiceManager:
 
         return {
             "initialized": self.is_initialized,
-            "server_running": self.server_running and self.check_server_status(),
+            "server_running": self.server_running,  # Removed check_server_status() - too slow for polling
             "model_loaded": self.model_loaded,
             "server_url": self.server_url,
             "model_info": {

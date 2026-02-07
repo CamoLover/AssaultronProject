@@ -1113,6 +1113,7 @@
         let lastPlayedAudioUrl = null;
         let audioPlayer = null;
         let audioQueue = [];
+        let voiceEventSource = null;  // SSE connection for real-time audio notifications
 
         // Web Audio API for real-time audio analysis
         let audioContext = null;
@@ -1750,7 +1751,48 @@
             }
         }
 
+        function initVoiceEventStream() {
+            // Connect to SSE endpoint for real-time audio notifications
+            if (voiceEventSource) {
+                voiceEventSource.close();
+            }
+
+            voiceEventSource = new EventSource('/api/voice/events');
+
+            voiceEventSource.onopen = () => {
+                console.log('Voice event stream connected');
+            };
+
+            voiceEventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === 'audio_ready') {
+                        // Immediately play audio when ready
+                        if (data.url && data.url !== lastPlayedAudioUrl) {
+                            playVoiceAudio(data.url);
+                            lastPlayedAudioUrl = data.url;
+                            addLog('VOICE', `Playing: ${data.filename}`);
+                        }
+                    }
+                } catch (error) {
+                    console.error('Error parsing voice event:', error);
+                }
+            };
+
+            voiceEventSource.onerror = (error) => {
+                console.error('Voice event stream error:', error);
+                // Reconnect after 5 seconds
+                setTimeout(() => {
+                    console.log('Reconnecting voice event stream...');
+                    initVoiceEventStream();
+                }, 5000);
+            };
+        }
+
         async function updateVoiceSystemStatus() {
+            // This function now only updates UI status, not audio playback
+            // Audio playback is handled by SSE in real-time
             try {
                 const response = await fetch('/api/voice/status');
                 if (response.ok) {
@@ -1780,12 +1822,6 @@
                         startBtn.disabled = false;
                         startBtn.textContent = '🚀 START VOICE SERVER';
                         stopBtn.disabled = true;
-                    }
-
-                    // Check for new audio to play
-                    if (status.last_audio_url && status.last_audio_url !== lastPlayedAudioUrl) {
-                        playVoiceAudio(status.last_audio_url);
-                        lastPlayedAudioUrl = status.last_audio_url;
                     }
                 }
             } catch (error) {
@@ -2891,6 +2927,9 @@
         setInterval(updateStats, 5000);
         setInterval(updateUptime, 1000);
 
+        // Initialize SSE connection for real-time voice notifications
+        initVoiceEventStream();
+
         // Load history on startup
         loadHistory();
 
@@ -3054,9 +3093,9 @@
                 updateVisionData();
             }
 
-            // Check for new audio
+            // Update voice system UI status (audio playback is handled by SSE)
             updateVoiceSystemStatus();
-        }, 2000); // Update tab-specific data every 2 seconds (reduced from 500ms to prevent lag)
+        }, 2000); // Update tab-specific data every 2 seconds
     </script>
 </body>
 

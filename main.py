@@ -7,7 +7,7 @@ hardware - instead it reasons about goals and emotions, which are then
 translated through behavioral and motion layers.
 """
 
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, Response
 import threading
 import time
 import json
@@ -23,6 +23,7 @@ from flask_httpauth import HTTPBasicAuth
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from functools import wraps
+from queue import Queue
 
 # Import new embodied agent layers
 from virtual_body import (
@@ -194,6 +195,10 @@ class EmbodiedAssaultronCore:
         # Voice system
         self.voice_system = VoiceManager(logger=self)
         self.voice_enabled = False
+        self.voice_event_queues = []  # SSE clients listening for audio ready events
+
+        # Register callback for real-time audio notifications
+        self.voice_system.set_audio_ready_callback(self._broadcast_audio_ready)
         self.log_event("Voice Manager initialized", "SYSTEM")
 
         # Vision system (Perception Layer)
@@ -243,6 +248,28 @@ class EmbodiedAssaultronCore:
         log_level = getattr(logging, event_type, logging.INFO)
         logger = logging.getLogger(f'assaultron.{event_type.lower()}')
         logger.log(log_level, message)
+
+    def _broadcast_audio_ready(self, filename):
+        """Broadcast audio ready event to all connected SSE clients"""
+        audio_url = f"/api/voice/audio/{filename}"
+        message = {
+            "type": "audio_ready",
+            "url": audio_url,
+            "filename": filename
+        }
+
+        # Send to all connected clients
+        dead_queues = []
+        for queue in self.voice_event_queues:
+            try:
+                queue.put_nowait(message)
+            except:
+                dead_queues.append(queue)
+
+        # Clean up disconnected clients
+        for queue in dead_queues:
+            if queue in self.voice_event_queues:
+                self.voice_event_queues.remove(queue)
 
     def process_message(self, user_message: str, image_path: str = None) -> dict:
         """
@@ -1436,6 +1463,40 @@ def serve_audio(filename):
         return send_from_directory(audio_dir, filename, mimetype='audio/wav')
     except Exception as e:
         return jsonify({"error": str(e)}), 404
+
+
+@app.route('/api/voice/events')
+@limiter.exempt
+def voice_events():
+    """Server-Sent Events stream for real-time voice notifications"""
+    def event_stream():
+        # Create a queue for this client
+        client_queue = Queue()
+
+        # Add queue to broadcast list
+        if not hasattr(assaultron, 'voice_event_queues'):
+            assaultron.voice_event_queues = []
+        assaultron.voice_event_queues.append(client_queue)
+
+        try:
+            # Send initial connection message
+            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+
+            # Listen for events
+            while True:
+                try:
+                    # Wait for events with timeout to send keepalive
+                    message = client_queue.get(timeout=30)
+                    yield f"data: {json.dumps(message)}\n\n"
+                except:
+                    # Send keepalive comment every 30 seconds
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            # Client disconnected
+            if client_queue in assaultron.voice_event_queues:
+                assaultron.voice_event_queues.remove(client_queue)
+
+    return Response(event_stream(), mimetype='text/event-stream')
 
 
 # ============================================================================
