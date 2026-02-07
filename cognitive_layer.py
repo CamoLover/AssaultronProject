@@ -61,9 +61,12 @@ class CognitiveEngine:
         
         # Long-term memories
         self.memory_file = "memories.json"
-        
+
         # Load memories into context from disk
         self.memory_context: List[Dict[str, Any]] = self._load_long_term_memories()
+
+        # Alias for compatibility - both names point to the same list
+        self.long_term_memories = self.memory_context
 
         # Configure Gemini if selected
         if Config.LLM_PROVIDER == "gemini":
@@ -414,6 +417,41 @@ Choose the emotion that best matches your feeling:
 ## FOCUS
 If your attention is directed at a specific entity (person, object), specify its ID.
 Otherwise, use null.
+
+## MEMORY STORAGE
+Use the "memory" field to store important information about Evan that you want to remember long-term.
+This should be a naturally reformulated fact, NOT a raw quote.
+
+**When to create a memory:**
+- Evan explicitly asks you to remember something (e.g., "remember that...", "don't forget...")
+- Evan shares personal information (preferences, plans, feelings, facts about himself)
+- Important events or decisions occur in your relationship
+- Evan tells you something about his life, work, or interests
+
+**How to format memories:**
+- Write in first-person from YOUR perspective (e.g., "Evan will get a Miata soon")
+- Be concise and factual
+- Reformulate naturally, don't just quote the user
+- Examples:
+  ✓ "Evan will notify me when he gets his new car"
+  ✓ "Evan prefers dark mode for the interface"
+  ✗ "User said: 'remember that so you can get to me when i get it'" (too literal)
+  ✗ "i'll tell you when i get it" (not reformulated)
+
+**Example with memory:**
+User: "Remember to remind me about my dentist appointment tomorrow"
+Response:
+```json
+{
+    "goal": "assist",
+    "emotion": "helpful",
+    "confidence": 1.0,
+    "urgency": 0.3,
+    "focus": null,
+    "dialogue": "Got it, I'll make sure you don't forget.",
+    "memory": "Evan has a dentist appointment tomorrow and wants a reminder"
+}
+```
 
 ## REQUESTING USER ATTENTION
 If you need the user's attention when they're not actively talking to you, set:

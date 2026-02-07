@@ -223,6 +223,30 @@ class MoodState:
         self.engagement = max(0.0, min(1.0, self.engagement))
         self.stress = max(0.0, min(1.0, self.stress))
 
+    @property
+    def dominant_emotion(self) -> str:
+        """
+        Calculate the dominant emotion based on current mood state.
+        Returns a string describing the primary emotional state.
+        """
+        # Create a dictionary of emotions and their values
+        emotions = {
+            "curious": self.curiosity,
+            "irritated": self.irritation,
+            "bored": self.boredom,
+            "attached": self.attachment,
+            "engaged": self.engagement,
+            "stressed": self.stress
+        }
+
+        # Find the emotion with the highest value
+        dominant = max(emotions.items(), key=lambda x: x[1])
+
+        # Return the emotion name, or "neutral" if all values are very low
+        if dominant[1] < 0.3:
+            return "neutral"
+        return dominant[0]
+
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dictionary"""
         return {

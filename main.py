@@ -410,11 +410,8 @@ class EmbodiedAssaultronCore:
             # Step 5: Update virtual body
             self.virtual_world.update_body(body_command)
 
-            # Step 6: Extract and store memories
-            memory = extract_memory_from_message(user_message, cognitive_state.dialogue)
-            if memory:
-                self.cognitive_engine.add_memory(memory)
-                self.log_event(f"Memory stored: {memory['content']}", "MEMORY")
+            # Step 6: Memory extraction is now handled automatically by cognitive_state.memory
+            # The AI decides what to remember and reformulates it naturally (see cognitive_layer.py:223-224)
 
             # Calculate performance metrics
             response_time = round((time.time() - start_time) * 1000)
