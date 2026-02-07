@@ -614,8 +614,8 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                     "messages": messages,
                     "stream": False,
                     "options": {
-                        "temperature": 0.9,
-                        "num_ctx": 4096, 
+                        "temperature": 0.85,
+                        "num_ctx": 8192, 
                     },
                     "keep_alive": "5m"
                 },
@@ -690,9 +690,9 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
             payload = {
                 "model": Config.OPENROUTER_MODEL,
                 "messages": messages,
-                "temperature": 0.9,
+                "temperature": 0.85,
                 "response_format": { "type": "json_object" },
-                "max_tokens": 4096  # Lowered to preventing 402 errors on low credit accounts
+                "max_tokens": 8192  # Lowered to preventing 402 errors on low credit accounts
             }
             
             response = requests.post(
