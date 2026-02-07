@@ -120,7 +120,9 @@ class CognitiveEngine:
         memory_summary: str = "",
         vision_context: str = "",
         agent_context: str = "",
-        record_history: bool = True
+        record_history: bool = True,
+        vision_image_b64: str = None,
+        attachment_image_path: str = None
     ) -> CognitiveState:
         """
         Process user input and generate cognitive state.
@@ -134,6 +136,8 @@ class CognitiveEngine:
             vision_context: Description of what vision system currently sees
             agent_context: Context from agent tasks
             record_history: Whether to save this interaction to conversation history (default: True)
+            vision_image_b64: Base64 encoded raw webcam image for multimodal vision
+            attachment_image_path: Path to user-attached image file (e.g., "chat_images/lego.jpg")
 
         Returns:
             CognitiveState with goal, emotion, confidence, urgency, focus, dialogue
@@ -141,6 +145,16 @@ class CognitiveEngine:
         max_retries = 10  # Increased to ensure we get a unique response
         cognitive_state = None
         last_generated_state = None  # Track the last attempt in case all fail
+
+        # Load attachment image if provided
+        attachment_image_b64 = None
+        if attachment_image_path:
+            try:
+                import base64
+                with open(attachment_image_path, 'rb') as img_file:
+                    attachment_image_b64 = base64.b64encode(img_file.read()).decode('utf-8')
+            except Exception as e:
+                print(f"[COGNITIVE ERROR] Failed to load attachment image {attachment_image_path}: {e}")
 
         for attempt in range(max_retries):
             # Build full prompt
@@ -151,7 +165,9 @@ class CognitiveEngine:
                 mood_state,
                 memory_summary,
                 vision_context,
-                agent_context
+                agent_context,
+                vision_image_b64,
+                attachment_image_b64
             )
 
             # Add anti-duplicate instruction on retry attempts
@@ -220,7 +236,7 @@ class CognitiveEngine:
 
         # Update conversation history
         if record_history:
-            self._update_history(user_message, cognitive_state.dialogue)
+            self._update_history(user_message, cognitive_state.dialogue, attachment_image_path)
 
         # Handle long-term memory extraction if suggested by the AI
         if cognitive_state.memory:
@@ -236,8 +252,10 @@ class CognitiveEngine:
         mood_state: MoodState,
         memory_summary: str,
         vision_context: str = "",
-        agent_context: str = ""
-    ) -> List[Dict[str, str]]:
+        agent_context: str = "",
+        vision_image_b64: str = None,
+        attachment_image_b64: str = None
+    ) -> List[Dict[str, Any]]:
         """
         Build the message list for LLM.
 
@@ -318,7 +336,30 @@ class CognitiveEngine:
 
         # 6. Recent conversation history (last 8 exchanges)
         for exchange in self.conversation_history[-8:]:
-            messages.append({"role": "user", "content": exchange["user"]})
+            # If the exchange has an attached image, load it
+            if "image_path" in exchange:
+                try:
+                    import base64
+                    import os
+                    if os.path.exists(exchange["image_path"]):
+                        with open(exchange["image_path"], 'rb') as img_file:
+                            history_image_b64 = base64.b64encode(img_file.read()).decode('utf-8')
+                        messages.append({
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": exchange["user"]},
+                                {"type": "image", "image": history_image_b64}
+                            ]
+                        })
+                    else:
+                        # Image file missing, just show text
+                        messages.append({"role": "user", "content": exchange["user"]})
+                except Exception as e:
+                    print(f"[COGNITIVE] Failed to load history image {exchange.get('image_path')}: {e}")
+                    messages.append({"role": "user", "content": exchange["user"]})
+            else:
+                messages.append({"role": "user", "content": exchange["user"]})
+
             messages.append({"role": "assistant", "content": exchange["assistant"]})
 
         # 6.5. Explicit separator to prevent response repetition
@@ -331,8 +372,9 @@ class CognitiveEngine:
         # 7. Current user message (Enhanced with vision context for better attention)
         final_user_content = user_message
 
-        # KEY FIX: Inject vision data directly into the user prompt block so the model can't ignore it
-        if vision_context:
+        # If we have multimodal image, skip the text vision context (AI can see the image directly)
+        # Otherwise, inject vision data as text for models without vision support
+        if vision_context and not vision_image_b64:
              final_user_content = (
                  f"INTERNAL SENSORY DATA:\n"
                  f"[{vision_context}]\n"
@@ -342,7 +384,24 @@ class CognitiveEngine:
                  f"User: {user_message}"
              )
 
-        messages.append({"role": "user", "content": final_user_content})
+        # Build multimodal content if we have images (webcam or attachment)
+        if vision_image_b64 or attachment_image_b64:
+            content_parts = [{"type": "text", "text": final_user_content}]
+
+            # Add webcam vision if available
+            if vision_image_b64:
+                content_parts.append({"type": "image", "image": vision_image_b64})
+
+            # Add user attachment if available
+            if attachment_image_b64:
+                content_parts.append({"type": "image", "image": attachment_image_b64})
+
+            messages.append({
+                "role": "user",
+                "content": content_parts
+            })
+        else:
+            messages.append({"role": "user", "content": final_user_content})
 
         return messages
 
@@ -595,8 +654,8 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
 
         return "\n".join(mood_desc)
 
-    def _call_llm(self, messages: List[Dict[str, str]]) -> str:
-        """Call the selected LLM provider"""
+    def _call_llm(self, messages: List[Dict[str, Any]]) -> str:
+        """Call the selected LLM provider with optional multimodal vision support"""
         if Config.LLM_PROVIDER == "gemini":
             return self._call_gemini(messages)
         elif Config.LLM_PROVIDER == "openrouter":
@@ -604,8 +663,8 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         else:
             return self._call_ollama(messages)
 
-    def _call_ollama(self, messages: List[Dict[str, str]]) -> str:
-        """Call standard Ollama endpoint"""
+    def _call_ollama(self, messages: List[Dict[str, Any]]) -> str:
+        """Call standard Ollama endpoint (multimodal support varies by model)"""
         try:
             response = requests.post(
                 f"{self.ollama_url}/api/chat",
@@ -631,19 +690,19 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to connect to Ollama: {e}")
 
-    def _call_gemini(self, messages: List[Dict[str, str]]) -> str:
-        """Call Google Gemini API"""
+    def _call_gemini(self, messages: List[Dict[str, Any]]) -> str:
+        """Call Google Gemini API with optional multimodal vision support"""
         if not GEMINI_AVAILABLE:
             raise ImportError("google-generativeai library is missing")
-            
+
         # Convert message format
         gemini_messages = []
         system_instruction = None
-        
+
         for msg in messages:
             role = msg["role"]
             content = msg["content"]
-            
+
             if role == "system":
                 # Concatenate system prompts
                 if system_instruction is None:
@@ -651,7 +710,23 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 else:
                     system_instruction += "\n\n" + content
             elif role == "user":
-                gemini_messages.append({"role": "user", "parts": [content]})
+                # Handle multimodal content (text + image)
+                if isinstance(content, list):
+                    parts = []
+                    for item in content:
+                        if item["type"] == "text":
+                            parts.append(item["text"])
+                        elif item["type"] == "image":
+                            # Gemini expects inline_data format for base64 images
+                            parts.append({
+                                "inline_data": {
+                                    "mime_type": "image/jpeg",
+                                    "data": item["image"]
+                                }
+                            })
+                    gemini_messages.append({"role": "user", "parts": parts})
+                else:
+                    gemini_messages.append({"role": "user", "parts": [content]})
             elif role == "assistant":
                 gemini_messages.append({"role": "model", "parts": [content]})
         
@@ -678,18 +753,39 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 return '{"goal": "idle", "emotion": "neutral", "dialogue": "System Error: Please check my API Key."}'
             raise
             
-    def _call_openrouter(self, messages: List[Dict[str, str]]) -> str:
-        """Call OpenRouter API"""
+    def _call_openrouter(self, messages: List[Dict[str, Any]]) -> str:
+        """Call OpenRouter API with optional multimodal vision support"""
         try:
             # Add site info for OpenRouter rankings (optional but good practice)
             headers = {
                 "Authorization": f"Bearer {Config.OPENROUTER_API_KEY}",
                 "Content-Type": "application/json",
             }
-            
+
+            # Convert messages to OpenRouter/OpenAI format (supports vision natively)
+            openrouter_messages = []
+            for msg in messages:
+                if isinstance(msg.get("content"), list):
+                    # Multimodal content - convert to OpenAI vision format
+                    content_parts = []
+                    for item in msg["content"]:
+                        if item["type"] == "text":
+                            content_parts.append({"type": "text", "text": item["text"]})
+                        elif item["type"] == "image":
+                            content_parts.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{item['image']}"
+                                }
+                            })
+                    openrouter_messages.append({"role": msg["role"], "content": content_parts})
+                else:
+                    # Text-only content
+                    openrouter_messages.append(msg)
+
             payload = {
                 "model": Config.OPENROUTER_MODEL,
-                "messages": messages,
+                "messages": openrouter_messages,
                 "temperature": 0.85,
                 "response_format": { "type": "json_object" },
                 "max_tokens": 8192  # Lowered to preventing 402 errors on low credit accounts
@@ -913,13 +1009,17 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
 
         return False
 
-    def _update_history(self, user_message: str, assistant_response: str) -> None:
-        """Update conversation history"""
-        self.conversation_history.append({
+    def _update_history(self, user_message: str, assistant_response: str, image_path: str = None) -> None:
+        """Update conversation history with optional image attachment"""
+        entry = {
             "user": user_message,
             "assistant": assistant_response,
             "timestamp": datetime.now().isoformat()
-        })
+        }
+        if image_path:
+            entry["image_path"] = image_path
+
+        self.conversation_history.append(entry)
 
         # Keep last 100 exchanges
         if len(self.conversation_history) > 100:

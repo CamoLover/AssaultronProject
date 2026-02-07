@@ -74,6 +74,7 @@ class VisionState:
     processing_time_ms: float = 0.0
     
     current_frame_b64: str = ""
+    raw_frame_b64: str = ""  # Raw frame without detection overlay
     frame_width: int = 640
     frame_height: int = 480
     
@@ -273,30 +274,33 @@ class VisionSystem:
                 time.sleep(0.01)
                 continue
                 
+            # Store raw frame before detection overlay
+            raw_frame = frame.copy()
+
             # Perform detection at interval
             if time.time() - self._last_detection_time >= self.detection_interval:
                 self._last_detection_time = time.time()
                 det_start = time.time()
-                
+
                 # Convert for MediaPipe (BGR -> RGB)
                 rgb_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
-                
+
                 # Run Detection
                 detection_result = self.detector.detect(mp_image)
-                
+
                 # Process Results
                 entities = self._process_detections(detection_result, frame.shape)
-                
+
                 # Draw boxes
                 frame = self._draw_detections(frame, entities)
-                
+
                 # Analyze scene
                 desc = self._generate_scene_description(entities)
                 threat = self._assess_threat(entities)
-                
+
                 proc_time = (time.time() - det_start) * 1000
-                
+
                 with self._lock:
                     self.state.entities = entities
                     self.state.person_count = sum(1 for e in entities if e.class_name == "person")
@@ -309,13 +313,18 @@ class VisionSystem:
             self._frame_times.append(time.time())
             if len(self._frame_times) > 30: self._frame_times.pop(0)
             fps = len(self._frame_times) / (self._frame_times[-1] - self._frame_times[0]) if len(self._frame_times) > 1 else 0
-            
-            # Encode frame
+
+            # Encode annotated frame
             _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 60])
             b64_frame = base64.b64encode(buffer).decode('utf-8')
-            
+
+            # Encode raw frame (without detection overlay)
+            _, raw_buffer = cv2.imencode('.jpg', raw_frame, [cv2.IMWRITE_JPEG_QUALITY, 85])
+            b64_raw_frame = base64.b64encode(raw_buffer).decode('utf-8')
+
             with self._lock:
                 self.state.current_frame_b64 = b64_frame
+                self.state.raw_frame_b64 = b64_raw_frame
                 self.state.fps = fps
                 
             # Cap FPS to 30
@@ -436,7 +445,11 @@ class VisionSystem:
 
     def get_frame_b64(self) -> str:
         with self._lock: return self.state.current_frame_b64
-        
+
+    def get_raw_frame_b64(self) -> str:
+        """Get raw webcam frame without detection overlay for AI vision"""
+        with self._lock: return self.state.raw_frame_b64
+
     def get_entities_for_world_state(self) -> List[str]:
         with self._lock: return [e.entity_id for e in self.state.entities]
         

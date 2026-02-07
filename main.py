@@ -7,7 +7,7 @@ hardware - instead it reasons about goals and emotions, which are then
 translated through behavioral and motion layers.
 """
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_from_directory
 import threading
 import time
 import json
@@ -244,7 +244,7 @@ class EmbodiedAssaultronCore:
         logger = logging.getLogger(f'assaultron.{event_type.lower()}')
         logger.log(log_level, message)
 
-    def process_message(self, user_message: str) -> dict:
+    def process_message(self, user_message: str, image_path: str = None) -> dict:
         """
         Process user message through the embodied agent pipeline.
 
@@ -255,6 +255,10 @@ class EmbodiedAssaultronCore:
         4. Motion Controller: Translate to hardware
         5. Update virtual body
         6. Voice synthesis (if enabled)
+
+        Args:
+            user_message: The user's text message
+            image_path: Optional path to an attached image file
 
         Returns:
             Dictionary with response, hardware state, and metadata
@@ -343,21 +347,25 @@ class EmbodiedAssaultronCore:
 
             # Step 1b: Integrate vision data into world state
             vision_context = ""
+            vision_image_b64 = None
             if self.vision_system.state.enabled:
                 vision_entities = self.vision_system.get_entities_for_world_state()
                 vision_data = self.vision_system.get_scene_for_cognitive_layer()
-                
+
+                # Get raw frame for AI vision (without detection overlay)
+                vision_image_b64 = self.vision_system.get_raw_frame_b64()
+
                 # Update world state with vision data
                 if vision_entities:
                     self.virtual_world.update_world(entities=vision_entities)
                     world_state = self.virtual_world.get_world_state()  # Refresh
-                
+
                 # Update threat level from vision
                 if vision_data.get("threat_level", "none") != "none":
                     self.virtual_world.update_world(threat_level=vision_data["threat_level"])
                     world_state = self.virtual_world.get_world_state()  # Refresh
                     self.log_event(f"Vision threat assessment: {vision_data['threat_level']}", "VISION")
-                
+
                 # Build vision context for cognitive layer
                 vision_context = vision_data.get("scene_description", "")
                 if vision_data.get("entities"):
@@ -381,7 +389,9 @@ class EmbodiedAssaultronCore:
                 mood_state=mood_state,
                 memory_summary=memory_summary,
                 vision_context=vision_context,
-                agent_context=agent_context
+                agent_context=agent_context,
+                vision_image_b64=vision_image_b64,
+                attachment_image_path=image_path
             )
 
             self.log_event(
@@ -834,6 +844,56 @@ assaultron_voice_active {1 if assaultron.voice_enabled else 0}
         return f"# ERROR: {str(e)}", 500, {'Content-Type': 'text/plain; charset=utf-8'}
 
 
+@app.route('/api/chat/upload_image', methods=['POST'])
+@limiter.limit("20 per minute")  # Rate limit for image uploads
+def upload_chat_image():
+    """
+    Upload an image to attach to a chat message.
+    Returns the path to the saved image.
+    """
+    if 'image' not in request.files:
+        return jsonify({"error": "No image file provided"}), 400
+
+    file = request.files['image']
+
+    if file.filename == '':
+        return jsonify({"error": "No file selected"}), 400
+
+    # Validate file type
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
+    file_ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+
+    if file_ext not in allowed_extensions:
+        return jsonify({"error": f"Invalid file type. Allowed: {', '.join(allowed_extensions)}"}), 400
+
+    # Create chat_images directory if it doesn't exist
+    import os
+    os.makedirs('chat_images', exist_ok=True)
+
+    # Generate unique filename
+    from datetime import datetime
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
+    filename = f"chat_{timestamp}.{file_ext}"
+    filepath = os.path.join('chat_images', filename)
+
+    # Save file
+    try:
+        file.save(filepath)
+        return jsonify({
+            "success": True,
+            "image_path": filepath,
+            "filename": filename
+        }), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to save image: {str(e)}"}), 500
+
+
+@app.route('/chat_images/<path:filename>')
+def serve_chat_image(filename):
+    """Serve uploaded chat images"""
+    return send_from_directory('chat_images', filename)
+
+
 @app.route('/api/chat', methods=['POST'])
 @limiter.limit("100 per minute")  # Rate limit: 100 messages per minute (reasonable for active conversation)
 def chat():
@@ -843,6 +903,7 @@ def chat():
     """
     data = request.get_json()
     message = data.get('message', '').strip()
+    image_path = data.get('image_path', None)  # Optional image attachment
 
     if not message:
         return jsonify({"error": "Empty message"}), 400
@@ -852,10 +913,13 @@ def chat():
         return jsonify({"error": "Message too long (max 5000 characters)"}), 400
 
     # Log received input
-    assaultron.log_event(f"INPUT RECEIVED: '{message}'", "CHAT")
+    if image_path:
+        assaultron.log_event(f"INPUT RECEIVED: '{message}' (with image: {image_path})", "CHAT")
+    else:
+        assaultron.log_event(f"INPUT RECEIVED: '{message}'", "CHAT")
 
     # Process through embodied agent pipeline
-    result = assaultron.process_message(message)
+    result = assaultron.process_message(message, image_path=image_path)
 
     if result["success"]:
         # Return response in format compatible with existing web UI

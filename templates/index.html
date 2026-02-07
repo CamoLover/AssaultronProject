@@ -265,7 +265,20 @@
                     </div>
                 </div>
                 <div class="p-3 border-t border-gray-300 bg-gray-50">
+                    <!-- Image Preview (shown when image selected) -->
+                    <div id="imagePreviewContainer" class="hidden mb-2 relative inline-block">
+                        <img id="imagePreview" src="" alt="Preview" class="max-h-20 rounded border border-gray-300">
+                        <button id="clearImageBtn" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">
+                            ×
+                        </button>
+                    </div>
                     <div class="flex gap-2">
+                        <input type="file" id="imageInput" accept="image/*" class="hidden">
+                        <button id="attachImageBtn"
+                            class="px-3 py-2 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300"
+                            title="Attach Image">
+                            📎
+                        </button>
                         <input type="text" id="chatInput" placeholder="ENTER COMMAND OR COMMUNICATION..."
                             class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500">
                         <button id="sendBtn"
@@ -1068,6 +1081,19 @@
 
         <!-- Chat Input Bar -->
         <div class="immersion-input-container">
+            <!-- Image Preview (shown when image selected) -->
+            <div id="immersionImagePreviewContainer" class="hidden" style="position: absolute; bottom: 70px; left: 20px;">
+                <div style="position: relative; display: inline-block;">
+                    <img id="immersionImagePreview" src="" alt="Preview" style="max-height: 80px; border-radius: 8px; border: 2px solid rgba(255,255,255,0.3);">
+                    <button id="immersionClearImageBtn" style="position: absolute; top: -8px; right: -8px; background: #ef4444; color: white; border-radius: 50%; width: 24px; height: 24px; border: none; cursor: pointer; font-size: 16px; line-height: 1;">
+                        ×
+                    </button>
+                </div>
+            </div>
+            <input type="file" id="immersionImageInput" accept="image/*" class="hidden">
+            <button id="immersionAttachImageBtn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-right: 10px; font-size: 18px;">
+                📎
+            </button>
             <input type="text" id="immersionChatInput" placeholder="ENTER COMMAND OR COMMUNICATION..."
                 class="immersion-chat-input">
             <button id="immersionSendBtn" class="immersion-send-btn">
@@ -1091,6 +1117,20 @@
         const chatHistory = document.getElementById('chatHistory');
         const chatInput = document.getElementById('chatInput');
         const sendBtn = document.getElementById('sendBtn');
+
+        // Image upload elements
+        const imageInput = document.getElementById('imageInput');
+        const attachImageBtn = document.getElementById('attachImageBtn');
+        const imagePreviewContainer = document.getElementById('imagePreviewContainer');
+        const imagePreview = document.getElementById('imagePreview');
+        const clearImageBtn = document.getElementById('clearImageBtn');
+
+        // Immersion mode image elements
+        const immersionImageInput = document.getElementById('immersionImageInput');
+        const immersionAttachImageBtn = document.getElementById('immersionAttachImageBtn');
+        const immersionImagePreviewContainer = document.getElementById('immersionImagePreviewContainer');
+        const immersionImagePreview = document.getElementById('immersionImagePreview');
+        const immersionClearImageBtn = document.getElementById('immersionClearImageBtn');
 
         // Stats elements
         const apiStatus = document.getElementById('apiStatus');
@@ -1125,6 +1165,54 @@
             document.removeEventListener('mousemove', handleResize);
             document.removeEventListener('mouseup', stopResize);
         }
+
+        // Image attachment handling
+        function clearSelectedImage() {
+            imageInput.value = '';
+            imagePreviewContainer.classList.add('hidden');
+            imagePreview.src = '';
+        }
+
+        function clearImmersionImage() {
+            immersionImageInput.value = '';
+            immersionImagePreviewContainer.classList.add('hidden');
+            immersionImagePreview.src = '';
+        }
+
+        attachImageBtn.addEventListener('click', () => {
+            imageInput.click();
+        });
+
+        immersionAttachImageBtn.addEventListener('click', () => {
+            immersionImageInput.click();
+        });
+
+        imageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    imagePreview.src = e.target.result;
+                    imagePreviewContainer.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        immersionImageInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    immersionImagePreview.src = e.target.result;
+                    immersionImagePreviewContainer.classList.remove('hidden');
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        clearImageBtn.addEventListener('click', clearSelectedImage);
+        immersionClearImageBtn.addEventListener('click', clearImmersionImage);
 
         // Logging
         function addLog(level, message) {
@@ -1161,12 +1249,20 @@
         }
 
         // Chat functions
-        function addChatMessage(sender, message, timestamp) {
+        function addChatMessage(sender, message, timestamp, imagePath = null) {
             const timeStr = timestamp || new Date().toLocaleTimeString();
             const div = document.createElement('div');
 
+            let imageHtml = '';
+            if (imagePath) {
+                // Normalize path separators (Windows uses backslash, web needs forward slash)
+                const webPath = imagePath.replace(/\\/g, '/');
+                // Create clickable image thumbnail
+                imageHtml = `<br><img src="/${webPath}" alt="Attached image" class="mt-2 max-w-xs max-h-48 rounded border border-gray-300 cursor-pointer" onclick="window.open('/${webPath}', '_blank')">`;
+            }
+
             if (sender === 'USER') {
-                div.innerHTML = `<div class="text-right"><span class="text-gray-500">[${timeStr}]</span> <span class="text-blue-600 font-bold">OPERATOR:</span> ${message}</div>`;
+                div.innerHTML = `<div class="text-right"><span class="text-gray-500">[${timeStr}]</span> <span class="text-blue-600 font-bold">OPERATOR:</span> ${message}${imageHtml}</div>`;
             } else if (sender === 'ASSAULTRON') {
                 div.innerHTML = `<div><span class="text-gray-500">[${timeStr}]</span> <span class="text-green-600 font-bold">ASR-7:</span> ${message}</div>`;
             } else {
@@ -1189,7 +1285,7 @@
                         chatHistory.innerHTML = ''; // Clear the initial online message
                         history.forEach(exchange => {
                             const timeStr = exchange.timestamp ? new Date(exchange.timestamp).toLocaleTimeString() : null;
-                            if (exchange.user) addChatMessage('USER', exchange.user, timeStr);
+                            if (exchange.user) addChatMessage('USER', exchange.user, timeStr, exchange.image_path);
                             if (exchange.assistant) addChatMessage('ASSAULTRON', exchange.assistant, timeStr);
                         });
                         addLog('SYSTEM', 'Conversation history restored');
@@ -1271,7 +1367,14 @@
             // Mark user as active when sending a message
             markUserActive();
 
-            addChatMessage('USER', message);
+            // Save reference to image file before clearing input
+            let imagePath = null;
+            let imageFile = null;
+            const imageInput = document.getElementById('imageInput');
+            if (imageInput.files.length > 0) {
+                imageFile = imageInput.files[0];
+            }
+
             chatInput.value = '';
             sendBtn.disabled = true;
             sendBtn.textContent = 'TRANSMITTING';
@@ -1286,10 +1389,39 @@
             try {
                 addLog('AI', `Sending: ${message.substring(0, 50)}...`);
 
+                // Handle image upload if present
+                if (imageFile) {
+                    const formData = new FormData();
+                    formData.append('image', imageFile);
+
+                    addLog('AI', 'Uploading image...');
+                    const uploadResponse = await fetch('/api/chat/upload_image', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (uploadResponse.ok) {
+                        const uploadData = await uploadResponse.json();
+                        imagePath = uploadData.image_path;
+                        addLog('AI', `Image uploaded: ${uploadData.filename}`);
+                    } else {
+                        throw new Error('Image upload failed');
+                    }
+
+                    // Clear the image
+                    clearSelectedImage();
+                }
+
+                // Now add the user message with the image path
+                addChatMessage('USER', message, null, imagePath);
+
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({
+                        message: message,
+                        image_path: imagePath
+                    })
                 });
 
                 const endTime = performance.now();
@@ -2570,11 +2702,12 @@
 
             if (!message) return;
 
-            // Add to immersion chat
-            addImmersionMessage('USER', message);
-
-            // Also add to main chat
-            addChatMessage('USER', message);
+            // Save reference to image file before clearing
+            let imagePath = null;
+            let imageFile = null;
+            if (immersionImageInput.files.length > 0) {
+                imageFile = immersionImageInput.files[0];
+            }
 
             input.value = '';
             sendBtn.disabled = true;
@@ -2587,10 +2720,40 @@
             isAISpeaking = true;
 
             try {
+                // Handle image upload if present
+                if (imageFile) {
+                    const formData = new FormData();
+                    formData.append('image', imageFile);
+
+                    const uploadResponse = await fetch('/api/chat/upload_image', {
+                        method: 'POST',
+                        body: formData
+                    });
+
+                    if (uploadResponse.ok) {
+                        const uploadData = await uploadResponse.json();
+                        imagePath = uploadData.image_path;
+                    } else {
+                        throw new Error('Image upload failed');
+                    }
+
+                    // Clear the image
+                    clearImmersionImage();
+                }
+
+                // Add to immersion chat (after upload so we have imagePath)
+                addImmersionMessage('USER', message);
+
+                // Also add to main chat with image
+                addChatMessage('USER', message, null, imagePath);
+
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ message: message })
+                    body: JSON.stringify({
+                        message: message,
+                        image_path: imagePath
+                    })
                 });
 
                 if (response.ok) {
