@@ -1109,6 +1109,18 @@
         let lastPingTime = 0;
         let currentTab = 'interface';
 
+        // Voice audio playback state
+        let lastPlayedAudioUrl = null;
+        let audioPlayer = null;
+        let audioQueue = [];
+
+        // Web Audio API for real-time audio analysis
+        let audioContext = null;
+        let audioAnalyser = null;
+        let audioSource = null;
+        let audioDataArray = null;
+        let audioBufferLength = 0;
+
         // DOM elements
         const logsPanel = document.getElementById('logsPanel');
         const chatPanel = document.getElementById('chatPanel');
@@ -1769,10 +1781,93 @@
                         startBtn.textContent = '🚀 START VOICE SERVER';
                         stopBtn.disabled = true;
                     }
+
+                    // Check for new audio to play
+                    if (status.last_audio_url && status.last_audio_url !== lastPlayedAudioUrl) {
+                        playVoiceAudio(status.last_audio_url);
+                        lastPlayedAudioUrl = status.last_audio_url;
+                    }
                 }
             } catch (error) {
                 // Silently fail for status updates to avoid spam
                 console.log('Voice status update failed:', error.message);
+            }
+        }
+
+        function initAudioAnalyser() {
+            try {
+                // Create audio context if it doesn't exist
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                }
+
+                // Create analyser node
+                if (!audioAnalyser) {
+                    audioAnalyser = audioContext.createAnalyser();
+                    audioAnalyser.fftSize = 256; // 256 samples for frequency analysis
+                    audioBufferLength = audioAnalyser.frequencyBinCount; // Will be 128 (half of fftSize)
+                    audioDataArray = new Uint8Array(audioBufferLength);
+                    audioAnalyser.connect(audioContext.destination);
+                }
+
+                return true;
+            } catch (error) {
+                console.error('Failed to initialize audio analyser:', error);
+                return false;
+            }
+        }
+
+        function playVoiceAudio(audioUrl) {
+            try {
+                // Initialize Web Audio API
+                if (!initAudioAnalyser()) {
+                    addLog('ERROR', 'Failed to initialize audio analyser');
+                    return;
+                }
+
+                // Create audio player if it doesn't exist
+                if (!audioPlayer) {
+                    audioPlayer = new Audio();
+
+                    // Event listeners
+                    audioPlayer.addEventListener('play', () => {
+                        isAISpeaking = true;
+                        if (audioContext.state === 'suspended') {
+                            audioContext.resume();
+                        }
+                    });
+
+                    audioPlayer.addEventListener('ended', () => {
+                        isAISpeaking = false;
+                    });
+
+                    audioPlayer.addEventListener('pause', () => {
+                        isAISpeaking = false;
+                    });
+
+                    audioPlayer.addEventListener('error', (e) => {
+                        addLog('ERROR', 'Failed to play voice audio');
+                        isAISpeaking = false;
+                    });
+                }
+
+                // Connect to Web Audio API analyser (only create once)
+                if (!audioSource) {
+                    audioSource = audioContext.createMediaElementSource(audioPlayer);
+                    audioSource.connect(audioAnalyser);
+                }
+
+                // Play the audio
+                audioPlayer.src = audioUrl;
+                audioPlayer.play().then(() => {
+                    addLog('VOICE', 'Playing synthesized voice');
+                }).catch(err => {
+                    addLog('ERROR', `Voice playback failed: ${err.message}`);
+                    isAISpeaking = false;
+                });
+            } catch (error) {
+                addLog('ERROR', `Voice playback error: ${error.message}`);
+                isAISpeaking = false;
             }
         }
 
@@ -2528,80 +2623,54 @@
             ctx.lineTo(width, centerY);
             ctx.stroke();
 
-            if (isAISpeaking) {
-                // REALISTIC VOICE WAVEFORM - Like Karen from SpongeBob
-                // Multiple frequencies combined for natural speech effect
+            if (isAISpeaking && audioAnalyser && audioDataArray) {
+                // REAL-TIME AUDIO VISUALIZATION using Web Audio API
+                // Get frequency data from the actual audio being played
+                audioAnalyser.getByteFrequencyData(audioDataArray);
 
-                ctx.strokeStyle = '#10b981'; // Brighter green
-                ctx.lineWidth = 3;
-                ctx.shadowBlur = 20;
+                // Draw frequency bars (mirrored from center)
+                ctx.fillStyle = '#10b981';
+                ctx.shadowBlur = 15;
                 ctx.shadowColor = '#10b981';
 
+                const barWidth = width / audioBufferLength;
+                let x = 0;
+
+                for (let i = 0; i < audioBufferLength; i++) {
+                    const barHeight = (audioDataArray[i] / 255) * (height * 0.4);
+                    ctx.fillRect(x, centerY - barHeight, barWidth - 1, barHeight);
+                    ctx.fillRect(x, centerY, barWidth - 1, barHeight);
+                    x += barWidth;
+                }
+
+                ctx.shadowBlur = 0;
+
+                // Also draw waveform overlay
+                audioAnalyser.getByteTimeDomainData(audioDataArray);
+
+                ctx.strokeStyle = '#34d399';
+                ctx.lineWidth = 2;
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = '#34d399';
                 ctx.beginPath();
 
-                const samplesPerPixel = 4;
-                const totalSamples = width * samplesPerPixel;
+                const sliceWidth = width / audioBufferLength;
+                x = 0;
 
-                for (let x = 0; x < width; x++) {
-                    const t = (x / width) * 10 - (time * 0.003); // Scrolling effect
+                for (let i = 0; i < audioBufferLength; i++) {
+                    const v = audioDataArray[i] / 128.0; // Normalize to 0-2 range
+                    const y = centerY + ((v - 1.0) * height * 0.4); // Center around centerY, scale to 40% of height
 
-                    // Combine multiple sine waves at different frequencies
-                    // This creates a realistic voice-like pattern
-                    const fundamental = Math.sin(t * 8) * 0.4; // Base frequency
-                    const harmonic1 = Math.sin(t * 16 + 0.5) * 0.25; // First harmonic
-                    const harmonic2 = Math.sin(t * 24 + 1.2) * 0.15; // Second harmonic
-                    const harmonic3 = Math.sin(t * 32 + 2.1) * 0.1; // Third harmonic
-
-                    // Add random amplitude modulation (like speech envelope)
-                    const envelope = (Math.sin(t * 2.5) * 0.5 + 0.5) * 0.8 + 0.2;
-
-                    // Add sharp random peaks (consonants/plosives in speech)
-                    const randomPeak = Math.random() < 0.05 ? (Math.random() - 0.5) * 0.3 : 0;
-
-                    // Combine all components
-                    let amplitude = (fundamental + harmonic1 + harmonic2 + harmonic3) * envelope + randomPeak;
-
-                    // Add some noise for realism
-                    amplitude += (Math.random() - 0.5) * 0.08;
-
-                    // Dynamic range compression (like actual audio)
-                    amplitude = Math.tanh(amplitude * 1.5);
-
-                    const y = centerY - (amplitude * height * 0.35);
-
-                    if (x === 0) {
+                    if (i === 0) {
                         ctx.moveTo(x, y);
                     } else {
                         ctx.lineTo(x, y);
                     }
+
+                    x += sliceWidth;
                 }
 
                 ctx.stroke();
-
-                // Add second layer with slight offset for thickness
-                ctx.globalAlpha = 0.6;
-                ctx.beginPath();
-                for (let x = 0; x < width; x++) {
-                    const t = (x / width) * 10 - (time * 0.003);
-                    const fundamental = Math.sin(t * 8 + 0.1) * 0.4;
-                    const harmonic1 = Math.sin(t * 16 + 0.6) * 0.25;
-                    const harmonic2 = Math.sin(t * 24 + 1.3) * 0.15;
-                    const harmonic3 = Math.sin(t * 32 + 2.2) * 0.1;
-                    const envelope = (Math.sin(t * 2.5) * 0.5 + 0.5) * 0.8 + 0.2;
-                    const randomPeak = Math.random() < 0.05 ? (Math.random() - 0.5) * 0.3 : 0;
-                    let amplitude = (fundamental + harmonic1 + harmonic2 + harmonic3) * envelope + randomPeak;
-                    amplitude += (Math.random() - 0.5) * 0.08;
-                    amplitude = Math.tanh(amplitude * 1.5);
-                    const y = centerY - (amplitude * height * 0.35) + 2;
-
-                    if (x === 0) {
-                        ctx.moveTo(x, y);
-                    } else {
-                        ctx.lineTo(x, y);
-                    }
-                }
-                ctx.stroke();
-                ctx.globalAlpha = 1.0;
                 ctx.shadowBlur = 0;
 
             } else {
@@ -2972,38 +3041,21 @@
         loadNotificationConfig();
 
         // Check voice playback status for immersion mode visualizer
-        async function checkVoicePlaybackStatus() {
-            if (!immersionModeActive) return;
-
-            try {
-                const response = await fetch('/api/voice/status');
-                if (response.ok) {
-                    const data = await response.json();
-                    // Update visualizer state based on actual voice playback
-                    if (data.is_playing !== undefined) {
-                        isAISpeaking = data.is_playing;
-                    }
-                }
-            } catch (error) {
-                // Silently fail - not critical
-            }
-        }
+        // Voice playback status is now tracked via audio player event listeners
+        // in playVoiceAudio() function - no need to poll backend
 
         // Additional periodic updates (kept from original)
         setInterval(() => {
             if (currentTab === 'embodied') {
                 updateEmbodiedAgentData();
-                updateVoiceSystemStatus();
                 loadNotificationConfig(); // Refresh notification status
             }
             if (currentTab === 'vision' && visionEnabled) {
                 updateVisionData();
             }
 
-            // Check voice status for immersion mode
-            if (immersionModeActive) {
-                checkVoicePlaybackStatus();
-            }
+            // Check for new audio
+            updateVoiceSystemStatus();
         }, 2000); // Update tab-specific data every 2 seconds (reduced from 500ms to prevent lag)
     </script>
 </body>

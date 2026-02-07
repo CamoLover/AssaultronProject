@@ -9,7 +9,6 @@ import json
 import requests
 import threading
 import os
-import pygame
 from pathlib import Path
 from datetime import datetime
 from queue import Queue
@@ -39,11 +38,10 @@ class VoiceManager:
         # Status tracking
         self.is_initialized = False
         self.last_synthesis_file = None
-        self.is_playing = False
-        self.playback_start_time = None
+        self.last_synthesis_filename = None
 
-        # Audio playback
-        pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
+        # Event callback for notifying when audio is ready
+        self.on_audio_ready_callback = None
         
         # Message queue for sequential synthesis
         self.message_queue = Queue()
@@ -603,20 +601,12 @@ class VoiceManager:
             test_file = Path(test_output)
             
             if test_file.exists():
-                # Try to play it first before deleting
-                try:
-                    self.play_audio(str(test_file))
-                    # Give pygame time to release the file handle
-                    time.sleep(0.5)
-                except Exception as e:
-                    pass
-                
-                # Clean up test file after playing
+                # Clean up test file
                 try:
                     test_file.unlink()
                 except Exception as e:
-                    # If file is still locked, it's okay - don't fail the test
-                    pass
+                    # If file is locked, it's okay - don't fail the test
+                    self.log(f"Could not delete test file: {e}", "WARN")
                 return True
             else:
                 self.log(f"Test file not created: {test_file}", "ERROR")
@@ -685,13 +675,12 @@ class VoiceManager:
             self.log(f"System verification error: {e}", "ERROR")
             return False
     
-    def synthesize_voice(self, text, play_audio=True, filename=None):
+    def synthesize_voice(self, text, filename=None):
         """
         Synthesize text to speech using loaded Assaultron model
 
         Args:
             text (str): Text to synthesize
-            play_audio (bool): Whether to automatically play the audio
             filename (str): Optional custom filename (without extension)
 
         Returns:
@@ -767,11 +756,15 @@ class VoiceManager:
             
             if expected_file.exists():
                 self.last_synthesis_file = str(expected_file)
-                
-                # Play audio if requested
-                if play_audio:
-                    self.play_audio(str(expected_file))
-                
+                self.last_synthesis_filename = expected_file.name
+
+                # Trigger callback to notify frontend
+                if self.on_audio_ready_callback:
+                    try:
+                        self.on_audio_ready_callback(expected_file.name)
+                    except Exception as e:
+                        self.log(f"Audio ready callback error: {e}", "ERROR")
+
                 return str(expected_file)
             else:
                 self.log(f"Audio file not generated: {output_filename}", "ERROR")
@@ -781,45 +774,21 @@ class VoiceManager:
             self.log(f"Voice synthesis failed: {e}", "ERROR")
             return None
     
-    def play_audio(self, file_path):
-        """Play audio file using pygame"""
-        try:
-            if not Path(file_path).exists():
-                self.log(f"Audio file not found: {file_path}", "ERROR")
-                return False
+    def set_audio_ready_callback(self, callback):
+        """Set a callback function to be called when audio is ready"""
+        self.on_audio_ready_callback = callback
 
-            # Load and play audio
-            self.is_playing = True
-            self.playback_start_time = time.time()
-            pygame.mixer.music.load(file_path)
-            pygame.mixer.music.play()
-
-            # Wait for playback to finish
-            while pygame.mixer.music.get_busy():
-                time.sleep(0.1)
-
-            self.is_playing = False
-            self.playback_start_time = None
-            return True
-
-        except Exception as e:
-            self.is_playing = False
-            self.playback_start_time = None
-            self.log(f"Audio playback failed: {e}", "ERROR")
-            return False
-    
-    def enqueue_message(self, text, play_audio=True):
+    def enqueue_message(self, text):
         """
         Add a message to the synthesis queue.
-        Messages will be synthesized and played sequentially.
-        
+        Messages will be synthesized sequentially.
+
         Args:
             text: Text to synthesize
-            play_audio: Whether to play the audio after synthesis
         """
-        self.message_queue.put((text, play_audio))
+        self.message_queue.put(text)
         self.log(f"Message queued: '{text[:50]}...' (queue size: {self.message_queue.qsize()})")
-        
+
         # Start queue processor if not running
         if not self.queue_running:
             self.start_queue_processor()
@@ -836,15 +805,15 @@ class VoiceManager:
             while self.queue_running:
                 try:
                     # Get message from queue (blocks until available)
-                    text, play_audio = self.message_queue.get(timeout=1)
-                    
-                    # Synthesize and play
+                    text = self.message_queue.get(timeout=1)
+
+                    # Synthesize
                     self.log(f"Processing queued message: '{text[:50]}...'")
-                    self.synthesize_voice(text, play_audio=play_audio)
-                    
+                    self.synthesize_voice(text)
+
                     # Mark task as done
                     self.message_queue.task_done()
-                    
+
                 except Exception as e:
                     if "Empty" not in str(e):  # Ignore timeout exceptions
                         self.log(f"Queue processor error: {e}", "ERROR")
@@ -860,17 +829,21 @@ class VoiceManager:
             self.queue_thread.join(timeout=2)
         self.log("Queue processor stopped")
     
-    def synthesize_async(self, text, play_audio=True):
+    def synthesize_async(self, text):
         """Synthesize voice asynchronously"""
         def synthesize():
-            self.synthesize_voice(text, play_audio)
-        
+            self.synthesize_voice(text)
+
         thread = threading.Thread(target=synthesize, daemon=True)
         thread.start()
         return thread
     
     def get_status(self):
         """Get comprehensive voice system status"""
+        audio_url = None
+        if self.last_synthesis_filename:
+            audio_url = f"/api/voice/audio/{self.last_synthesis_filename}"
+
         return {
             "initialized": self.is_initialized,
             "server_running": self.server_running and self.check_server_status(),
@@ -882,9 +855,9 @@ class VoiceManager:
                 "author": self.model_info.get('author') if self.model_info else None
             },
             "last_synthesis": self.last_synthesis_file,
-            "audio_output_dir": str(self.audio_output_dir),
-            "is_playing": self.is_playing,
-            "playback_duration": time.time() - self.playback_start_time if self.playback_start_time else 0
+            "last_audio_filename": self.last_synthesis_filename,
+            "last_audio_url": audio_url,
+            "audio_output_dir": str(self.audio_output_dir)
         }
     
     def cleanup_old_files(self, keep_last=10):
@@ -907,19 +880,16 @@ class VoiceManager:
     def shutdown(self):
         """Complete system shutdown"""
         self.log("Shutting down voice system...")
-        
+
         try:
-            # Stop audio playback
-            pygame.mixer.music.stop()
-            
             # Stop server
             self.stop_server()
-            
+
             # Clean up old files
             self.cleanup_old_files(5)
-            
+
             self.log("Voice system shutdown complete")
-            
+
         except Exception as e:
             self.log(f"Shutdown error: {e}", "ERROR")
 

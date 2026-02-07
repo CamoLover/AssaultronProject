@@ -1420,11 +1420,22 @@ def manual_speak():
 
 
 @app.route('/api/voice/status')
+@limiter.exempt  # Exempt from rate limiting - polled frequently for audio playback
 def voice_status():
-    """Get voice system status"""
+    """Get voice system status - polled frequently to detect new audio"""
     status = assaultron.voice_system.get_status()
     status["voice_enabled"] = assaultron.voice_enabled
     return jsonify(status)
+
+
+@app.route('/api/voice/audio/<filename>')
+def serve_audio(filename):
+    """Serve generated audio files to the frontend"""
+    try:
+        audio_dir = assaultron.voice_system.audio_output_dir
+        return send_from_directory(audio_dir, filename, mimetype='audio/wav')
+    except Exception as e:
+        return jsonify({"error": str(e)}), 404
 
 
 # ============================================================================
