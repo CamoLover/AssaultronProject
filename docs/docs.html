@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Documentation - Assaultron ASR-7</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#ef4444',
+                        'primary-dark': '#dc2626',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .gradient-text {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-blur {
+            backdrop-filter: blur(10px);
+        }
+
+        .sidebar {
+            position: sticky;
+            top: 80px;
+            max-height: calc(100vh - 100px);
+            overflow-y: auto;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+        }
+
+        .dark .sidebar::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 3px;
+        }
+
+        .dark .sidebar::-webkit-scrollbar-thumb {
+            background: #475569;
+        }
+
+        #markdown-content {
+            line-height: 1.8;
+        }
+
+        #markdown-content h1 {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            color: #ef4444;
+        }
+
+        #markdown-content h2 {
+            font-size: 2rem;
+            font-weight: bold;
+            margin-top: 2rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #ef4444;
+            padding-bottom: 0.5rem;
+        }
+
+        .dark #markdown-content h2 {
+            color: #f1f5f9;
+        }
+
+        #markdown-content h3 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-top: 1.5rem;
+            margin-bottom: 0.75rem;
+        }
+
+        .dark #markdown-content h3 {
+            color: #f1f5f9;
+        }
+
+        #markdown-content h4 {
+            font-size: 1.25rem;
+            font-weight: bold;
+            margin-top: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .dark #markdown-content h4 {
+            color: #f1f5f9;
+        }
+
+        #markdown-content p {
+            margin-bottom: 1rem;
+            color: #334155;
+        }
+
+        .dark #markdown-content p {
+            color: #cbd5e1;
+        }
+
+        #markdown-content ul, #markdown-content ol {
+            margin-bottom: 1rem;
+            padding-left: 2rem;
+            color: #334155;
+        }
+
+        .dark #markdown-content ul,
+        .dark #markdown-content ol {
+            color: #cbd5e1;
+        }
+
+        #markdown-content li {
+            margin-bottom: 0.5rem;
+        }
+
+        #markdown-content code {
+            background-color: #f1f5f9;
+            color: #dc2626;
+            padding: 0.2rem 0.4rem;
+            border-radius: 0.25rem;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+        }
+
+        .dark #markdown-content code {
+            background-color: #334155;
+            color: #fca5a5;
+        }
+
+        #markdown-content pre {
+            background-color: #1e293b;
+            color: #e2e8f0;
+            padding: 1rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            margin-bottom: 1rem;
+        }
+
+        #markdown-content pre code {
+            background-color: transparent;
+            color: #e2e8f0;
+            padding: 0;
+        }
+
+        #markdown-content blockquote {
+            border-left: 4px solid #ef4444;
+            padding-left: 1rem;
+            margin: 1rem 0;
+            color: #64748b;
+        }
+
+        .dark #markdown-content blockquote {
+            color: #94a3af;
+        }
+
+        #markdown-content table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 1rem;
+        }
+
+        #markdown-content table th,
+        #markdown-content table td {
+            border: 1px solid #e2e8f0;
+            padding: 0.5rem;
+            color: #334155;
+        }
+
+        .dark #markdown-content table th,
+        .dark #markdown-content table td {
+            border-color: #475569;
+            color: #cbd5e1;
+        }
+
+        #markdown-content table th {
+            background-color: #f8fafc;
+            font-weight: bold;
+        }
+
+        .dark #markdown-content table th {
+            background-color: #334155;
+        }
+
+        #markdown-content a {
+            color: #ef4444;
+            text-decoration: underline;
+        }
+
+        #markdown-content a:hover {
+            color: #dc2626;
+        }
+
+        #markdown-content img {
+            max-width: 100%;
+            height: auto;
+            border-radius: 0.5rem;
+            margin: 1rem 0;
+        }
+
+        #markdown-content hr {
+            border: none;
+            border-top: 2px solid #e5e7eb;
+            margin: 2rem 0;
+        }
+
+        .dark #markdown-content hr {
+            border-top-color: #475569;
+        }
+
+        .doc-link.active {
+            background-color: #fee2e2;
+            color: #ef4444;
+        }
+
+        .dark .doc-link.active {
+            background-color: #7f1d1d;
+            color: #fca5a5;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 bg-white/80 dark:bg-slate-900/80 nav-blur border-b border-gray-200 dark:border-slate-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-robot text-2xl text-red-500"></i>
+                    <a href="index.html" class="text-xl font-bold gradient-text">ASR-7</a>
+                </div>
+
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="index.html#home" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Home</a>
+                    <a href="index.html#about" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">About</a>
+                    <a href="index.html#capabilities" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Capabilities</a>
+                    <a href="docs.html" class="text-red-500">Documentation</a>
+                    <a href="https://github.com/camolover" target="_blank" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">
+                        <i class="fab fa-github text-xl"></i>
+                    </a>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                    <button id="theme-toggle" class="p-2 rounded-lg bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
+                        <i class="fas fa-moon dark:fa-sun text-xl text-gray-700 dark:text-gray-300"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Documentation Layout -->
+    <div class="pt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+            <div class="grid lg:grid-cols-4 gap-8">
+                <!-- Sidebar -->
+                <aside class="lg:col-span-1">
+                    <div class="sidebar bg-white dark:bg-slate-800 rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+                        <h3 class="text-lg font-bold mb-4 gradient-text">Documentation</h3>
+                        <ul class="space-y-2" id="doc-list">
+                            <li>
+                                <button onclick="loadDoc('ARCHITECTURE.md')" class="doc-link w-full text-left px-3 py-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                                    <i class="fas fa-file-alt mr-2 text-red-500"></i>
+                                    Architecture
+                                </button>
+                            </li>
+                        </ul>
+
+                        <hr class="my-6 border-gray-200 dark:border-slate-700">
+
+                        <div class="space-y-2">
+                            <a href="index.html" class="block px-3 py-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                                <i class="fas fa-home mr-2 text-red-500"></i>
+                                Back to Home
+                            </a>
+                            <a href="https://github.com/camolover" target="_blank" class="block px-3 py-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                                <i class="fab fa-github mr-2 text-red-500"></i>
+                                View on GitHub
+                            </a>
+                        </div>
+                    </div>
+                </aside>
+
+                <!-- Main Content -->
+                <main class="lg:col-span-3">
+                    <div class="bg-white dark:bg-slate-800 rounded-lg p-8 border border-gray-200 dark:border-slate-700">
+                        <div id="loading" class="text-center py-12">
+                            <i class="fas fa-spinner fa-spin text-4xl text-red-500 mb-4"></i>
+                            <p class="text-gray-600 dark:text-gray-400">Loading documentation...</p>
+                        </div>
+                        <div id="error" class="hidden text-center py-12">
+                            <i class="fas fa-exclamation-triangle text-4xl text-red-500 mb-4"></i>
+                            <p class="text-gray-600 dark:text-gray-400">Failed to load documentation</p>
+                        </div>
+                        <div id="markdown-content" class="hidden"></div>
+                    </div>
+                </main>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 dark:bg-black text-white py-12 px-4 mt-20">
+        <div class="max-w-7xl mx-auto text-center">
+            <div class="flex justify-center items-center space-x-2 mb-4">
+                <i class="fas fa-robot text-3xl text-red-500"></i>
+                <span class="text-2xl font-bold">Assaultron ASR-7</span>
+            </div>
+            <p class="text-gray-400 mb-6">
+                An embodied AI agent by Evan E
+            </p>
+            <div class="flex justify-center space-x-6 mb-6">
+                <a href="https://github.com/camolover" target="_blank" class="hover:text-red-500 transition-colors">
+                    <i class="fab fa-github text-2xl"></i>
+                </a>
+                <a href="https://pixeleur.fr" target="_blank" class="hover:text-red-500 transition-colors">
+                    <i class="fas fa-gamepad text-2xl"></i>
+                </a>
+                <a href="https://paraxe.xyz" target="_blank" class="hover:text-red-500 transition-colors">
+                    <i class="fas fa-code text-2xl"></i>
+                </a>
+                <a href="https://cocoworld.fr" target="_blank" class="hover:text-red-500 transition-colors">
+                    <i class="fas fa-globe text-2xl"></i>
+                </a>
+            </div>
+            <p class="text-gray-500 text-sm">
+                &copy; 2026 Evan E. Built with passion and AI.
+            </p>
+        </div>
+    </footer>
+
+    <script src="docs-script.js"></script>
+</body>
+</html>

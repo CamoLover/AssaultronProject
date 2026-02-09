@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assaultron ASR-7 - Embodied AI Agent</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#ef4444',
+                        'primary-dark': '#dc2626',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(30px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        @keyframes pulse-glow {
+            0%, 100% {
+                box-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+            }
+            50% {
+                box-shadow: 0 0 40px rgba(239, 68, 68, 0.8);
+            }
+        }
+
+        .animate-fade-in-up {
+            animation: fadeInUp 0.8s ease-out;
+        }
+
+        .pulse-glow {
+            animation: pulse-glow 2s infinite;
+        }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .nav-blur {
+            backdrop-filter: blur(10px);
+        }
+    </style>
+</head>
+<body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
+    <!-- Navigation -->
+    <nav class="fixed top-0 w-full z-50 bg-white/80 dark:bg-slate-900/80 nav-blur border-b border-gray-200 dark:border-slate-700">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-robot text-2xl text-red-500"></i>
+                    <span class="text-xl font-bold gradient-text">ASR-7</span>
+                </div>
+
+                <div class="hidden md:flex items-center space-x-8">
+                    <a href="#home" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Home</a>
+                    <a href="#about" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">About</a>
+                    <a href="#capabilities" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Capabilities</a>
+                    <a href="#documentation" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Documentation</a>
+                    <a href="https://github.com/camolover" target="_blank" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">
+                        <i class="fab fa-github text-xl"></i>
+                    </a>
+                </div>
+
+                <div class="flex items-center space-x-4">
+                    <button id="theme-toggle" class="p-2 rounded-lg bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
+                        <i class="fas fa-moon dark:fa-sun text-xl text-gray-700 dark:text-gray-300"></i>
+                    </button>
+                    <button id="mobile-menu-btn" class="md:hidden p-2 text-gray-700 dark:text-gray-300">
+                        <i class="fas fa-bars text-xl"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Menu -->
+        <div id="mobile-menu" class="hidden md:hidden border-t border-gray-200 dark:border-slate-700 bg-white dark:bg-slate-900">
+            <div class="px-4 py-4 space-y-3">
+                <a href="#home" class="block text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Home</a>
+                <a href="#about" class="block text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">About</a>
+                <a href="#capabilities" class="block text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Capabilities</a>
+                <a href="#documentation" class="block text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Documentation</a>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section id="home" class="pt-32 pb-20 px-4 bg-gradient-to-b from-gray-50 to-white dark:from-slate-900 dark:to-slate-800">
+        <div class="max-w-7xl mx-auto text-center animate-fade-in-up">
+            <div class="inline-block p-4 mb-6 rounded-full bg-red-100 dark:bg-red-900/30 pulse-glow">
+                <i class="fas fa-robot text-6xl text-red-500"></i>
+            </div>
+            <h1 class="text-5xl md:text-7xl font-bold mb-6 text-gray-900 dark:text-white">
+                Assaultron <span class="gradient-text">ASR-7</span>
+            </h1>
+            <p class="text-xl md:text-2xl text-gray-600 dark:text-gray-400 mb-8 max-w-3xl mx-auto">
+                An embodied AI agent with personality, vision, voice, and agentic capabilities
+            </p>
+            <div class="flex flex-wrap justify-center gap-4">
+                <a href="#capabilities" class="px-8 py-3 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors shadow-lg">
+                    Explore Capabilities
+                </a>
+                <a href="#documentation" class="px-8 py-3 border-2 border-red-500 text-red-500 dark:text-red-400 rounded-lg font-semibold hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors">
+                    Read Documentation
+                </a>
+                <a href="https://github.com/camolover" target="_blank" class="px-8 py-3 bg-gray-900 dark:bg-slate-700 text-white rounded-lg font-semibold hover:bg-gray-800 dark:hover:bg-slate-600 transition-colors shadow-lg">
+                    <i class="fab fa-github mr-2"></i>View on GitHub
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- About Section -->
+    <section id="about" class="py-20 px-4 bg-white dark:bg-slate-800">
+        <div class="max-w-7xl mx-auto">
+            <h2 class="text-4xl font-bold text-center mb-16 gradient-text">About the Project</h2>
+
+            <div class="grid md:grid-cols-2 gap-12 items-center">
+                <!-- Creator Info -->
+                <div class="bg-gray-50 dark:bg-slate-900 p-8 rounded-2xl border border-gray-200 dark:border-slate-700 hover:shadow-xl transition-all duration-300">
+                    <div class="flex items-center space-x-4 mb-6">
+                        <div class="w-20 h-20 bg-red-500 rounded-full flex items-center justify-center text-white text-3xl font-bold">
+                            E
+                        </div>
+                        <div>
+                            <h3 class="text-2xl font-bold text-gray-900 dark:text-white">Evan E</h3>
+                            <p class="text-gray-600 dark:text-gray-400">@camolover on GitHub</p>
+                        </div>
+                    </div>
+                    <div class="space-y-3 text-gray-700 dark:text-gray-300">
+                        <p><i class="fas fa-birthday-cake text-red-500 mr-2"></i>21 years old</p>
+                        <p><i class="fas fa-map-marker-alt text-red-500 mr-2"></i>France</p>
+                        <p><i class="fas fa-graduation-cap text-red-500 mr-2"></i>Bachelor (BAC +3) in Web Development</p>
+                        <hr class="border-gray-300 dark:border-slate-600 my-4">
+                        <p class="font-semibold text-red-500"><i class="fas fa-gamepad mr-2"></i>Founder of Pixeleur Game Studio</p>
+                        <a href="https://pixeleur.fr" target="_blank" class="block text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors">pixeleur.fr</a>
+                        <p class="font-semibold text-red-500 mt-3"><i class="fas fa-code mr-2"></i>Founder of ParaXe</p>
+                        <a href="https://paraxe.xyz" target="_blank" class="block text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors">paraxe.xyz</a>
+                        <p class="font-semibold text-red-500 mt-3"><i class="fas fa-laptop-code mr-2"></i>Lead Developer at Cocoworld</p>
+                        <a href="https://cocoworld.fr" target="_blank" class="block text-sm text-gray-500 dark:text-gray-400 hover:text-red-500 transition-colors">cocoworld.fr</a>
+                    </div>
+                </div>
+
+                <!-- Project Info -->
+                <div class="space-y-6">
+                    <h3 class="text-3xl font-bold mb-4 text-gray-900 dark:text-white">What is Assaultron ASR-7?</h3>
+                    <p class="text-gray-700 dark:text-gray-300 leading-relaxed">
+                        ASR-7 (Autonomous Security Robot - Unit 7) is an advanced embodied AI agent that goes far beyond traditional chatbots. It's a sophisticated system combining personality-driven AI, computer vision, voice synthesis, and real robotics hardware integration.
+                    </p>
+                    <p class="text-gray-700 dark:text-gray-300 leading-relaxed">
+                        Inspired by Fallout's Assaultron units, ASR-7 has a distinct personality: 10% friendly, 45% sarcastic, and 45% flirtatious. But underneath the character is a robust multi-layer architecture designed for real-world robotics applications.
+                    </p>
+                    <div class="grid grid-cols-2 gap-4 mt-8">
+                        <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg text-center border border-red-100 dark:border-red-900/30">
+                            <div class="text-3xl font-bold text-red-500">5</div>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">Architecture Layers</div>
+                        </div>
+                        <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg text-center border border-red-100 dark:border-red-900/30">
+                            <div class="text-3xl font-bold text-red-500">15+</div>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">AI Capabilities</div>
+                        </div>
+                        <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg text-center border border-red-100 dark:border-red-900/30">
+                            <div class="text-3xl font-bold text-red-500">7</div>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">Core Behaviors</div>
+                        </div>
+                        <div class="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg text-center border border-red-100 dark:border-red-900/30">
+                            <div class="text-3xl font-bold text-red-500">100%</div>
+                            <div class="text-sm text-gray-600 dark:text-gray-400">Embodied</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Capabilities Section -->
+    <section id="capabilities" class="py-20 px-4 bg-gray-50 dark:bg-slate-900">
+        <div class="max-w-7xl mx-auto">
+            <h2 class="text-4xl font-bold text-center mb-4 gradient-text">AI Capabilities</h2>
+            <p class="text-center text-gray-600 dark:text-gray-400 mb-16 max-w-2xl mx-auto">
+                ASR-7 combines multiple AI modalities to create a truly embodied and autonomous agent
+            </p>
+
+            <div class="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <!-- Voice Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-microphone-alt text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Voice Synthesis</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Character voice generation using xVAsynth with custom voice models. ASR-7 speaks with personality and emotion.
+                    </p>
+                </div>
+
+                <!-- Vision Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-eye text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Computer Vision</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        YOLO-based object detection and MediaPipe integration for real-time scene understanding and threat assessment.
+                    </p>
+                </div>
+
+                <!-- Chat Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-comments text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Natural Conversation</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Multi-LLM support (Ollama, Gemini, DeepSeek) with personality-driven dialogue and context awareness.
+                    </p>
+                </div>
+
+                <!-- Memory Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-brain text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Long-Term Memory</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Chat history and persistent memories allow ASR-7 to remember past conversations and build relationships.
+                    </p>
+                </div>
+
+                <!-- Mood Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-heart text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Mood & Emotion</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Cognitive layer tracks emotional states and moods that influence behavior selection and interactions.
+                    </p>
+                </div>
+
+                <!-- Embodied Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-robot text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Embodied Body</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Virtual body with posture, hand positions, and LED states that map to real hardware via Arduino/ESP32.
+                    </p>
+                </div>
+
+                <!-- Agentic Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-cogs text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Agentic Capabilities</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Task execution with any LLM model, even those without native agentic features. Autonomous problem-solving.
+                    </p>
+                </div>
+
+                <!-- Email Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-envelope text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Email Integration</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Can send and manage emails autonomously, perfect for notifications and communication tasks.
+                    </p>
+                </div>
+
+                <!-- GitHub Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fab fa-github text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Git Operations</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Integrated GitHub capabilities for repository management and version control operations.
+                    </p>
+                </div>
+
+                <!-- Sandbox Capability -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-shield-alt text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Sandboxed Execution</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Safe code execution environment with isolated file operations for secure agent tasks.
+                    </p>
+                </div>
+
+                <!-- Behavior System -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-project-diagram text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Behavior Arbiter</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Utility-based behavior selection system with 7 core behaviors for deterministic and predictable actions.
+                    </p>
+                </div>
+
+                <!-- Image Viewer -->
+                <div class="bg-white dark:bg-slate-800 p-6 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300">
+                    <div class="w-14 h-14 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center mb-4">
+                        <i class="fas fa-images text-2xl text-red-500"></i>
+                    </div>
+                    <h3 class="text-xl font-bold mb-3 text-gray-900 dark:text-white">Image Understanding</h3>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Visual conversation data processing and image analysis capabilities for multimodal interactions.
+                    </p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Architecture Overview -->
+    <section class="py-20 px-4 bg-white dark:bg-slate-800">
+        <div class="max-w-7xl mx-auto">
+            <h2 class="text-4xl font-bold text-center mb-4 gradient-text">Architecture</h2>
+            <p class="text-center text-gray-600 dark:text-gray-400 mb-16 max-w-2xl mx-auto">
+                A sophisticated 5-layer architecture separating cognition from action
+            </p>
+
+            <div class="space-y-6">
+                <div class="bg-gray-50 dark:bg-slate-900 p-6 rounded-xl border-l-4 border-red-500 hover:shadow-lg transition-all duration-300">
+                    <h3 class="text-xl font-bold mb-2 text-gray-900 dark:text-white">Layer 0: Perception/Vision System</h3>
+                    <p class="text-gray-600 dark:text-gray-400">YOLO-based object detection feeding scene understanding to the world model</p>
+                </div>
+
+                <div class="bg-gray-50 dark:bg-slate-900 p-6 rounded-xl border-l-4 border-red-500 hover:shadow-lg transition-all duration-300">
+                    <h3 class="text-xl font-bold mb-2 text-gray-900 dark:text-white">Layer 1: Cognitive Layer</h3>
+                    <p class="text-gray-600 dark:text-gray-400">LLM-powered reasoning about goals, emotions, and intentions. The "brain" of ASR-7</p>
+                </div>
+
+                <div class="bg-gray-50 dark:bg-slate-900 p-6 rounded-xl border-l-4 border-red-500 hover:shadow-lg transition-all duration-300">
+                    <h3 class="text-xl font-bold mb-2 text-gray-900 dark:text-white">Layer 2: Behavioral Layer</h3>
+                    <p class="text-gray-600 dark:text-gray-400">Utility-based behavior arbiter selecting from 7 core behaviors based on cognitive state</p>
+                </div>
+
+                <div class="bg-gray-50 dark:bg-slate-900 p-6 rounded-xl border-l-4 border-red-500 hover:shadow-lg transition-all duration-300">
+                    <h3 class="text-xl font-bold mb-2 text-gray-900 dark:text-white">Layer 3: Virtual Body/World Model</h3>
+                    <p class="text-gray-600 dark:text-gray-400">Symbolic representation of body state and environment, completely hardware-agnostic</p>
+                </div>
+
+                <div class="bg-gray-50 dark:bg-slate-900 p-6 rounded-xl border-l-4 border-red-500 hover:shadow-lg transition-all duration-300">
+                    <h3 class="text-xl font-bold mb-2 text-gray-900 dark:text-white">Layer 4: Motion/Actuator Layer</h3>
+                    <p class="text-gray-600 dark:text-gray-400">Hardware translation mapping symbolic states to physical servo positions and LED values</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Documentation Section -->
+    <section id="documentation" class="py-20 px-4 bg-gray-50 dark:bg-slate-900">
+        <div class="max-w-7xl mx-auto">
+            <h2 class="text-4xl font-bold text-center mb-4 gradient-text">Documentation</h2>
+            <p class="text-center text-gray-600 dark:text-gray-400 mb-16 max-w-2xl mx-auto">
+                Comprehensive technical documentation for the Assaultron ASR-7 project
+            </p>
+
+            <div class="grid md:grid-cols-2 gap-8">
+                <a href="docs.html" class="bg-white dark:bg-slate-800 p-8 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300 block">
+                    <div class="flex items-center space-x-4 mb-4">
+                        <div class="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center">
+                            <i class="fas fa-book text-2xl text-red-500"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-900 dark:text-white">Architecture Guide</h3>
+                    </div>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Deep dive into the 5-layer architecture, behavior system, and design principles behind ASR-7
+                    </p>
+                </a>
+
+                <a href="https://github.com/camolover" target="_blank" class="bg-white dark:bg-slate-800 p-8 rounded-xl border border-gray-200 dark:border-slate-700 hover:shadow-xl hover:-translate-y-2 transition-all duration-300 block">
+                    <div class="flex items-center space-x-4 mb-4">
+                        <div class="w-12 h-12 bg-red-100 dark:bg-red-900/20 rounded-lg flex items-center justify-center">
+                            <i class="fab fa-github text-2xl text-red-500"></i>
+                        </div>
+                        <h3 class="text-2xl font-bold text-gray-900 dark:text-white">Source Code</h3>
+                    </div>
+                    <p class="text-gray-600 dark:text-gray-400">
+                        Explore the full source code, setup instructions, and contribute to the project on GitHub
+                    </p>
+                </a>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="bg-gray-900 dark:bg-black text-white py-12 px-4">
+        <div class="max-w-7xl mx-auto text-center">
+            <div class="flex justify-center items-center space-x-2 mb-4">
+                <i class="fas fa-robot text-3xl text-red-500"></i>
+                <span class="text-2xl font-bold">Assaultron ASR-7</span>
+            </div>
+            <p class="text-gray-400 mb-6">
+                An embodied AI agent by Evan E
+            </p>
+            <div class="flex justify-center space-x-6 mb-6">
+                <a href="https://github.com/camolover" target="_blank" class="hover:text-red-500 transition-colors">
+                    <i class="fab fa-github text-2xl"></i>
+                </a>
+                <a href="https://pixeleur.fr" target="_blank" class="hover:text-red-500 transition-colors">
+                    <i class="fas fa-gamepad text-2xl"></i>
+                </a>
+                <a href="https://paraxe.xyz" target="_blank" class="hover:text-red-500 transition-colors">
+                    <i class="fas fa-code text-2xl"></i>
+                </a>
+                <a href="https://cocoworld.fr" target="_blank" class="hover:text-red-500 transition-colors">
+                    <i class="fas fa-globe text-2xl"></i>
+                </a>
+            </div>
+            <p class="text-gray-500 text-sm">
+                &copy; 2026 Evan E. Built with passion and AI.
+            </p>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
