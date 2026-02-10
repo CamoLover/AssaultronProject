@@ -1701,9 +1701,10 @@ def handle_provider_settings():
             return jsonify({"error": str(e)}), 400
             
     # GET request
+    current_model = Config.OPENROUTER_MODEL if Config.LLM_PROVIDER == "openrouter" else (Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL)
     return jsonify({
         "provider": Config.LLM_PROVIDER,
-        "model": Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL
+        "model": current_model
     })
 
 

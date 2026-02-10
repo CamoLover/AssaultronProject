@@ -1524,7 +1524,8 @@
                     messageCountEl.textContent = data.conversation_count || messageCount;
 
                     // NEW: Update provider and model info in real-time
-                    if (data.model) {
+                    if (data.model && data.provider) {
+                        // Update footer model name
                         modelNameEl.textContent = data.model;
                         if (data.provider === 'gemini') {
                             modelNameEl.className = 'font-bold text-blue-500';
@@ -1533,6 +1534,9 @@
                         } else {
                             modelNameEl.className = 'font-bold text-green-500';
                         }
+
+                        // Update provider UI (buttons, badge, and model display)
+                        updateProviderUI(data.provider, data.model);
                     }
 
                 } else {
@@ -2932,6 +2936,9 @@
 
         // Load history on startup
         loadHistory();
+
+        // Load provider status on startup
+        getProviderStatus();
 
         // ============================================================================
         // NOTIFICATION SYSTEM FUNCTIONS
