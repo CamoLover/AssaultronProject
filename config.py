@@ -5,25 +5,24 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    # LLM Choice: "ollama", "gemini", or "openrouter"
-    LLM_PROVIDER = "gemini"
+    # LLM Configuration - All from .env
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # "ollama", "gemini", or "openrouter"
 
     # Gemini Configuration
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL = "gemini-2.5-flash"
-    
+    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
     # OpenRouter Configuration
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_KEY", "")
-    OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
-    # OPENROUTER_MODEL = "google/gemini-2.5-flash" 
+    OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-v3.2")
 
-    # Ollama Configuration
-    OLLAMA_URL = "http://localhost:11434"
-    AI_MODEL = "gemma3:4b"  # Backup local model
-    
-    # xVAsynth Configuration
-    XVASYNTH_PATH = "./Content/xVAsynth"
-    VOICE_MODEL = "f4_robot_assaultron"
+    # Ollama Configuration (local)
+    OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
+    AI_MODEL = os.getenv("AI_MODEL", "gemma3:4b")  # Local model fallback
+
+    # Voice Configuration - From .env
+    XVASYNTH_PATH = os.getenv("XVASYNTH_PATH", "./Content/xVAsynth")
+    VOICE_MODEL = os.getenv("VOICE_MODEL", "f4_robot_assaultron")
     
     # Assaultron Core Identity Matrix (Embodied Agent Version)
     ASSAULTRON_PROMPT = """
