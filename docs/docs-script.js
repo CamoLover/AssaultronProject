@@ -164,10 +164,22 @@ function generateTOC() {
     if (headings.length === 0) return;
 
     const toc = document.createElement('div');
-    toc.className = 'bg-gray-100 dark:bg-gray-900 p-6 rounded-lg mb-8 border border-gray-200 dark:border-gray-700';
-    toc.innerHTML = '<h3 class="text-xl font-bold mb-4 gradient-text">Table of Contents</h3><ul class="space-y-2"></ul>';
+    toc.className = 'bg-gray-100 dark:bg-slate-900 p-6 rounded-lg mb-8 border border-gray-200 dark:border-slate-700';
 
-    const tocList = toc.querySelector('ul');
+    // Create collapsible header
+    const tocHeader = document.createElement('div');
+    tocHeader.className = 'flex justify-between items-center mb-4 cursor-pointer';
+    tocHeader.onclick = toggleTOC;
+    tocHeader.innerHTML = `
+        <h3 class="text-xl font-bold gradient-text">Table of Contents</h3>
+        <button class="p-2 rounded-lg bg-gray-200 dark:bg-slate-800 hover:bg-gray-300 dark:hover:bg-slate-700 transition-colors">
+            <i id="toc-icon" class="fas fa-chevron-up text-red-500"></i>
+        </button>
+    `;
+
+    const tocContent = document.createElement('ul');
+    tocContent.id = 'toc-content';
+    tocContent.className = 'space-y-2';
 
     headings.forEach((heading, index) => {
         // Add ID to heading if it doesn't have one
@@ -179,7 +191,7 @@ function generateTOC() {
         const link = document.createElement('a');
         link.href = `#${heading.id}`;
         link.textContent = heading.textContent;
-        link.className = 'text-red-500 hover:text-red-600 transition-colors';
+        link.className = 'text-red-500 hover:text-red-600 dark:hover:text-red-400 transition-colors';
 
         if (heading.tagName === 'H3') {
             li.className = 'ml-4';
@@ -196,8 +208,11 @@ function generateTOC() {
         });
 
         li.appendChild(link);
-        tocList.appendChild(li);
+        tocContent.appendChild(li);
     });
+
+    toc.appendChild(tocHeader);
+    toc.appendChild(tocContent);
 
     // Insert TOC after the first h1
     const firstH1 = contentDiv.querySelector('h1');
@@ -205,6 +220,17 @@ function generateTOC() {
         firstH1.after(toc);
     } else {
         contentDiv.prepend(toc);
+    }
+
+    // Restore TOC state from localStorage
+    const tocCollapsed = localStorage.getItem('toc-collapsed');
+    if (tocCollapsed === 'true') {
+        tocContent.classList.add('hidden');
+        const tocIcon = document.getElementById('toc-icon');
+        if (tocIcon) {
+            tocIcon.classList.remove('fa-chevron-up');
+            tocIcon.classList.add('fa-chevron-down');
+        }
     }
 }
 
@@ -214,3 +240,19 @@ loadDoc = async function(filename) {
     await originalLoadDoc.call(this, filename);
     generateTOC();
 };
+
+// Toggle TOC visibility
+function toggleTOC() {
+    const tocContent = document.getElementById('toc-content');
+    const tocIcon = document.getElementById('toc-icon');
+
+    if (tocContent && tocIcon) {
+        tocContent.classList.toggle('hidden');
+        tocIcon.classList.toggle('fa-chevron-up');
+        tocIcon.classList.toggle('fa-chevron-down');
+
+        // Save state to localStorage
+        const isCollapsed = tocContent.classList.contains('hidden');
+        localStorage.setItem('toc-collapsed', isCollapsed ? 'true' : 'false');
+    }
+}
