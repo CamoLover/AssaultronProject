@@ -73,6 +73,9 @@ async function loadDoc(filename) {
         // Scroll to top of content
         window.scrollTo({ top: 0, behavior: 'smooth' });
 
+        // Render Mermaid diagrams
+        await renderMermaidDiagrams();
+
         // Add copy buttons to code blocks
         addCopyButtons();
 
@@ -256,3 +259,67 @@ function toggleTOC() {
         localStorage.setItem('toc-collapsed', isCollapsed ? 'true' : 'false');
     }
 }
+
+// Render Mermaid diagrams
+async function renderMermaidDiagrams() {
+    if (!window.mermaid) {
+        console.warn('Mermaid is not loaded');
+        return;
+    }
+
+    // Find all code blocks with language 'mermaid'
+    const mermaidBlocks = contentDiv.querySelectorAll('pre code.language-mermaid, pre code[class*="mermaid"]');
+
+    for (let i = 0; i < mermaidBlocks.length; i++) {
+        const block = mermaidBlocks[i];
+        const code = block.textContent;
+        const pre = block.parentElement;
+
+        try {
+            // Create a container for the mermaid diagram
+            const container = document.createElement('div');
+            container.className = 'mermaid-diagram bg-white dark:bg-slate-900 p-6 rounded-lg border border-gray-200 dark:border-slate-700 my-4 overflow-x-auto';
+            container.style.textAlign = 'center';
+
+            // Generate unique ID for the diagram
+            const id = `mermaid-${Date.now()}-${i}`;
+
+            // Render the mermaid diagram
+            const { svg } = await window.mermaid.render(id, code);
+
+            // Set the SVG content
+            container.innerHTML = svg;
+
+            // Replace the pre block with the rendered diagram
+            pre.parentNode.replaceChild(container, pre);
+
+            // Update theme for mermaid if in dark mode
+            if (html.classList.contains('dark')) {
+                container.style.filter = 'invert(0.9) hue-rotate(180deg)';
+            }
+        } catch (error) {
+            console.error('Error rendering mermaid diagram:', error);
+            // Keep the original code block if rendering fails
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'bg-red-100 dark:bg-red-900 border border-red-400 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded my-4';
+            errorDiv.innerHTML = `<strong>Mermaid Rendering Error:</strong> ${error.message}`;
+            pre.parentNode.insertBefore(errorDiv, pre);
+        }
+    }
+}
+
+// Update theme toggle to also update mermaid diagrams
+const originalThemeToggle = themeToggle.onclick;
+themeToggle.addEventListener('click', () => {
+    // Update mermaid diagram colors
+    setTimeout(() => {
+        const mermaidDiagrams = document.querySelectorAll('.mermaid-diagram');
+        mermaidDiagrams.forEach(diagram => {
+            if (html.classList.contains('dark')) {
+                diagram.style.filter = 'invert(0.9) hue-rotate(180deg)';
+            } else {
+                diagram.style.filter = 'none';
+            }
+        });
+    }, 100);
+});

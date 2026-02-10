@@ -7,6 +7,22 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({
+            startOnLoad: false,
+            theme: 'default',
+            themeVariables: {
+                primaryColor: '#ef4444',
+                primaryTextColor: '#fff',
+                primaryBorderColor: '#dc2626',
+                lineColor: '#64748b',
+                secondaryColor: '#f1f5f9',
+                tertiaryColor: '#e2e8f0'
+            }
+        });
+        window.mermaid = mermaid;
+    </script>
     <script>
         tailwind.config = {
             darkMode: 'class',
@@ -234,6 +250,16 @@
             background-color: #7f1d1d;
             color: #fca5a5;
         }
+
+        /* Mermaid diagram styling */
+        .mermaid-diagram svg {
+            max-width: 100%;
+            height: auto;
+        }
+
+        .mermaid-diagram {
+            transition: filter 0.3s ease;
+        }
     </style>
 </head>
 <body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
@@ -278,6 +304,12 @@
                                 <button onclick="loadDoc('ARCHITECTURE.md')" class="doc-link w-full text-left px-3 py-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
                                     <i class="fas fa-file-alt mr-2 text-red-500"></i>
                                     Architecture
+                                </button>
+                            </li>
+                            <li>
+                                <button onclick="loadDoc('architecture-viewer.md')" class="doc-link w-full text-left px-3 py-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                                    <i class="fas fa-project-diagram mr-2 text-red-500"></i>
+                                    Architecture Viewer
                                 </button>
                             </li>
                         </ul>
