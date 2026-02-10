@@ -323,3 +323,27 @@ themeToggle.addEventListener('click', () => {
         });
     }, 100);
 });
+
+// GitHub Repository Modal Functions
+function showRepoModal() {
+    const modal = document.getElementById('repo-modal');
+    if (modal) {
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+}
+
+function closeRepoModal() {
+    const modal = document.getElementById('repo-modal');
+    if (modal) {
+        modal.classList.add('hidden');
+        document.body.style.overflow = 'auto';
+    }
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+        closeRepoModal();
+    }
+});
