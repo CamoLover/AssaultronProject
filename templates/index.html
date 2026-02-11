@@ -7,15 +7,64 @@
     <title>Assaultron Interface</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
+        /* Dark Mode Variables */
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f9fafb;
+            --bg-tertiary: #f3f4f6;
+            --bg-panel: #ffffff;
+            --text-primary: #111827;
+            --text-secondary: #4b5563;
+            --text-tertiary: #6b7280;
+            --border-color: #d1d5db;
+            --border-color-light: #e5e7eb;
+            --resize-handle: #e5e5e5;
+            --resize-handle-hover: #999;
+            --scrollbar-track: #f1f1f1;
+            --scrollbar-thumb: #cbd5e1;
+            --scrollbar-thumb-hover: #94a3b8;
+            --card-bg: #ffffff;
+            --input-bg: #ffffff;
+            --input-border: #d1d5db;
+            --button-secondary-bg: #e5e7eb;
+            --button-secondary-text: #374151;
+            --button-secondary-hover: #d1d5db;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark-mode {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --bg-panel: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-tertiary: #94a3b8;
+            --border-color: #475569;
+            --border-color-light: #334155;
+            --resize-handle: #475569;
+            --resize-handle-hover: #64748b;
+            --scrollbar-track: #1e293b;
+            --scrollbar-thumb: #475569;
+            --scrollbar-thumb-hover: #64748b;
+            --card-bg: #1e293b;
+            --input-bg: #0f172a;
+            --input-border: #475569;
+            --button-secondary-bg: #334155;
+            --button-secondary-text: #e2e8f0;
+            --button-secondary-hover: #475569;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+
         .resize-handle {
-            background: #e5e5e5;
+            background: var(--resize-handle);
             cursor: ew-resize;
             width: 4px;
             min-height: 100%;
         }
 
         .resize-handle:hover {
-            background: #999;
+            background: var(--resize-handle-hover);
         }
 
         .panel {
@@ -29,24 +78,82 @@
         }
 
         ::-webkit-scrollbar-track {
-            background: #f1f1f1;
+            background: var(--scrollbar-track);
             border-radius: 4px;
         }
 
         ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
+            background: var(--scrollbar-thumb);
             border-radius: 4px;
-            border: 2px solid #f1f1f1;
+            border: 2px solid var(--scrollbar-track);
         }
 
         ::-webkit-scrollbar-thumb:hover {
-            background: #94a3b8;
+            background: var(--scrollbar-thumb-hover);
         }
 
         /* For Firefox */
         * {
             scrollbar-width: thin;
-            scrollbar-color: #cbd5e1 #f1f1f1;
+            scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+        }
+
+        /* Explicitly update ALL scrollbars in dark mode */
+        body.dark-mode ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        body.dark-mode ::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+
+        body.dark-mode ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+            border: 2px solid #1e293b;
+        }
+
+        body.dark-mode ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        body.dark-mode ::-webkit-scrollbar-corner {
+            background: #1e293b;
+        }
+
+        /* Specifically target the main body/html scrollbar */
+        body.dark-mode,
+        body.dark-mode html {
+            scrollbar-width: thin;
+            scrollbar-color: #475569 #1e293b;
+        }
+
+        /* For Firefox in dark mode */
+        body.dark-mode * {
+            scrollbar-color: #475569 #1e293b;
+        }
+
+        /* Target html element scrollbar in WebKit */
+        html:has(body.dark-mode) ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        html:has(body.dark-mode) ::-webkit-scrollbar-track {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+
+        html:has(body.dark-mode) ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border-radius: 4px;
+            border: 2px solid #1e293b;
+        }
+
+        html:has(body.dark-mode) ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
         }
 
         /* Immersion Mode Styles */
@@ -208,32 +315,478 @@
         .immersion-chat-message.ai {
             color: #34d399;
         }
+
+        /* Global Dark Mode Compatibility */
+        body.dark-mode .bg-white {
+            background-color: var(--card-bg) !important;
+        }
+
+        body.dark-mode .bg-gray-50 {
+            background-color: var(--bg-secondary) !important;
+        }
+
+        body.dark-mode .bg-gray-100 {
+            background-color: var(--bg-tertiary) !important;
+        }
+
+        body.dark-mode .bg-gray-200 {
+            background-color: var(--button-secondary-bg) !important;
+        }
+
+        body.dark-mode .text-gray-700,
+        body.dark-mode .text-gray-800,
+        body.dark-mode .text-gray-900 {
+            color: var(--text-primary) !important;
+        }
+
+        body.dark-mode .text-gray-600 {
+            color: var(--text-secondary) !important;
+        }
+
+        body.dark-mode .text-gray-500,
+        body.dark-mode .text-gray-400 {
+            color: var(--text-tertiary) !important;
+        }
+
+        body.dark-mode .border-gray-200,
+        body.dark-mode .border-gray-300 {
+            border-color: var(--border-color) !important;
+        }
+
+        body.dark-mode input[type="text"],
+        body.dark-mode input[type="number"],
+        body.dark-mode select,
+        body.dark-mode textarea {
+            background-color: var(--input-bg) !important;
+            border-color: var(--input-border) !important;
+            color: var(--text-primary) !important;
+        }
+
+        body.dark-mode select option {
+            background-color: var(--input-bg) !important;
+            color: var(--text-primary) !important;
+        }
+
+        /* Dark mode for gradient backgrounds - preserve gradient headers */
+        body.dark-mode .bg-gradient-to-b.from-gray-50.to-white {
+            background: linear-gradient(to bottom, var(--bg-secondary), var(--card-bg)) !important;
+        }
+
+        /* Hover states for buttons in dark mode */
+        body.dark-mode .hover\:bg-gray-300:hover {
+            background-color: var(--button-secondary-hover) !important;
+        }
+
+        /* Shadow adjustments for dark mode */
+        body.dark-mode .shadow-md,
+        body.dark-mode .shadow-lg {
+            box-shadow: 0 4px 6px -1px var(--shadow-color), 0 2px 4px -1px var(--shadow-color);
+        }
+
+        /* Tab button styling */
+        body.dark-mode .tab-button {
+            color: var(--text-secondary);
+        }
+
+        body.dark-mode .tab-button.active {
+            color: var(--text-primary);
+        }
+
+        body.dark-mode .tab-button:hover {
+            color: var(--text-primary);
+        }
+
+        /* Dark mode for colored stat boxes */
+        body.dark-mode .bg-blue-50 {
+            background-color: rgba(59, 130, 246, 0.1) !important;
+        }
+
+        body.dark-mode .bg-orange-50 {
+            background-color: rgba(249, 115, 22, 0.1) !important;
+        }
+
+        body.dark-mode .bg-purple-50 {
+            background-color: rgba(168, 85, 247, 0.1) !important;
+        }
+
+        body.dark-mode .bg-indigo-50 {
+            background-color: rgba(99, 102, 241, 0.1) !important;
+        }
+
+        body.dark-mode .bg-green-50 {
+            background-color: rgba(34, 197, 94, 0.1) !important;
+        }
+
+        body.dark-mode .bg-red-50 {
+            background-color: rgba(239, 68, 68, 0.1) !important;
+        }
+
+        body.dark-mode .border-blue-200 {
+            border-color: rgba(59, 130, 246, 0.3) !important;
+        }
+
+        body.dark-mode .border-orange-200 {
+            border-color: rgba(249, 115, 22, 0.3) !important;
+        }
+
+        body.dark-mode .border-purple-200 {
+            border-color: rgba(168, 85, 247, 0.3) !important;
+        }
+
+        body.dark-mode .border-indigo-200 {
+            border-color: rgba(99, 102, 241, 0.3) !important;
+        }
+
+        body.dark-mode .border-green-200,
+        body.dark-mode .border-green-300 {
+            border-color: rgba(34, 197, 94, 0.3) !important;
+        }
+
+        body.dark-mode .border-red-200,
+        body.dark-mode .border-red-300 {
+            border-color: rgba(239, 68, 68, 0.3) !important;
+        }
+
+        /* Dark mode for colored backgrounds (100 level) */
+        body.dark-mode .bg-green-100 {
+            background-color: rgba(34, 197, 94, 0.15) !important;
+        }
+
+        body.dark-mode .bg-yellow-100 {
+            background-color: rgba(234, 179, 8, 0.15) !important;
+        }
+
+        body.dark-mode .bg-orange-100 {
+            background-color: rgba(249, 115, 22, 0.15) !important;
+        }
+
+        body.dark-mode .bg-red-100 {
+            background-color: rgba(239, 68, 68, 0.15) !important;
+        }
+
+        /* Dark mode for slate colors (used in body panel) */
+        body.dark-mode .text-slate-400 {
+            color: #94a3b8 !important;
+        }
+
+        body.dark-mode .text-slate-500 {
+            color: #64748b !important;
+        }
+
+        body.dark-mode .text-slate-600 {
+            color: #cbd5e1 !important;
+        }
+
+        body.dark-mode .text-slate-700 {
+            color: #e2e8f0 !important;
+        }
+
+        body.dark-mode .bg-slate-100 {
+            background-color: var(--bg-tertiary) !important;
+        }
+
+        body.dark-mode .border-slate-200 {
+            border-color: var(--border-color) !important;
+        }
+
+        body.dark-mode .text-slate-300 {
+            color: #475569 !important;
+        }
+
+        /* Dark mode for yellow colored elements */
+        body.dark-mode .bg-yellow-100 {
+            background-color: rgba(234, 179, 8, 0.15) !important;
+        }
+
+        body.dark-mode .border-yellow-200 {
+            border-color: rgba(234, 179, 8, 0.3) !important;
+        }
+
+        body.dark-mode .text-blue-700 {
+            color: #60a5fa !important;
+        }
+
+        body.dark-mode .text-orange-700 {
+            color: #fb923c !important;
+        }
+
+        body.dark-mode .text-yellow-700 {
+            color: #facc15 !important;
+        }
+
+        body.dark-mode .text-green-700 {
+            color: #4ade80 !important;
+        }
+
+        body.dark-mode .text-red-700 {
+            color: #f87171 !important;
+        }
+
+        body.dark-mode .text-purple-700 {
+            color: #c084fc !important;
+        }
+
+        /* Dark mode for gray text colors */
+        body.dark-mode .text-gray-300 {
+            color: var(--text-tertiary) !important;
+        }
+
+        /* Dark mode for gradient backgrounds with -50 colors */
+        body.dark-mode .bg-gradient-to-br.from-purple-50.to-indigo-50,
+        body.dark-mode .bg-gradient-to-r.from-purple-50.to-indigo-50 {
+            background: linear-gradient(to bottom right, rgba(168, 85, 247, 0.1), rgba(99, 102, 241, 0.1)) !important;
+        }
+
+        body.dark-mode .bg-gradient-to-r.from-blue-50.to-indigo-50 {
+            background: linear-gradient(to right, rgba(59, 130, 246, 0.1), rgba(99, 102, 241, 0.1)) !important;
+        }
+
+        body.dark-mode .bg-gradient-to-br.from-blue-50.to-indigo-50 {
+            background: linear-gradient(to bottom right, rgba(59, 130, 246, 0.1), rgba(99, 102, 241, 0.1)) !important;
+        }
+
+        body.dark-mode .text-gray-800 {
+            color: var(--text-primary) !important;
+        }
+
+        body.dark-mode .bg-purple-200 {
+            background-color: rgba(168, 85, 247, 0.2) !important;
+        }
+
+        body.dark-mode .text-purple-800 {
+            color: #c084fc !important;
+        }
+
+        /* Dark mode for background with opacity */
+        body.dark-mode .bg-gray-50\/50 {
+            background-color: rgba(30, 41, 59, 0.5) !important;
+        }
+
+        body.dark-mode .bg-gray-900 {
+            background-color: #0f172a !important;
+        }
+
+        /* Dark mode for all borders that use gray-200 (separators) */
+        body.dark-mode .border-t.border-gray-200,
+        body.dark-mode .border-b.border-gray-200,
+        body.dark-mode .border-l.border-gray-200,
+        body.dark-mode .border-r.border-gray-200 {
+            border-color: var(--border-color) !important;
+        }
+
+        /* Ensure all cards with bg-white get dark mode */
+        body.dark-mode .rounded-lg.bg-white,
+        body.dark-mode .bg-white.rounded-lg {
+            background-color: var(--card-bg) !important;
+        }
+
+        body.dark-mode .border.border-gray-200 {
+            border-color: var(--border-color-light) !important;
+        }
+
+        /* Dark mode for indigo colors */
+        body.dark-mode .bg-indigo-100 {
+            background-color: rgba(99, 102, 241, 0.15) !important;
+        }
+
+        body.dark-mode .text-indigo-700 {
+            color: #a78bfa !important;
+        }
+
+        body.dark-mode .border-indigo-200 {
+            border-color: rgba(99, 102, 241, 0.3) !important;
+        }
+
+        body.dark-mode .border-pink-100 {
+            border-color: rgba(236, 72, 153, 0.2) !important;
+        }
+
+        body.dark-mode .text-pink-600 {
+            color: #f472b6 !important;
+        }
+
+        body.dark-mode .text-blue-600 {
+            color: #60a5fa !important;
+        }
+
+        body.dark-mode .text-orange-600 {
+            color: #fb923c !important;
+        }
+
+        /* Range slider backgrounds in dark mode */
+        body.dark-mode input[type="range"] {
+            background-color: var(--bg-tertiary) !important;
+        }
+
+        /* Dark mode for shadow inner elements */
+        body.dark-mode .shadow-inner {
+            box-shadow: inset 0 2px 4px 0 rgba(0, 0, 0, 0.3);
+        }
+
+        /* Dark mode for slate-50 backgrounds */
+        body.dark-mode .bg-slate-50 {
+            background-color: rgba(51, 65, 85, 0.3) !important;
+        }
+
+        body.dark-mode .border-slate-200 {
+            border-color: var(--border-color) !important;
+        }
+
+        body.dark-mode .border-blue-50 {
+            border-color: rgba(59, 130, 246, 0.2) !important;
+        }
+
+        /* Dark mode for blue-100 decorative backgrounds */
+        body.dark-mode .bg-blue-100 {
+            background-color: rgba(59, 130, 246, 0.15) !important;
+        }
+
+        /* Custom shadow for specific elements in dark mode */
+        body.dark-mode .shadow-\[0_2px_8px_rgba\(0\,0\,0\,0\.02\)\] {
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+        }
+
+        /* Dark mode for emerald and teal gradient backgrounds */
+        body.dark-mode .bg-gradient-to-br.from-emerald-50.to-teal-50 {
+            background: linear-gradient(to bottom right, rgba(16, 185, 129, 0.1), rgba(20, 184, 166, 0.1)) !important;
+        }
+
+        body.dark-mode .border-emerald-200 {
+            border-color: rgba(16, 185, 129, 0.3) !important;
+        }
+
+        body.dark-mode .text-emerald-700 {
+            color: #34d399 !important;
+        }
+
+        body.dark-mode .text-emerald-800 {
+            color: #6ee7b7 !important;
+        }
+
+        body.dark-mode .text-blue-800 {
+            color: #93c5fd !important;
+        }
+
+        body.dark-mode .bg-gradient-to-br.from-slate-50.to-gray-50 {
+            background: linear-gradient(to bottom right, rgba(51, 65, 85, 0.2), rgba(55, 65, 81, 0.2)) !important;
+        }
+
+        body.dark-mode .text-slate-600 {
+            color: #cbd5e1 !important;
+        }
+
+        body.dark-mode .text-slate-700 {
+            color: #e2e8f0 !important;
+        }
+
+        /* Dark mode for gray-700 borders (right column) */
+        body.dark-mode .border-gray-700 {
+            border-color: #374151 !important;
+        }
+
+        body.dark-mode .text-orange-400 {
+            color: #fb923c !important;
+        }
+
+        body.dark-mode .text-gray-300 {
+            color: var(--text-tertiary) !important;
+        }
+
+        /* Preserve dark backgrounds for hardware debug panel */
+        body.dark-mode .bg-gradient-to-br.from-gray-800.to-gray-900 {
+            background: linear-gradient(to bottom right, #1e293b, #0f172a) !important;
+        }
+
+        body.dark-mode .bg-black {
+            background-color: #000000 !important;
+        }
+
+        /* Dark mode for cyan and teal colors */
+        body.dark-mode .bg-cyan-300 {
+            background-color: #67e8f9 !important;
+        }
+
+        body.dark-mode .text-cyan-300 {
+            color: #67e8f9 !important;
+        }
+
+        body.dark-mode .text-cyan-200 {
+            color: #a5f3fc !important;
+        }
+
+        body.dark-mode .text-indigo-200 {
+            color: #c7d2fe !important;
+        }
+
+        body.dark-mode .text-teal-600 {
+            color: #14b8a6 !important;
+        }
+
+        /* Hover states for text colors */
+        body.dark-mode .hover\:text-cyan-300:hover {
+            color: #67e8f9 !important;
+        }
+
+        body.dark-mode .hover\:text-white:hover {
+            color: #ffffff !important;
+        }
+
+        /* Dark mode for pink colors */
+        body.dark-mode .bg-pink-300 {
+            background-color: #f9a8d4 !important;
+        }
+
+        body.dark-mode .bg-pink-500 {
+            background-color: #ec4899 !important;
+        }
+
+        /* Dark mode for hover states on buttons */
+        body.dark-mode .hover\:bg-gray-50:hover {
+            background-color: var(--bg-tertiary) !important;
+        }
+
+        body.dark-mode .hover\:bg-gray-500:hover {
+            background-color: #64748b !important;
+        }
+
+        /* Dark mode for border-gray-100 */
+        body.dark-mode .border-gray-100 {
+            border-color: var(--border-color-light) !important;
+        }
     </style>
 </head>
 
-<body class="bg-white text-gray-900 min-h-screen font-mono">
+<body class="min-h-screen font-mono transition-colors duration-200" style="background-color: var(--bg-primary); color: var(--text-primary);">
     <div class="h-screen flex flex-col">
         <!-- Tab Navigation -->
-        <div class="bg-gray-100 border-b border-gray-300">
-            <nav class="flex space-x-4 px-3">
-                <button onclick="switchTab('interface')" id="tabInterface"
-                    class="tab-button active py-2 px-4 text-sm font-bold border-b-2 border-blue-500">INTERFACE</button>
-                <button onclick="switchTab('embodied')" id="tabEmbodied"
-                    class="tab-button py-2 px-4 text-sm font-bold border-b-2 border-transparent hover:border-gray-400">EMBODIED
-                    AGENT</button>
-                <button onclick="switchTab('vision')" id="tabVision"
-                    class="tab-button py-2 px-4 text-sm font-bold border-b-2 border-transparent hover:border-gray-400">VISION</button>
+        <div class="border-b transition-colors duration-200" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
+            <nav class="flex justify-between items-center px-3">
+                <div class="flex space-x-4">
+                    <button onclick="switchTab('interface')" id="tabInterface"
+                        class="tab-button active py-2 px-4 text-sm font-bold border-b-2 border-blue-500">INTERFACE</button>
+                    <button onclick="switchTab('embodied')" id="tabEmbodied"
+                        class="tab-button py-2 px-4 text-sm font-bold border-b-2 border-transparent hover:border-gray-400">EMBODIED
+                        AGENT</button>
+                    <button onclick="switchTab('vision')" id="tabVision"
+                        class="tab-button py-2 px-4 text-sm font-bold border-b-2 border-transparent hover:border-gray-400">VISION</button>
+                </div>
+                <button onclick="toggleDarkMode()" id="darkModeToggle"
+                    class="py-2 px-3 text-xs font-bold rounded transition-all hover:scale-105"
+                    style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text);"
+                    title="Toggle Dark Mode">
+                    <span id="darkModeIcon">🌙</span> DARK MODE
+                </button>
             </nav>
         </div>
 
         <!-- Interface Tab Content -->
-        <div id="interfaceTab" class="flex-1 flex tab-content">
+        <div id="interfaceTab" class="flex-1 flex tab-content overflow-hidden">
             <!-- Logs Panel -->
-            <div id="logsPanel" class="panel bg-gray-50 border-r border-gray-300 flex flex-col" style="width: 50%;">
-                <div class="p-3 bg-gray-100 border-b border-gray-300">
+            <div id="logsPanel" class="panel border-r flex flex-col transition-colors duration-200" style="width: 50%; background-color: var(--bg-secondary); border-color: var(--border-color);">
+                <div class="p-3 border-b transition-colors duration-200" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
                     <h2 class="text-sm font-bold">System Logs</h2>
                 </div>
-                <div id="systemLogs" class="flex-1 p-3 overflow-y-auto text-xs space-y-1 bg-white">
+                <div id="systemLogs" class="flex-1 p-3 overflow-y-auto text-xs space-y-1 transition-colors duration-200" style="background-color: var(--bg-panel);">
                     <div class="text-blue-600">[INFO] Interface initialized</div>
                 </div>
             </div>
@@ -243,31 +796,34 @@
 
             <!-- Chat Panel -->
             <div id="chatPanel" class="panel flex-1 flex flex-col">
-                <div class="p-3 bg-gray-100 border-b border-gray-300 flex justify-between items-center">
+                <div class="p-3 border-b flex justify-between items-center transition-colors duration-200" style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
                     <h2 class="text-sm font-bold">Chat</h2>
                     <div class="flex gap-2">
                         <button onclick="toggleImmersionMode()"
-                            class="text-[10px] font-bold text-gray-600 hover:text-blue-500 transition-colors uppercase tracking-widest border border-gray-300 px-2 py-0.5 rounded bg-white">
+                            class="text-[10px] font-bold hover:text-blue-500 transition-colors uppercase tracking-widest border px-2 py-0.5 rounded"
+                            style="color: var(--text-secondary); border-color: var(--border-color); background-color: var(--bg-panel);">
                             Immersion Mode
                         </button>
                         <button onclick="reloadConversation()"
-                            class="text-[10px] font-bold text-gray-600 hover:text-green-500 transition-colors uppercase tracking-widest border border-gray-300 px-2 py-0.5 rounded bg-white">
+                            class="text-[10px] font-bold hover:text-green-500 transition-colors uppercase tracking-widest border px-2 py-0.5 rounded"
+                            style="color: var(--text-secondary); border-color: var(--border-color); background-color: var(--bg-panel);">
                             Reload Chat
                         </button>
                         <button onclick="clearConversation()"
-                            class="text-[10px] font-bold text-gray-400 hover:text-red-500 transition-colors uppercase tracking-widest border border-gray-300 px-2 py-0.5 rounded bg-white">
+                            class="text-[10px] font-bold text-gray-400 hover:text-red-500 transition-colors uppercase tracking-widest border px-2 py-0.5 rounded"
+                            style="border-color: var(--border-color); background-color: var(--bg-panel);">
                             Clear Memory
                         </button>
                     </div>
                 </div>
-                <div id="chatHistory" class="flex-1 p-3 overflow-y-auto text-sm space-y-2 bg-white">
+                <div id="chatHistory" class="flex-1 p-3 overflow-y-auto text-sm space-y-2 transition-colors duration-200" style="background-color: var(--bg-panel);">
                     <div class="text-green-600 font-bold">ASSAULTRON UNIT ASR-7 ONLINE - AWAITING OPERATOR COMMANDS
                     </div>
                 </div>
-                <div class="p-3 border-t border-gray-300 bg-gray-50">
+                <div class="p-3 border-t transition-colors duration-200" style="background-color: var(--bg-secondary); border-color: var(--border-color);">
                     <!-- Image Preview (shown when image selected) -->
                     <div id="imagePreviewContainer" class="hidden mb-2 relative inline-block">
-                        <img id="imagePreview" src="" alt="Preview" class="max-h-20 rounded border border-gray-300">
+                        <img id="imagePreview" src="" alt="Preview" class="max-h-20 rounded border" style="border-color: var(--border-color);">
                         <button id="clearImageBtn" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center text-xs hover:bg-red-600">
                             ×
                         </button>
@@ -275,12 +831,16 @@
                     <div class="flex gap-2">
                         <input type="file" id="imageInput" accept="image/*" class="hidden">
                         <button id="attachImageBtn"
-                            class="px-3 py-2 bg-gray-200 text-gray-700 rounded text-sm hover:bg-gray-300"
+                            class="px-3 py-2 rounded text-sm transition-colors duration-200"
+                            style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text);"
+                            onmouseover="this.style.backgroundColor='var(--button-secondary-hover)'"
+                            onmouseout="this.style.backgroundColor='var(--button-secondary-bg)'"
                             title="Attach Image">
                             📎
                         </button>
                         <input type="text" id="chatInput" placeholder="ENTER COMMAND OR COMMUNICATION..."
-                            class="flex-1 px-3 py-2 border border-gray-300 rounded text-sm focus:outline-none focus:border-blue-500">
+                            class="flex-1 px-3 py-2 border rounded text-sm focus:outline-none focus:border-blue-500 transition-colors duration-200"
+                            style="background-color: var(--input-bg); border-color: var(--input-border); color: var(--text-primary);">
                         <button id="sendBtn"
                             class="px-4 py-2 bg-blue-500 text-white rounded text-sm hover:bg-blue-600 disabled:bg-gray-400">
                             TRANSMIT
@@ -291,7 +851,7 @@
         </div>
 
         <!-- Embodied Agent Tab Content -->
-        <div id="embodiedTab" class="flex-1 flex flex-col tab-content hidden bg-gray-50 overflow-hidden">
+        <div id="embodiedTab" class="flex-1 flex flex-col tab-content hidden overflow-hidden transition-colors duration-200" style="background-color: var(--bg-secondary);">
 
             <div class="flex-1 overflow-y-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
 
@@ -299,14 +859,14 @@
                 <div class="col-span-1 lg:col-span-4 space-y-6">
 
                     <!-- Brain Source (Toggle) -->
-                    <div class="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden transition-all hover:shadow-lg">
+                    <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg" style="background-color: var(--card-bg); border-color: var(--border-color-light);">
                         <div class="bg-gradient-to-r from-gray-800 to-gray-900 px-4 py-2.5 flex justify-between items-center">
                             <h3 class="font-bold text-white text-xs tracking-widest uppercase">Brain Source</h3>
                             <span id="providerBadge"
                                 class="text-[10px] font-bold bg-blue-500 text-white px-2 py-0.5 rounded uppercase">Init</span>
                         </div>
-                        <div class="p-4 bg-gradient-to-b from-gray-50 to-white">
-                            <div class="flex p-1 bg-gray-200 rounded-lg shadow-inner">
+                        <div class="p-4 transition-colors duration-200" style="background: linear-gradient(to bottom, var(--bg-secondary), var(--card-bg));">
+                            <div class="flex p-1 rounded-lg shadow-inner transition-colors duration-200" style="background-color: var(--button-secondary-bg);">
                                 <button onclick="setProvider('ollama')" id="btnOllama"
                                     class="flex-1 py-1.5 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900 transition-all">
                                     Local
@@ -327,21 +887,21 @@
                     </div>
 
                     <!-- Voice Control -->
-                    <div class="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden transition-all hover:shadow-lg">
+                    <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg" style="background-color: var(--card-bg); border-color: var(--border-color-light);">
                         <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 flex justify-between items-center">
                             <h3 class="font-bold text-white text-xs tracking-widest uppercase">Vocal Synthesis</h3>
                             <div id="voiceStatusIndicator" class="h-2 w-2 rounded-full bg-red-300 shadow-lg"></div>
                         </div>
                         <div class="p-4 space-y-4">
                             <div class="flex justify-between items-start">
-                                <div class="text-xs text-gray-500 space-y-1.5">
+                                <div class="text-xs space-y-1.5" style="color: var(--text-tertiary);">
                                     <div class="flex items-center gap-2">
-                                        <span class="w-12 text-gray-400 text-[10px] uppercase font-bold">Server</span>
-                                        <span id="serverStatus" class="font-mono text-gray-800 bg-gray-100 px-2 py-0.5 rounded text-[10px]">Stopped</span>
+                                        <span class="w-12 text-[10px] uppercase font-bold" style="color: var(--text-tertiary);">Server</span>
+                                        <span id="serverStatus" class="font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200" style="color: var(--text-primary); background-color: var(--bg-tertiary);">Stopped</span>
                                     </div>
                                     <div class="flex items-center gap-2">
-                                        <span class="w-12 text-gray-400 text-[10px] uppercase font-bold">Model</span>
-                                        <span id="modelStatus" class="font-mono text-gray-800 bg-gray-100 px-2 py-0.5 rounded text-[10px]">--</span>
+                                        <span class="w-12 text-[10px] uppercase font-bold" style="color: var(--text-tertiary);">Model</span>
+                                        <span id="modelStatus" class="font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200" style="color: var(--text-primary); background-color: var(--bg-tertiary);">--</span>
                                     </div>
                                 </div>
                                 <span id="voiceStatusText"
@@ -377,15 +937,17 @@
                             <div class="relative group">
                                 <input type="text" id="testSpeechInput"
                                     placeholder="Enter text to synthesize sequence..."
-                                    class="w-full pl-3 pr-16 py-2 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 bg-gray-50 transition-all focus:bg-white text-gray-700">
+                                    class="w-full pl-3 pr-16 py-2 border rounded text-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
+                                    style="background-color: var(--input-bg); border-color: var(--input-border); color: var(--text-primary);">
                                 <button onclick="testSpeech()"
-                                    class="absolute right-1 top-1 bottom-1 px-3 bg-gray-200 text-gray-700 rounded text-[10px] font-bold hover:bg-emerald-500 hover:text-white transition-colors uppercase">TEST</button>
+                                    class="absolute right-1 top-1 bottom-1 px-3 rounded text-[10px] font-bold hover:bg-emerald-500 hover:text-white transition-colors uppercase"
+                                    style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text);">TEST</button>
                             </div>
                         </div>
                     </div>
 
                     <!-- Notification System Control -->
-                    <div class="bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden transition-all hover:shadow-lg">
+                    <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg" style="background-color: var(--card-bg); border-color: var(--border-color-light);">
                         <div class="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-2.5 flex justify-between items-center">
                             <h3 class="font-bold text-white text-xs tracking-widest uppercase">Alert System</h3>
                             <div id="notificationStatusIndicator" class="h-2 w-2 rounded-full bg-green-300 shadow-lg"></div>
@@ -422,23 +984,26 @@
                             </div>
 
                             <!-- Configuration -->
-                            <div class="space-y-3 pt-3 border-t border-gray-200">
+                            <div class="space-y-3 pt-3 border-t transition-colors duration-200" style="border-color: var(--border-color-light);">
                                 <div>
-                                    <label class="text-[10px] font-bold text-gray-600 uppercase block mb-1.5">Min Interval (sec)</label>
+                                    <label class="text-[10px] font-bold uppercase block mb-1.5" style="color: var(--text-secondary);">Min Interval (sec)</label>
                                     <input type="number" id="minInterval" value="30" min="10" max="300"
-                                        class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-orange-500">
+                                        class="w-full px-3 py-1.5 border rounded text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors duration-200"
+                                        style="background-color: var(--input-bg); border-color: var(--input-border); color: var(--text-primary);">
                                 </div>
                                 <div>
-                                    <label class="text-[10px] font-bold text-gray-600 uppercase block mb-1.5">Check-In Min (sec)</label>
+                                    <label class="text-[10px] font-bold uppercase block mb-1.5" style="color: var(--text-secondary);">Check-In Min (sec)</label>
                                     <input type="number" id="inactivityThresholdMin" value="300" min="60" max="3600"
-                                        class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-orange-500">
+                                        class="w-full px-3 py-1.5 border rounded text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors duration-200"
+                                        style="background-color: var(--input-bg); border-color: var(--input-border); color: var(--text-primary);">
                                 </div>
                                 <div>
-                                    <label class="text-[10px] font-bold text-gray-600 uppercase block mb-1.5">Check-In Max (sec)</label>
+                                    <label class="text-[10px] font-bold uppercase block mb-1.5" style="color: var(--text-secondary);">Check-In Max (sec)</label>
                                     <input type="number" id="inactivityThresholdMax" value="1800" min="300" max="3600"
-                                        class="w-full px-3 py-1.5 border border-gray-300 rounded text-xs focus:outline-none focus:ring-2 focus:ring-orange-500">
+                                        class="w-full px-3 py-1.5 border rounded text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 transition-colors duration-200"
+                                        style="background-color: var(--input-bg); border-color: var(--input-border); color: var(--text-primary);">
                                 </div>
-                                <div class="text-[9px] text-gray-500 italic bg-gray-50 p-2 rounded">
+                                <div class="text-[9px] italic p-2 rounded transition-colors duration-200" style="color: var(--text-tertiary); background-color: var(--bg-secondary);">
                                     AI will check in randomly between min-max interval with personalized questions
                                 </div>
                                 <button onclick="updateNotificationConfig()"
@@ -876,13 +1441,13 @@
         </div>
 
         <!-- Vision Tab Content -->
-        <div id="visionTab" class="flex-1 flex flex-col tab-content hidden bg-gray-50 overflow-hidden">
+        <div id="visionTab" class="flex-1 flex flex-col tab-content hidden overflow-hidden transition-colors duration-200" style="background-color: var(--bg-secondary);">
             <div class="flex-1 overflow-y-auto p-4 lg:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
 
                 <!-- Left: Camera Feed -->
                 <div class="lg:col-span-8 space-y-4">
                     <!-- Camera Controls -->
-                    <div class="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+                    <div class="rounded-lg shadow-lg border overflow-hidden transition-colors duration-200" style="background-color: var(--card-bg); border-color: var(--border-color-light);">
                         <div
                             class="bg-gradient-to-r from-blue-500 to-indigo-600 px-4 py-2 flex justify-between items-center">
                             <h3 class="font-bold text-white text-xs tracking-widest uppercase">Visual Feed</h3>
@@ -893,15 +1458,19 @@
                         </div>
 
                         <!-- Camera Controls Bar -->
-                        <div class="bg-gray-50 px-4 py-3 border-b border-gray-200 flex items-center gap-4 flex-wrap">
+                        <div class="px-4 py-3 border-b flex items-center gap-4 flex-wrap transition-colors duration-200" style="background-color: var(--bg-secondary); border-color: var(--border-color-light);">
                             <div class="flex items-center gap-2">
-                                <label class="text-xs text-gray-600 uppercase tracking-wide">Camera:</label>
+                                <label class="text-xs uppercase tracking-wide" style="color: var(--text-secondary);">Camera:</label>
                                 <select id="cameraSelect"
-                                    class="bg-white text-gray-800 text-xs px-3 py-1.5 rounded border border-gray-300 focus:outline-none focus:border-blue-500">
+                                    class="text-xs px-3 py-1.5 rounded border focus:outline-none focus:border-blue-500 transition-colors duration-200"
+                                    style="background-color: var(--input-bg); color: var(--text-primary); border-color: var(--input-border);">
                                     <option value="-1">No cameras</option>
                                 </select>
                                 <button onclick="refreshCameras()"
-                                    class="p-1.5 bg-gray-200 text-gray-600 rounded hover:bg-gray-300"
+                                    class="p-1.5 rounded transition-colors duration-200"
+                                    style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text);"
+                                    onmouseover="this.style.backgroundColor='var(--button-secondary-hover)'"
+                                    onmouseout="this.style.backgroundColor='var(--button-secondary-bg)'"
                                     title="Refresh cameras">
                                     <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -954,17 +1523,17 @@
                 <!-- Right: Detection Info -->
                 <div class="lg:col-span-4 space-y-4">
                     <!-- Scene Analysis -->
-                    <div class="bg-white rounded-lg shadow-lg border border-gray-200 overflow-hidden">
+                    <div class="rounded-lg shadow-lg border overflow-hidden transition-colors duration-200" style="background-color: var(--card-bg); border-color: var(--border-color-light);">
                         <div class="bg-gradient-to-r from-purple-500 to-pink-500 px-4 py-2">
                             <h3 class="font-bold text-white text-xs tracking-widest uppercase">Scene Analysis</h3>
                         </div>
                         <div class="p-4 space-y-4">
                             <!-- Scene Description -->
-                            <div class="bg-gray-50 rounded p-3 border border-gray-200">
+                            <div class="rounded p-3 border transition-colors duration-200" style="background-color: var(--bg-secondary); border-color: var(--border-color-light);">
                                 <span
                                     class="text-[10px] text-purple-600 font-bold uppercase tracking-wider block mb-2">AI
                                     Perception</span>
-                                <p id="sceneDescription" class="text-gray-700 text-sm leading-relaxed">No visual input
+                                <p id="sceneDescription" class="text-sm leading-relaxed" style="color: var(--text-primary);">No visual input
                                     available.</p>
                             </div>
 
@@ -1619,6 +2188,39 @@
             }
         }
 
+        // Dark Mode Toggle Function
+        function toggleDarkMode() {
+            const body = document.body;
+            const darkModeIcon = document.getElementById('darkModeIcon');
+
+            body.classList.toggle('dark-mode');
+
+            // Update icon and save preference
+            if (body.classList.contains('dark-mode')) {
+                darkModeIcon.textContent = '☀️';
+                localStorage.setItem('darkMode', 'enabled');
+                addLog('INFO', 'Dark mode enabled');
+            } else {
+                darkModeIcon.textContent = '🌙';
+                localStorage.setItem('darkMode', 'disabled');
+                addLog('INFO', 'Dark mode disabled');
+            }
+        }
+
+        // Load dark mode preference on page load
+        function loadDarkModePreference() {
+            const darkMode = localStorage.getItem('darkMode');
+            if (darkMode === 'enabled') {
+                document.body.classList.add('dark-mode');
+                const darkModeIcon = document.getElementById('darkModeIcon');
+                if (darkModeIcon) {
+                    darkModeIcon.textContent = '☀️';
+                }
+            }
+        }
+
+        // Call on page load
+        document.addEventListener('DOMContentLoaded', loadDarkModePreference);
 
         // Voice System Functions
         async function startVoiceServer() {
