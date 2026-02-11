@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Assaultron Interface</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
     <style>
         /* Dark Mode Variables */
         :root {
@@ -154,6 +155,17 @@
 
         html:has(body.dark-mode) ::-webkit-scrollbar-thumb:hover {
             background: #64748b;
+        }
+
+        /* Card hover effects for dark mode */
+        body.dark-mode .hover\:shadow-lg:hover {
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5), 0 4px 6px -2px rgba(0, 0, 0, 0.4);
+        }
+
+        /* Dynamic div hover effects in dark mode */
+        body.dark-mode .group:hover,
+        body.dark-mode .hover\:shadow-sm:hover {
+            box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
         }
 
         /* Immersion Mode Styles */
@@ -786,7 +798,7 @@
                     class="py-2 px-3 text-xs font-bold rounded transition-all hover:scale-105"
                     style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text);"
                     title="Toggle Dark Mode">
-                    <span id="darkModeIcon">🌙</span> DARK MODE
+                    <i id="darkModeIcon" class="fas fa-moon"></i> DARK MODE
                 </button>
             </nav>
         </div>
@@ -848,7 +860,7 @@
                             onmouseover="this.style.backgroundColor='var(--button-secondary-hover)'"
                             onmouseout="this.style.backgroundColor='var(--button-secondary-bg)'"
                             title="Attach Image">
-                            📎
+                            <i class="fas fa-paperclip"></i>
                         </button>
                         <input type="text" id="chatInput" placeholder="ENTER COMMAND OR COMMUNICATION..."
                             class="flex-1 px-3 py-2 border rounded text-sm focus:outline-none focus:border-blue-500 transition-colors duration-200"
@@ -1111,7 +1123,7 @@
                         </div>
                         <div class="p-4 space-y-3">
                             <div class="text-[10px] text-pink-600 font-bold uppercase tracking-wide mb-2 border-b border-pink-100 pb-2 flex justify-between items-center">
-                                <span>💭 Emotional State</span>
+                                <span><i class="fas fa-brain"></i> Emotional State</span>
                                 <span class="text-gray-400 text-[9px]">Persistent</span>
                             </div>
 
@@ -1420,7 +1432,8 @@
 
                     <!-- Behavior Logs -->
                     <div
-                        class="flex-1 bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden flex flex-col min-h-[300px] transition-all hover:shadow-lg">
+                        class="flex-1 rounded-lg shadow-md overflow-hidden flex flex-col min-h-[300px] transition-all hover:shadow-lg"
+                        style="background-color: var(--card-bg); border: 1px solid var(--border-color);">
                         <div class="bg-gradient-to-r from-cyan-600 to-blue-600 px-3 py-2 flex justify-between items-center">
                             <h3 class="font-bold text-white text-[10px] tracking-widest uppercase">Decision Log</h3>
                             <button onclick="updateBehaviorHistory()" class="text-cyan-200 hover:text-white transition-colors"><svg
@@ -1431,7 +1444,8 @@
                                 </svg></button>
                         </div>
                         <div id="behaviorHistory"
-                            class="flex-1 p-0 overflow-y-auto bg-white scrollbar-thin scrollbar-thumb-gray-200">
+                            class="flex-1 p-0 overflow-y-auto scrollbar-thin"
+                            style="background-color: var(--card-bg);">
                             <div class="p-4 text-center text-gray-300 italic text-xs">System Initializing Sequence...
                             </div>
                         </div>
@@ -1439,12 +1453,13 @@
 
                     <!-- State Logs -->
                     <div
-                        class="flex-1 bg-white rounded-lg shadow-md border border-gray-200 overflow-hidden flex flex-col min-h-[200px] transition-all hover:shadow-lg">
+                        class="flex-1 rounded-lg shadow-md overflow-hidden flex flex-col min-h-[200px] transition-all hover:shadow-lg"
+                        style="background-color: var(--card-bg); border: 1px solid var(--border-color);">
                         <div class="bg-gradient-to-r from-teal-600 to-emerald-600 px-3 py-2">
                             <h3 class="font-bold text-white text-[10px] tracking-widest uppercase">State Transitions
                             </h3>
                         </div>
-                        <div id="stateHistory" class="flex-1 p-0 overflow-y-auto bg-gray-50/50">
+                        <div id="stateHistory" class="flex-1 p-0 overflow-y-auto" style="background-color: var(--bg-secondary);">
                             <div class="p-4 text-center text-gray-300 italic text-xs">Awaiting Input...</div>
                         </div>
                     </div>
@@ -1673,7 +1688,7 @@
             </div>
             <input type="file" id="immersionImageInput" accept="image/*" class="hidden">
             <button id="immersionAttachImageBtn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-right: 10px; font-size: 18px;">
-                📎
+                <i class="fas fa-paperclip"></i>
             </button>
             <input type="text" id="immersionChatInput" placeholder="ENTER COMMAND OR COMMUNICATION..."
                 class="immersion-chat-input">
@@ -2209,11 +2224,11 @@
 
             // Update icon and save preference
             if (body.classList.contains('dark-mode')) {
-                darkModeIcon.textContent = '☀️';
+                darkModeIcon.className = 'fas fa-sun';
                 localStorage.setItem('darkMode', 'enabled');
                 addLog('INFO', 'Dark mode enabled');
             } else {
-                darkModeIcon.textContent = '🌙';
+                darkModeIcon.className = 'fas fa-moon';
                 localStorage.setItem('darkMode', 'disabled');
                 addLog('INFO', 'Dark mode disabled');
             }
@@ -2226,7 +2241,7 @@
                 document.body.classList.add('dark-mode');
                 const darkModeIcon = document.getElementById('darkModeIcon');
                 if (darkModeIcon) {
-                    darkModeIcon.textContent = '☀️';
+                    darkModeIcon.className = 'fas fa-sun';
                 }
             }
         }
@@ -2438,11 +2453,11 @@
 
                     if (enabled) {
                         startBtn.disabled = true;
-                        startBtn.textContent = '✅ VOICE ONLINE';
+                        startBtn.innerHTML = '<i class="fas fa-check-circle"></i> VOICE ONLINE';
                         stopBtn.disabled = false;
                     } else {
                         startBtn.disabled = false;
-                        startBtn.textContent = '🚀 START VOICE SERVER';
+                        startBtn.innerHTML = '<i class="fas fa-rocket"></i> START VOICE SERVER';
                         stopBtn.disabled = true;
                     }
                 }
@@ -2491,7 +2506,7 @@
                             z-index: 10000;
                             font-family: 'Share Tech Mono', monospace;
                             animation: slideIn 0.3s ease-out;">
-                    <div style="font-weight: bold; font-size: 14px;">🔊 Voice Activated</div>
+                    <div style="font-weight: bold; font-size: 14px;"><i class="fas fa-volume-up"></i> Voice Activated</div>
                 </div>
             `;
 
@@ -2691,23 +2706,25 @@
                             const alternatives = entry.all_utilities ? entry.all_utilities.map(([name, utility]) =>
                                 `${name}: ${utility.toFixed(2)}`
                             ).join(', ') : 'N/A';
-                            let colorClass = 'border-indigo-100 bg-indigo-50/50';
-                            let textClass = 'text-indigo-700';
+                            let bgColor = 'rgba(99, 102, 241, 0.1)'; // indigo-50/50 equivalent
+                            let borderColor = 'rgba(99, 102, 241, 0.2)';
+                            let textColor = '#4338ca'; // indigo-700
 
                             // Simple heuristic for coloring based on utility
                             if (entry.selected_utility > 0.8) {
-                                colorClass = 'border-green-100 bg-green-50/50';
-                                textClass = 'text-green-700';
+                                bgColor = 'rgba(34, 197, 94, 0.1)'; // green-50/50 equivalent
+                                borderColor = 'rgba(34, 197, 94, 0.2)';
+                                textColor = '#15803d'; // green-700
                             }
 
-                            return `<div class="border-b ${colorClass} p-2 mb-1 rounded flex justify-between items-start group hover:bg-white hover:shadow-sm transition-all">
+                            return `<div class="border-b p-2 mb-1 rounded flex justify-between items-start group hover:shadow-sm transition-all" style="background-color: ${bgColor}; border-color: ${borderColor};">
                                 <div>
-                                    <div class="font-bold ${textClass} text-xs">[${timestamp}] ${entry.selected_behavior}</div>
-                                    <div class="text-[10px] text-gray-500 mt-1">Goal: <span class="text-gray-700">${entry.cognitive_state.goal}</span></div>
+                                    <div class="font-bold text-xs" style="color: ${textColor};">[${timestamp}] ${entry.selected_behavior}</div>
+                                    <div class="text-[10px] mt-1" style="color: var(--text-tertiary);">Goal: <span style="color: var(--text-secondary);">${entry.cognitive_state.goal}</span></div>
                                 </div>
                                 <div class="text-right">
-                                    <div class="bg-indigo-100 text-indigo-800 px-1.5 rounded text-[9px] font-bold mb-1">U: ${entry.selected_utility.toFixed(2)}</div>
-                                    <div class="text-[9px] text-gray-400 group-hover:text-gray-600">Alt: ${alternatives}</div>
+                                    <div class="px-1.5 rounded text-[9px] font-bold mb-1" style="background-color: rgba(99, 102, 241, 0.2); color: #3730a3;">U: ${entry.selected_utility.toFixed(2)}</div>
+                                    <div class="text-[9px]" style="color: var(--text-tertiary);">Alt: ${alternatives}</div>
                                 </div>
                             </div>`;
                         }).join('');
@@ -2739,9 +2756,9 @@
 
                             const changeText = changes.join(', ') || 'Minor update';
 
-                            return `<div class="border-b border-gray-100 p-2 mb-1 rounded flex justify-between items-center bg-white/50 hover:bg-white hover:shadow-sm transition-all">
-                                <span class="font-mono text-[10px] text-gray-400">[${timestamp}]</span>
-                                <span class="text-xs font-bold text-gray-600">${changeText}</span>
+                            return `<div class="border-b p-2 mb-1 rounded flex justify-between items-center hover:shadow-sm transition-all" style="background-color: var(--bg-tertiary); border-color: var(--border-color-light);">
+                                <span class="font-mono text-[10px]" style="color: var(--text-tertiary);">[${timestamp}]</span>
+                                <span class="text-xs font-bold" style="color: var(--text-secondary);">${changeText}</span>
                             </div>`;
                         }).join('');
                     }
