@@ -271,6 +271,25 @@ class EmbodiedAssaultronCore:
             if queue in self.voice_event_queues:
                 self.voice_event_queues.remove(queue)
 
+    def _broadcast_voice_notification(self, text):
+        """Broadcast voice activation notification to all connected SSE clients"""
+        message = {
+            "type": "voice_notification"
+        }
+
+        # Send to all connected clients
+        dead_queues = []
+        for queue in self.voice_event_queues:
+            try:
+                queue.put_nowait(message)
+            except:
+                dead_queues.append(queue)
+
+        # Clean up disconnected clients
+        for queue in dead_queues:
+            if queue in self.voice_event_queues:
+                self.voice_event_queues.remove(queue)
+
     def process_message(self, user_message: str, image_path: str = None) -> dict:
         """
         Process user message through the embodied agent pipeline.
@@ -1399,6 +1418,8 @@ def start_voice_server():
         if result["success"]:
             assaultron.voice_enabled = True
             assaultron.log_event("Assaultron voice system online", "VOICE")
+            # Send notification that voice is activated
+            assaultron._broadcast_voice_notification("Voice system activated")
             return jsonify({
                 "success": True,
                 "message": result["message"],

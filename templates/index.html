@@ -753,6 +753,18 @@
         body.dark-mode .border-gray-100 {
             border-color: var(--border-color-light) !important;
         }
+
+        /* Voice notification animation */
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
     </style>
 </head>
 
@@ -2380,6 +2392,10 @@
                             lastPlayedAudioUrl = data.url;
                             addLog('VOICE', `Playing: ${data.filename}`);
                         }
+                    } else if (data.type === 'voice_notification') {
+                        // Show notification when voice system starts
+                        showVoiceNotification();
+                        addLog('VOICE', 'Voice system activated');
                     }
                 } catch (error) {
                     console.error('Error parsing voice event:', error);
@@ -2457,6 +2473,37 @@
                 console.error('Failed to initialize audio analyser:', error);
                 return false;
             }
+        }
+
+        function showVoiceNotification() {
+            console.log('showVoiceNotification called');
+            // Create a simple notification popup
+            const notification = document.createElement('div');
+            notification.className = 'voice-notification';
+            notification.innerHTML = `
+                <div style="position: fixed; top: 20px; right: 20px;
+                            background: rgba(0, 255, 136, 0.15);
+                            border: 1px solid #00ff88;
+                            color: #00ff88;
+                            padding: 15px 20px;
+                            border-radius: 8px;
+                            box-shadow: 0 4px 12px rgba(0, 255, 136, 0.3);
+                            z-index: 10000;
+                            font-family: 'Share Tech Mono', monospace;
+                            animation: slideIn 0.3s ease-out;">
+                    <div style="font-weight: bold; font-size: 14px;">🔊 Voice Activated</div>
+                </div>
+            `;
+
+            document.body.appendChild(notification);
+            console.log('Notification appended to body');
+
+            // Auto-remove after 3 seconds
+            setTimeout(() => {
+                notification.style.opacity = '0';
+                notification.style.transition = 'opacity 0.3s ease-out';
+                setTimeout(() => notification.remove(), 300);
+            }, 3000);
         }
 
         function playVoiceAudio(audioUrl) {
