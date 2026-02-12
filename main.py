@@ -258,7 +258,12 @@ class EmbodiedAssaultronCore:
             "filename": filename
         }
 
+        # Determine message source (default to web if not set)
+        source = getattr(self, 'last_message_source', 'web')
+
         # Send to all connected clients
+        # Note: We broadcast to all clients regardless of source
+        # The Discord bot and web UI will handle playing/not playing based on their own state
         dead_queues = []
         for queue in self.voice_event_queues:
             try:
@@ -270,6 +275,9 @@ class EmbodiedAssaultronCore:
         for queue in dead_queues:
             if queue in self.voice_event_queues:
                 self.voice_event_queues.remove(queue)
+
+        # Reset source after broadcast
+        self.last_message_source = 'web'
 
     def _broadcast_voice_notification(self, text):
         """Broadcast voice activation notification to all connected SSE clients"""
@@ -289,6 +297,29 @@ class EmbodiedAssaultronCore:
         for queue in dead_queues:
             if queue in self.voice_event_queues:
                 self.voice_event_queues.remove(queue)
+
+    def _broadcast_agent_completion(self, message_text):
+        """Broadcast agent completion message to all connected SSE clients"""
+        message = {
+            "type": "agent_completion",
+            "message": message_text,
+            "timestamp": datetime.now().isoformat()
+        }
+
+        # Send to all connected clients
+        dead_queues = []
+        for queue in self.voice_event_queues:
+            try:
+                queue.put_nowait(message)
+            except:
+                dead_queues.append(queue)
+
+        # Clean up disconnected clients
+        for queue in dead_queues:
+            if queue in self.voice_event_queues:
+                self.voice_event_queues.remove(queue)
+
+        self.log_event(f"Broadcasted agent completion: {message_text[:50]}...", "AGENT")
 
     def process_message(self, user_message: str, image_path: str = None) -> dict:
         """
@@ -365,7 +396,8 @@ class EmbodiedAssaultronCore:
                     cognitive_engine=self.cognitive_engine,
                     voice_system=self.voice_system,
                     voice_enabled=self.voice_enabled,
-                    log_callback=self.log_event
+                    log_callback=self.log_event,
+                    broadcast_callback=self._broadcast_agent_completion
                 )
                 
                 # Queue voice message for acknowledgment if enabled
@@ -950,6 +982,7 @@ def chat():
     data = request.get_json()
     message = data.get('message', '').strip()
     image_path = data.get('image_path', None)  # Optional image attachment
+    source = data.get('source', 'web')  # Track message source (web, discord, etc.)
 
     if not message:
         return jsonify({"error": "Empty message"}), 400
@@ -963,6 +996,9 @@ def chat():
         assaultron.log_event(f"INPUT RECEIVED: '{message}' (with image: {image_path})", "CHAT")
     else:
         assaultron.log_event(f"INPUT RECEIVED: '{message}'", "CHAT")
+
+    # Store message source for voice system
+    assaultron.last_message_source = source
 
     # Process through embodied agent pipeline
     result = assaultron.process_message(message, image_path=image_path)

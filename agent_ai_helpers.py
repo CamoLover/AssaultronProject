@@ -96,11 +96,12 @@ def run_agent_in_background(
     cognitive_engine=None,
     voice_system=None,
     voice_enabled: bool = False,
-    log_callback=None
+    log_callback=None,
+    broadcast_callback=None
 ):
     """
     Run the agent in a background thread and notify when complete.
-    
+
     Args:
         agent_logic: The agent logic instance
         agent_tasks: Dictionary to store task status
@@ -111,6 +112,7 @@ def run_agent_in_background(
         voice_system: Voice synthesis system
         voice_enabled: Whether voice is enabled
         log_callback: Function to call for logging
+        broadcast_callback: Function to broadcast completion to clients (web UI, Discord)
     """
     progress_updates = []
     
@@ -144,11 +146,15 @@ def run_agent_in_background(
                     completion_message = generate_completion_message(cognitive_engine, original_task, result)
                 else:
                     completion_message = f"Task completed: {original_task}"
-                
+
+                # Broadcast completion to all clients (web UI, Discord)
+                if broadcast_callback:
+                    broadcast_callback(completion_message)
+
                 # Send voice message
                 if voice_enabled and voice_system:
                     voice_system.synthesize_async(completion_message)
-                
+
                 log(f"Agent task completed: {task_id}", "AGENT")
                 log(f"Completion message: {completion_message}", "AGENT")
             else:

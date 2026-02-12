@@ -1710,6 +1710,7 @@
         let audioPlayer = null;
         let audioQueue = [];
         let voiceEventSource = null;  // SSE connection for real-time audio notifications
+        let webUiIsActiveSource = false;  // Track if web UI sent the last message
 
         // Web Audio API for real-time audio analysis
         let audioContext = null;
@@ -2024,12 +2025,16 @@
                 // Now add the user message with the image path
                 addChatMessage('USER', message, null, imagePath);
 
+                // Mark that web UI is sending this message
+                webUiIsActiveSource = true;
+
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         message: message,
-                        image_path: imagePath
+                        image_path: imagePath,
+                        source: 'web'
                     })
                 });
 
@@ -2401,12 +2406,26 @@
                     const data = JSON.parse(event.data);
 
                     if (data.type === 'audio_ready') {
-                        // Immediately play audio when ready
-                        if (data.url && data.url !== lastPlayedAudioUrl) {
+                        // Only play audio if the web UI sent the last message
+                        if (webUiIsActiveSource && data.url && data.url !== lastPlayedAudioUrl) {
                             playVoiceAudio(data.url);
                             lastPlayedAudioUrl = data.url;
                             addLog('VOICE', `Playing: ${data.filename}`);
+                        } else if (!webUiIsActiveSource) {
+                            addLog('VOICE', `Audio ready (not playing - message from another source): ${data.filename}`);
                         }
+                        // Reset the flag after handling audio
+                        webUiIsActiveSource = false;
+                    } else if (data.type === 'agent_completion') {
+                        // Display agent completion message in chat
+                        console.log('Agent completion received:', data.message);
+                        addLog('AGENT', 'Task completed');
+
+                        // Add the completion message to the chat UI
+                        addMessageToChat('ASR-7', data.message, 'ai');
+
+                        // Update conversation history display
+                        loadConversationHistory();
                     } else if (data.type === 'voice_notification') {
                         // Show notification when voice system starts
                         showVoiceNotification();
@@ -3522,12 +3541,16 @@
                 // Also add to main chat with image
                 addChatMessage('USER', message, null, imagePath);
 
+                // Mark that web UI is sending this message
+                webUiIsActiveSource = true;
+
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         message: message,
-                        image_path: imagePath
+                        image_path: imagePath,
+                        source: 'web'
                     })
                 });
 

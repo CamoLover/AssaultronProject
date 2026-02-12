@@ -1,0 +1,20 @@
+{
+  "name": "asr-discord-bot",
+  "version": "1.0.0",
+  "description": "Discord bot bridge for ASR-7 AI system",
+  "main": "bot.js",
+  "type": "module",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node --watch bot.js"
+  },
+  "keywords": ["discord", "bot", "ai", "assaultron"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.17.3",
+    "dotenv": "^16.4.7",
+    "axios": "^1.7.9",
+    "eventsource": "^2.0.2"
+  }
+}
