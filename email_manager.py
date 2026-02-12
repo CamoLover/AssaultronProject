@@ -44,6 +44,11 @@ class EmailManager:
         allowed_domains_str = os.getenv("ALLOWED_EMAIL_DOMAINS", "")
         self.allowed_domains = [d.strip() for d in allowed_domains_str.split(",") if d.strip()]
 
+        # Email signature configuration
+        self.signature_enabled = os.getenv("EMAIL_SIGNATURE_ENABLED", "true").lower() == "true"
+        self.ai_name = os.getenv("AI_NAME", "Assaultron AI")
+        self.signature = self._generate_signature()
+
         # Logging
         self.logger = logging.getLogger('assaultron.email')
 
@@ -63,6 +68,30 @@ class EmailManager:
         if not self.log_webhook_url:
             self.logger.warning("Discord log webhook not configured - logging disabled")
         return True
+
+    def _generate_signature(self) -> Dict[str, str]:
+        """
+        Generate email signature in both plain text and HTML formats
+
+        Returns:
+            Dict with 'plain' and 'html' signature versions
+        """
+        plain_signature = f"\n\n---\n{self.ai_name}\nAutonomous AI Assistant\nEmail: {self.email_address}\nPowered by Camolover"
+
+        html_signature = f"""
+        <br><br>
+        <div style="border-top: 1px solid #ccc; padding-top: 10px; margin-top: 20px; font-family: Arial, sans-serif; color: #555;">
+            <strong style="color: #2c3e50;">{self.ai_name}</strong><br>
+            <span style="font-size: 12px;">Autonomous AI Assistant</span><br>
+            <span style="font-size: 12px;">Email: <a href="mailto:{self.email_address}" style="color: #3498db;">{self.email_address}</a></span><br>
+            <span style="font-size: 11px; color: #888;">Powered by Camolover</span>
+        </div>
+        """
+
+        return {
+            'plain': plain_signature,
+            'html': html_signature
+        }
 
     def _check_rate_limit(self) -> Tuple[bool, int]:
         """
@@ -169,16 +198,22 @@ class EmailManager:
         to: str,
         subject: str,
         body: str,
-        body_html: Optional[str] = None
+        body_html: Optional[str] = None,
+        cc: Optional[List[str]] = None,
+        bcc: Optional[List[str]] = None,
+        add_signature: bool = True
     ) -> Tuple[bool, Optional[str]]:
         """
         Send an email with guardrails and logging
 
         Args:
-            to: Recipient email address
+            to: Recipient email address (can be comma-separated list)
             subject: Email subject
             body: Plain text body
             body_html: Optional HTML body
+            cc: Optional list of CC recipients
+            bcc: Optional list of BCC recipients
+            add_signature: Whether to add automatic signature (default: True)
 
         Returns:
             (success: bool, error_message: Optional[str])
@@ -189,16 +224,23 @@ class EmailManager:
             self.logger.warning(error)
             return False, error
 
-        # Validate recipient domain
-        if not self._validate_domain(to):
-            error = f"Domain not allowed: {to}"
-            self.logger.warning(error)
-            self._log_to_discord("send_email", {
-                "to": to,
-                "subject": subject,
-                "status": "blocked"
-            }, success=False, error=error)
-            return False, error
+        # Parse recipients
+        to_list = [addr.strip() for addr in to.split(',')] if isinstance(to, str) else to
+        cc_list = cc if cc else []
+        bcc_list = bcc if bcc else []
+
+        # Validate all recipient domains
+        all_recipients = to_list + cc_list + bcc_list
+        for recipient in all_recipients:
+            if not self._validate_domain(recipient):
+                error = f"Domain not allowed: {recipient}"
+                self.logger.warning(error)
+                self._log_to_discord("send_email", {
+                    "to": to,
+                    "subject": subject,
+                    "status": "blocked"
+                }, success=False, error=error)
+                return False, error
 
         # Check rate limit
         can_send, count = self._check_rate_limit()
@@ -213,19 +255,30 @@ class EmailManager:
             return False, error
 
         try:
+            # Add signature if enabled
+            final_body = body
+            final_body_html = body_html
+
+            if add_signature and self.signature_enabled:
+                final_body = body + self.signature['plain']
+                if body_html:
+                    final_body_html = body_html + self.signature['html']
+
             # Create message
             msg = MIMEMultipart('alternative')
             msg['From'] = self.email_address
-            msg['To'] = to
+            msg['To'] = ', '.join(to_list)
+            if cc_list:
+                msg['Cc'] = ', '.join(cc_list)
             msg['Subject'] = subject
             msg['Date'] = email.utils.formatdate(localtime=True)
 
             # Attach plain text
-            msg.attach(MIMEText(body, 'plain'))
+            msg.attach(MIMEText(final_body, 'plain'))
 
             # Attach HTML if provided
-            if body_html:
-                msg.attach(MIMEText(body_html, 'html'))
+            if final_body_html:
+                msg.attach(MIMEText(final_body_html, 'html'))
 
             # Connect to SMTP server
             with smtplib.SMTP(self.smtp_server, self.smtp_port, timeout=10) as server:
@@ -237,12 +290,18 @@ class EmailManager:
             self._record_email_sent()
 
             # Log to Discord
-            self._log_to_discord("send_email", {
+            log_details = {
                 "to": to,
                 "subject": subject,
                 "body_length": f"{len(body)} chars",
                 "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            }, success=True)
+            }
+            if cc_list:
+                log_details["cc"] = ', '.join(cc_list)
+            if bcc_list:
+                log_details["bcc"] = f"{len(bcc_list)} recipient(s)"
+
+            self._log_to_discord("send_email", log_details, success=True)
 
             self.logger.info(f"Email sent successfully to {to}")
             return True, None
@@ -253,6 +312,206 @@ class EmailManager:
             self._log_to_discord("send_email", {
                 "to": to,
                 "subject": subject
+            }, success=False, error=error)
+            return False, error
+
+    def reply_to_email(
+        self,
+        original_email_id: str,
+        reply_body: str,
+        reply_body_html: Optional[str] = None,
+        cc: Optional[List[str]] = None,
+        folder: str = "INBOX"
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Reply to an existing email
+
+        Args:
+            original_email_id: ID of the email to reply to
+            reply_body: Plain text reply body
+            reply_body_html: Optional HTML reply body
+            cc: Optional list of CC recipients
+            folder: IMAP folder containing the original email
+
+        Returns:
+            (success: bool, error_message: Optional[str])
+        """
+        try:
+            # First, fetch the original email to get details
+            with imaplib.IMAP4_SSL(self.imap_server, self.imap_port) as mail:
+                mail.login(self.email_address, self.email_password)
+                mail.select(folder)
+
+                # Fetch the original email
+                status, msg_data = mail.fetch(original_email_id.encode(), "(RFC822)")
+
+                if status != "OK":
+                    return False, "Failed to fetch original email"
+
+                # Parse original email
+                raw_email = msg_data[0][1]
+                original_msg = email.message_from_bytes(raw_email)
+
+                # Extract original details
+                original_from = original_msg.get("From", "")
+                original_subject = original_msg.get("Subject", "")
+                original_date = original_msg.get("Date", "")
+                original_message_id = original_msg.get("Message-ID", "")
+
+                # Extract original body for quoting
+                original_body = ""
+                if original_msg.is_multipart():
+                    for part in original_msg.walk():
+                        if part.get_content_type() == "text/plain":
+                            original_body = part.get_payload(decode=True).decode()
+                            break
+                else:
+                    original_body = original_msg.get_payload(decode=True).decode()
+
+            # Prepare reply subject
+            reply_subject = original_subject
+            if not reply_subject.lower().startswith("re:"):
+                reply_subject = f"Re: {reply_subject}"
+
+            # Quote original message in plain text
+            quoted_body = f"{reply_body}\n\n" + "On " + original_date + ", " + original_from + " wrote:\n"
+            quoted_body += "\n".join(["> " + line for line in original_body.split("\n")])
+
+            # Quote original message in HTML (if HTML reply provided)
+            quoted_html = None
+            if reply_body_html:
+                quoted_html = f"{reply_body_html}<br><br><div style='border-left: 2px solid #ccc; padding-left: 10px; margin-left: 10px;'>"
+                quoted_html += f"<p><strong>On {original_date}, {original_from} wrote:</strong></p>"
+                quoted_html += f"<p>{original_body.replace(chr(10), '<br>')}</p></div>"
+
+            # Send the reply using send_email
+            success, error = self.send_email(
+                to=original_from,
+                subject=reply_subject,
+                body=quoted_body,
+                body_html=quoted_html,
+                cc=cc,
+                add_signature=True
+            )
+
+            if success:
+                self.logger.info(f"Reply sent successfully to {original_from}")
+
+            return success, error
+
+        except Exception as e:
+            error = str(e)
+            self.logger.exception(f"Failed to reply to email: {e}")
+            return False, error
+
+    def forward_email(
+        self,
+        original_email_id: str,
+        to: str,
+        forward_message: Optional[str] = None,
+        cc: Optional[List[str]] = None,
+        folder: str = "INBOX"
+    ) -> Tuple[bool, Optional[str]]:
+        """
+        Forward an existing email to another recipient
+
+        Args:
+            original_email_id: ID of the email to forward
+            to: Recipient email address
+            forward_message: Optional message to add before the forwarded content
+            cc: Optional list of CC recipients
+            folder: IMAP folder containing the original email
+
+        Returns:
+            (success: bool, error_message: Optional[str])
+        """
+        try:
+            # Fetch the original email
+            with imaplib.IMAP4_SSL(self.imap_server, self.imap_port) as mail:
+                mail.login(self.email_address, self.email_password)
+                mail.select(folder)
+
+                status, msg_data = mail.fetch(original_email_id.encode(), "(RFC822)")
+
+                if status != "OK":
+                    return False, "Failed to fetch original email"
+
+                # Parse original email
+                raw_email = msg_data[0][1]
+                original_msg = email.message_from_bytes(raw_email)
+
+                # Extract original details
+                original_from = original_msg.get("From", "")
+                original_to = original_msg.get("To", "")
+                original_subject = original_msg.get("Subject", "")
+                original_date = original_msg.get("Date", "")
+
+                # Extract original body
+                original_body = ""
+                if original_msg.is_multipart():
+                    for part in original_msg.walk():
+                        if part.get_content_type() == "text/plain":
+                            original_body = part.get_payload(decode=True).decode()
+                            break
+                else:
+                    original_body = original_msg.get_payload(decode=True).decode()
+
+            # Prepare forward subject
+            forward_subject = original_subject
+            if not forward_subject.lower().startswith("fwd:"):
+                forward_subject = f"Fwd: {forward_subject}"
+
+            # Build forwarded message body
+            forward_body = ""
+            if forward_message:
+                forward_body = f"{forward_message}\n\n"
+
+            forward_body += "---------- Forwarded message ---------\n"
+            forward_body += f"From: {original_from}\n"
+            forward_body += f"Date: {original_date}\n"
+            forward_body += f"Subject: {original_subject}\n"
+            forward_body += f"To: {original_to}\n\n"
+            forward_body += original_body
+
+            # Build HTML version
+            forward_html = ""
+            if forward_message:
+                forward_html = f"<p>{forward_message}</p><br>"
+
+            forward_html += "<div style='border-top: 1px solid #ccc; margin-top: 20px; padding-top: 10px;'>"
+            forward_html += "<p><strong>---------- Forwarded message ---------</strong></p>"
+            forward_html += f"<p><strong>From:</strong> {original_from}<br>"
+            forward_html += f"<strong>Date:</strong> {original_date}<br>"
+            forward_html += f"<strong>Subject:</strong> {original_subject}<br>"
+            forward_html += f"<strong>To:</strong> {original_to}</p>"
+            forward_html += f"<p>{original_body.replace(chr(10), '<br>')}</p></div>"
+
+            # Send the forwarded email
+            success, error = self.send_email(
+                to=to,
+                subject=forward_subject,
+                body=forward_body,
+                body_html=forward_html,
+                cc=cc,
+                add_signature=True
+            )
+
+            if success:
+                self.logger.info(f"Email forwarded successfully to {to}")
+                self._log_to_discord("forward_email", {
+                    "original_from": original_from,
+                    "forwarded_to": to,
+                    "subject": forward_subject
+                }, success=True)
+
+            return success, error
+
+        except Exception as e:
+            error = str(e)
+            self.logger.exception(f"Failed to forward email: {e}")
+            self._log_to_discord("forward_email", {
+                "email_id": original_email_id,
+                "to": to
             }, success=False, error=error)
             return False, error
 

@@ -15,7 +15,15 @@ logger = logging.getLogger('assaultron.agent_tools')
 # EMAIL TOOLS
 # ============================================================================
 
-def send_email(to: str, subject: str, body: str, body_html: Optional[str] = None) -> Dict[str, Any]:
+def send_email(
+    to: str,
+    subject: str,
+    body: str,
+    body_html: Optional[str] = None,
+    cc: Optional[List[str]] = None,
+    bcc: Optional[List[str]] = None,
+    add_signature: bool = True
+) -> Dict[str, Any]:
     """
     Send an email via the AI's email account.
 
@@ -24,22 +32,32 @@ def send_email(to: str, subject: str, body: str, body_html: Optional[str] = None
         subject: Email subject
         body: Plain text email body
         body_html: Optional HTML email body
+        cc: Optional list of CC recipients
+        bcc: Optional list of BCC recipients
+        add_signature: Whether to add automatic signature (default: True)
 
     Returns:
         Dict with success status and error message if failed
     """
     try:
         email_manager = get_email_manager()
-        success, error = email_manager.send_email(to, subject, body, body_html)
+        success, error = email_manager.send_email(
+            to, subject, body, body_html, cc, bcc, add_signature
+        )
 
         if success:
             logger.info(f"Email sent successfully to {to}")
-            return {
+            result = {
                 "success": True,
                 "to": to,
                 "subject": subject,
                 "message": "Email sent successfully"
             }
+            if cc:
+                result["cc"] = cc
+            if bcc:
+                result["bcc"] = f"{len(bcc)} recipient(s)"
+            return result
         else:
             logger.error(f"Failed to send email: {error}")
             return {
@@ -113,6 +131,103 @@ def get_email_status() -> Dict[str, Any]:
         }
     except Exception as e:
         logger.exception(f"Email status tool error: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+def reply_to_email(
+    email_id: str,
+    reply_body: str,
+    reply_body_html: Optional[str] = None,
+    cc: Optional[List[str]] = None,
+    folder: str = "INBOX"
+) -> Dict[str, Any]:
+    """
+    Reply to an existing email.
+
+    Args:
+        email_id: ID of the email to reply to
+        reply_body: Plain text reply body
+        reply_body_html: Optional HTML reply body
+        cc: Optional list of CC recipients
+        folder: Email folder containing the original email
+
+    Returns:
+        Dict with success status and error message if failed
+    """
+    try:
+        email_manager = get_email_manager()
+        success, error = email_manager.reply_to_email(
+            email_id, reply_body, reply_body_html, cc, folder
+        )
+
+        if success:
+            logger.info(f"Reply sent successfully for email {email_id}")
+            return {
+                "success": True,
+                "email_id": email_id,
+                "message": "Reply sent successfully"
+            }
+        else:
+            logger.error(f"Failed to reply to email: {error}")
+            return {
+                "success": False,
+                "error": error or "Unknown error"
+            }
+
+    except Exception as e:
+        logger.exception(f"Reply email tool error: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+
+def forward_email(
+    email_id: str,
+    to: str,
+    forward_message: Optional[str] = None,
+    cc: Optional[List[str]] = None,
+    folder: str = "INBOX"
+) -> Dict[str, Any]:
+    """
+    Forward an existing email to another recipient.
+
+    Args:
+        email_id: ID of the email to forward
+        to: Recipient email address
+        forward_message: Optional message to add before forwarded content
+        cc: Optional list of CC recipients
+        folder: Email folder containing the original email
+
+    Returns:
+        Dict with success status and error message if failed
+    """
+    try:
+        email_manager = get_email_manager()
+        success, error = email_manager.forward_email(
+            email_id, to, forward_message, cc, folder
+        )
+
+        if success:
+            logger.info(f"Email {email_id} forwarded successfully to {to}")
+            return {
+                "success": True,
+                "email_id": email_id,
+                "to": to,
+                "message": "Email forwarded successfully"
+            }
+        else:
+            logger.error(f"Failed to forward email: {error}")
+            return {
+                "success": False,
+                "error": error or "Unknown error"
+            }
+
+    except Exception as e:
+        logger.exception(f"Forward email tool error: {e}")
         return {
             "success": False,
             "error": str(e)
@@ -429,7 +544,7 @@ AGENT_TOOLS = {
     # Email tools
     "send_email": {
         "function": send_email,
-        "description": "Send an email to a recipient. Args: to (str), subject (str), body (str), body_html (optional str)",
+        "description": "Send an email to a recipient. Args: to (str), subject (str), body (str), body_html (optional str), cc (optional list), bcc (optional list), add_signature (bool, default True)",
         "category": "email"
     },
     "read_emails": {
@@ -440,6 +555,16 @@ AGENT_TOOLS = {
     "get_email_status": {
         "function": get_email_status,
         "description": "Get email manager status and configuration. No arguments required.",
+        "category": "email"
+    },
+    "reply_to_email": {
+        "function": reply_to_email,
+        "description": "Reply to an existing email. Args: email_id (str), reply_body (str), reply_body_html (optional str), cc (optional list), folder (str, default 'INBOX')",
+        "category": "email"
+    },
+    "forward_email": {
+        "function": forward_email,
+        "description": "Forward an email to another recipient. Args: email_id (str), to (str), forward_message (optional str), cc (optional list), folder (str, default 'INBOX')",
         "category": "email"
     },
 

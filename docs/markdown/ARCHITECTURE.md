@@ -262,8 +262,8 @@ Dialogue Text → xVAsynth API → WAV File → audio_output/ → Frontend Playb
 - **File Operations**: create_file, edit_file, read_file, delete_file, create_folder, list_files
 - **System**: run_command (sandboxed)
 - **Web**: web_search (Brave API)
-- **Email**: send_email, read_emails (if configured)
-- **Git**: git_clone, git_commit, git_push, git_pull (if configured)
+- **Email**: send_email, read_emails, reply_to_email, forward_email, get_email_status (if configured)
+- **Git**: git_clone, git_commit, git_push, git_pull, list_git_repositories, git_status, get_git_config (if configured)
 
 **Agent Prompt Structure**:
 ```
@@ -353,27 +353,88 @@ Mood: attachment=0.7, boredom=0.3
 
 #### Email Manager (`email_manager.py`)
 
-**Purpose**: Send and read emails on behalf of the AI agent.
+**Purpose**: Complete email management system for AI agent communications.
 
 **Features**:
-- Send emails via SMTP
-- Read emails via IMAP
-- Rate limiting (configurable in .env)
-- Domain whitelist for security
-- HTML and plain text support
+- **Send emails** via SMTP with CC/BCC support
+- **Read emails** from IMAP folders
+- **Reply to emails** with quoted original messages
+- **Forward emails** with custom messages
+- **Automatic email signature** (configurable)
+- **Rate limiting** (default: 10/hour, configurable in .env)
+- **Domain whitelist** for security
+- **HTML and plain text** support
+- **Discord logging** for all email activities
+
+**Email Operations**:
+
+1. **send_email(to, subject, body, body_html, cc, bcc, add_signature)**
+   - Supports multiple recipients (comma-separated or list)
+   - Optional CC and BCC recipients
+   - Automatic signature appended (can be disabled)
+   - Domain validation for all recipients
+   - Rate limit checking before send
+
+2. **reply_to_email(email_id, reply_body, reply_body_html, cc, folder)**
+   - Fetches original email from IMAP
+   - Automatically adds "Re:" prefix to subject
+   - Quotes original message in reply
+   - Preserves conversation context
+
+3. **forward_email(email_id, to, forward_message, cc, folder)**
+   - Forwards complete email with headers
+   - Adds "Fwd:" prefix to subject
+   - Optional custom message before forwarded content
+   - Includes original From/Date/Subject/To headers
+
+4. **read_emails(folder, limit, unread_only)**
+   - Reads from specified IMAP folder (default: INBOX)
+   - Filters for unread messages (configurable)
+   - Returns structured email objects with id, from, to, subject, date, body
+
+**Email Signature**:
+- Automatically generated in plain text and HTML formats
+- Includes AI name, role, email address, and branding
+- Configurable via `EMAIL_SIGNATURE_ENABLED` and `AI_NAME` environment variables
+- Example format:
+  ```
+  ---
+  Assaultron AI
+  Autonomous AI Assistant
+  Email: asr-7@camolover.dev
+  Powered by Camolover
+  ```
+
+**Security Features**:
+- Domain whitelist validation (all recipients checked)
+- Rate limiting with timestamp tracking (thread-safe)
+- Enabled/disabled via `EMAIL_ENABLED` flag
+- Discord webhook logging for monitoring
+- SMTP with TLS encryption (STARTTLS)
+- IMAP with SSL encryption
 
 **Configuration** (.env):
-```
-AI_EMAIL_ADDRESS=
-AI_EMAIL_PASSWORD=
-SMTP_SERVER=smtp.gmail.com
+```bash
+AI_EMAIL_ADDRESS=asr-7@camolover.dev
+AI_EMAIL_PASSWORD=your_password
+SMTP_SERVER=smtp.server.com
 SMTP_PORT=587
-IMAP_SERVER=imap.gmail.com
+IMAP_SERVER=imap.server.com
 IMAP_PORT=993
-EMAIL_ENABLED=false
+EMAIL_ENABLED=true
 EMAIL_RATE_LIMIT=10
-ALLOWED_EMAIL_DOMAINS=gmail.com,example.com
+ALLOWED_EMAIL_DOMAINS=gmail.com,yahoo.com,example.com
+EMAIL_SIGNATURE_ENABLED=true
+AI_NAME=Assaultron AI
+DISCORD_LOG_URL=your_webhook_url
 ```
+
+**Agent Tool Integration** (`agent_tools.py`):
+- `send_email()` - Send new emails with full CC/BCC support
+- `read_emails()` - Check inbox for messages
+- `reply_to_email()` - Intelligently reply to existing emails
+- `forward_email()` - Forward emails to other recipients
+- `get_email_status()` - Check email system configuration
 
 #### Git Manager (`git_manager.py`)
 
@@ -567,9 +628,11 @@ def process_message(user_message, image_path=None) -> dict:
 
 ### Email Endpoints (auth required)
 
-- `POST /api/email/send` - Send email
+- `POST /api/email/send` - Send email (supports cc, bcc, add_signature params)
+- `POST /api/email/reply` - Reply to existing email
+- `POST /api/email/forward` - Forward email to another recipient
 - `GET /api/email/read` - Read emails from inbox
-- `GET /api/email/status` - Email manager status
+- `GET /api/email/status` - Email manager status and configuration
 
 ### Git Endpoints (auth required)
 

@@ -202,18 +202,20 @@ File Operations:
 
 Web & Communication:
 9. web_search(query: str) - Search the web using Brave Search API
-10. send_email(to: str, subject: str, body: str, body_html: str = None) - Send an email
-11. read_emails(folder: str = "INBOX", limit: int = 5, unread_only: bool = True) - Read emails
-12. get_email_status() - Get email manager status
+10. send_email(to: str, subject: str, body: str, body_html: str = None, cc: list = None, bcc: list = None, add_signature: bool = True) - Send an email with optional CC/BCC
+11. read_emails(folder: str = "INBOX", limit: int = 5, unread_only: bool = True) - Read emails from inbox
+12. reply_to_email(email_id: str, reply_body: str, reply_body_html: str = None, cc: list = None, folder: str = "INBOX") - Reply to an email
+13. forward_email(email_id: str, to: str, forward_message: str = None, cc: list = None, folder: str = "INBOX") - Forward an email
+14. get_email_status() - Get email manager status
 
 Git Operations (Multi-Repository Support):
-13. list_git_repositories() - List all git repos in sandbox with their info
-14. git_clone(repo_url: str, repo_path: str, use_ssh: bool = True) - Clone a repo into sandbox folder (e.g., repo_path="my-project")
-15. git_status(repo_path: str) - Get repo status (e.g., repo_path="my-project")
-16. git_commit(repo_path: str, message: str, files: list = None) - Create commit in specific repo (conventional format required)
-17. git_push(repo_path: str, branch: str = "main") - Push commits from specific repo
-18. git_pull(repo_path: str, branch: str = "main") - Pull changes to specific repo
-19. get_git_config() - Get git configuration status
+15. list_git_repositories() - List all git repos in sandbox with their info
+16. git_clone(repo_url: str, repo_path: str, use_ssh: bool = True) - Clone a repo into sandbox folder (e.g., repo_path="my-project")
+17. git_status(repo_path: str) - Get repo status (e.g., repo_path="my-project")
+18. git_commit(repo_path: str, message: str, files: list = None) - Create commit in specific repo (conventional format required)
+19. git_push(repo_path: str, branch: str = "main") - Push commits from specific repo
+20. git_pull(repo_path: str, branch: str = "main") - Pull changes to specific repo
+21. get_git_config() - Get git configuration status
 
 IMPORTANT GIT NOTES:
 - You can work on multiple git projects simultaneously in different folders

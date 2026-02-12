@@ -1879,20 +1879,28 @@ def send_email():
     subject = data.get('subject')
     body = data.get('body')
     body_html = data.get('body_html')
+    cc = data.get('cc')
+    bcc = data.get('bcc')
+    add_signature = data.get('add_signature', True)
 
     if not to or not subject or not body:
         return jsonify({"error": "Missing required fields: to, subject, body"}), 400
 
     email_manager = get_email_manager()
-    success, error = email_manager.send_email(to, subject, body, body_html)
+    success, error = email_manager.send_email(to, subject, body, body_html, cc, bcc, add_signature)
 
     if success:
-        return jsonify({
+        result = {
             "success": True,
             "message": "Email sent successfully",
             "to": to,
             "subject": subject
-        })
+        }
+        if cc:
+            result["cc"] = cc
+        if bcc:
+            result["bcc"] = f"{len(bcc)} recipient(s)" if isinstance(bcc, list) else bcc
+        return jsonify(result)
     else:
         return jsonify({
             "success": False,
@@ -1937,6 +1945,71 @@ def get_email_status():
     status = email_manager.get_status()
 
     return jsonify(status)
+
+
+@app.route('/api/email/reply', methods=['POST'])
+@auth.login_required
+def reply_email():
+    """Reply to an email"""
+    from email_manager import get_email_manager
+
+    data = request.get_json()
+    email_id = data.get('email_id')
+    reply_body = data.get('reply_body')
+    reply_body_html = data.get('reply_body_html')
+    cc = data.get('cc')
+    folder = data.get('folder', 'INBOX')
+
+    if not email_id or not reply_body:
+        return jsonify({"error": "Missing required fields: email_id, reply_body"}), 400
+
+    email_manager = get_email_manager()
+    success, error = email_manager.reply_to_email(email_id, reply_body, reply_body_html, cc, folder)
+
+    if success:
+        return jsonify({
+            "success": True,
+            "message": "Reply sent successfully",
+            "email_id": email_id
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": error
+        }), 400
+
+
+@app.route('/api/email/forward', methods=['POST'])
+@auth.login_required
+def forward_email():
+    """Forward an email"""
+    from email_manager import get_email_manager
+
+    data = request.get_json()
+    email_id = data.get('email_id')
+    to = data.get('to')
+    forward_message = data.get('forward_message')
+    cc = data.get('cc')
+    folder = data.get('folder', 'INBOX')
+
+    if not email_id or not to:
+        return jsonify({"error": "Missing required fields: email_id, to"}), 400
+
+    email_manager = get_email_manager()
+    success, error = email_manager.forward_email(email_id, to, forward_message, cc, folder)
+
+    if success:
+        return jsonify({
+            "success": True,
+            "message": "Email forwarded successfully",
+            "email_id": email_id,
+            "to": to
+        })
+    else:
+        return jsonify({
+            "success": False,
+            "error": error
+        }), 400
 
 
 @app.route('/api/git/repositories', methods=['GET'])
