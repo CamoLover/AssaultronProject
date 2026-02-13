@@ -299,6 +299,83 @@ Action: Final Answer: "Website created! Check out lego_website.html"
 
 ---
 
+### Discord Bot Integration (`discord/bot.js`)
+
+**Purpose**: Multi-channel user interaction via Discord platform.
+
+**Technology**: Node.js with discord.js library
+
+**Key Features**:
+- **Message Handling**:
+  - Responds to bot mentions in Discord servers
+  - Supports Direct Messages (DMs)
+  - Tracks active channel for multi-location conversations
+  - Auto-splits responses exceeding 2000-character Discord limit
+  - Resets notification counter on user interaction
+
+- **Slash Commands**:
+  - `/voice activate|deactivate|status` - Control xVAsynth voice system
+  - `/llm change [provider]|status` - Switch between ollama/gemini/openrouter
+  - Uses Discord embeds for formatted responses
+
+**Voice Message Integration**:
+
+The Discord bot can send AI responses as native Discord voice messages when voice is enabled:
+
+**Voice Message Pipeline**:
+```
+AI Dialogue → xVAsynth (WAV) → Discord Bot Downloads → FFmpeg Conversion (WAV→OGG Opus) → Discord CDN Upload → Voice Message Posted
+```
+
+**Technical Flow**:
+1. Bot listens to `/api/voice/events` SSE stream
+2. Receives `audio_ready` event with WAV file URL
+3. Downloads WAV file from AI server via authenticated request
+4. Converts WAV to OGG Opus using FFmpeg (48kHz, 64k bitrate)
+5. Extracts audio metadata (duration via ffprobe, waveform data)
+6. Requests upload URL from Discord API
+7. Uploads OGG file to Discord CDN
+8. Posts message with `IS_VOICE_MESSAGE` flag and metadata
+9. Cleans up temporary files
+
+**FFmpeg Integration**:
+- Checks for FFmpeg availability on startup
+- Provides user-friendly error messages if missing
+- Uses `ffmpeg` for conversion and `ffprobe` for metadata extraction
+
+**Server-Sent Events (SSE) Connection**:
+- Maintains persistent connection to `/api/voice/events`
+- Listens for three event types:
+  - `audio_ready` - Triggers voice message sending
+  - `agent_completion` - Broadcasts agent task results to channel
+  - `voice_notification` - Handles voice system status changes
+- Auto-reconnects if connection drops while voice is enabled
+- Only active when voice system is running
+
+**Integration with Main System**:
+- Authenticates with AI server using HTTP Basic Auth (API_USERNAME, API_PASSWORD)
+- Sends messages to `/api/chat` endpoint with `source: "discord"` tag
+- Posts bot status to `/api/monitoring/discord_status` for dashboard tracking
+- Resets notification system on user activity
+
+**Configuration** (.env):
+```bash
+DISCORD_BOT_TOKEN=your_bot_token
+DISCORD_CLIENT_ID=your_client_id
+DISCORD_GUILD_ID=optional_guild_id
+API_BASE_URL=http://127.0.0.1:8080
+API_USERNAME=your_api_username
+API_PASSWORD=your_api_password
+```
+
+**Implementation Notes**:
+- Node.js subprocess managed by `run.py`
+- Handles Discord API rate limits gracefully
+- Tracks pending voice responses to prevent duplicates
+- Logs all operations for debugging
+
+---
+
 ### Notification System (`notification_manager.py`)
 
 **Purpose**: Proactive attention requests via Discord webhooks.
@@ -459,6 +536,184 @@ GIT_ENABLED=false
 
 ---
 
+### Monitoring & Observability System
+
+**Purpose**: Production-grade system performance monitoring and metrics collection.
+
+#### Monitoring Service (`monitoring_service.py`)
+
+**Core Component**: `MetricsCollector` class - Thread-safe metrics tracking
+
+**Metrics Tracked**:
+
+**1. API Response Times**:
+- Endpoint path
+- Duration in milliseconds
+- HTTP status code
+- Timestamp
+- Calculates min/avg/max statistics
+
+**2. Voice Processing Times**:
+- Text length
+- Synthesis duration (ms)
+- Success/failure status
+- Tracks successful generations for performance analysis
+
+**3. LLM Requests**:
+- Model name (Ollama/Gemini/OpenRouter)
+- Prompt tokens
+- Response tokens
+- Total tokens consumed
+- Inference duration (ms)
+- Cumulative token usage tracking
+
+**4. System Delays**:
+- Component name (e.g., "cognitive_engine", "behavior_arbiter")
+- Duration in milliseconds
+- Optional details field
+- Identifies bottlenecks between system components
+
+**5. Message Pipeline**:
+- Full message processing stages
+- Timing for each pipeline step
+- End-to-end latency tracking
+
+**6. Error Logging**:
+- Timestamp
+- Component that errored
+- Error message
+- Exception details
+- Last 1000 errors stored
+
+**Performance Counters**:
+- `total_messages` - Messages processed through pipeline
+- `total_api_calls` - All API endpoint calls
+- `total_voice_generated` - Successful voice syntheses
+- `total_llm_tokens` - Cumulative token usage across all models
+- `total_errors` - All errors encountered
+
+**System Status Flags**:
+- `ai_active` - AI core running status
+- `voice_enabled` - Voice system active status
+- `discord_bot_active` - Discord bot connection status
+- `current_requests` - Concurrent request counter
+
+**Data Structure**:
+- Thread-safe operations using `threading.Lock()`
+- Configurable history size (default: 1000 items)
+- Uses `collections.deque` with `maxlen` for automatic rotation
+- In-memory storage (no database required)
+
+#### Monitoring Dashboard (`monitoring_dashboard.py`)
+
+**Purpose**: Live web interface for real-time metrics visualization.
+
+**Port**: 8081 (separate Flask instance from main AI on 8080)
+
+**Dashboard Features**:
+
+**1. Live Status Panel**:
+- System uptime (formatted as hours:minutes:seconds)
+- AI Core status indicator (Online/Offline with color-coded badges)
+- Voice Synthesis status indicator
+- Discord Bot status indicator
+- Total messages processed counter
+
+**2. Real-time Metrics Charts** (Chart.js visualizations):
+- **API Performance Panel**: Average/min/max response times with 20-point line chart
+- **Voice Processing Panel**: Voice synthesis performance with line chart
+- **LLM Performance Panel**: Inference time and average tokens per request
+- Auto-updates every second via SSE stream
+
+**3. Recent Errors Panel**:
+- Scrollable log of last 50 errors
+- Timestamp, component, and error message
+- Auto-scrolls to latest error
+
+**4. Dark Mode Toggle**:
+- Persistent preference via localStorage
+- Synchronized color scheme across all charts
+- Smooth transitions between themes
+
+**Export Capabilities**:
+- **JSON Export**: Download all metrics via `/api/export` endpoint
+- **Markdown Reports**: Auto-generated on system shutdown
+  - Saved to `/report/monitoring_report_YYYYMMDD_HHMMSS.md`
+  - Contains full metrics summary, performance stats, error logs
+  - Triggered by `atexit` hook in `run.py`
+
+**API Endpoints** (Dashboard on port 8081):
+- `GET /` - Dashboard HTML interface
+- `GET /api/stats` - Current statistics summary (JSON)
+- `GET /api/metrics/<metric_name>` - Time series data for specific metric
+- `GET /api/stream` - Server-Sent Events stream (1-second interval updates)
+- `GET /api/export` - Export all metrics as JSON
+
+**Integration with Main System**:
+- Main AI server (`main.py`) imports `get_monitoring_service()` singleton
+- Records metrics at key points in message processing pipeline
+- Discord bot posts status via `POST /api/monitoring/discord_status`
+- No performance impact on main system (async metrics collection)
+
+**Startup**:
+- Launched first by `run.py` to track all other services
+- Runs in daemon thread
+- Graceful shutdown with report generation
+
+---
+
+### Multi-Service Architecture (`run.py`)
+
+**Purpose**: Unified launcher for all Assaultron system services.
+
+**Toggleable Services** (boolean configuration flags):
+```python
+START_ASR = True            # ASR-7 AI Interface (main.py) on port 8080
+START_DOCS = True           # Documentation website on port 8000
+START_DISCORD_BOT = True    # Discord bot (Node.js)
+START_MONITORING = True     # Monitoring dashboard on port 8081
+```
+
+**Service Startup Order** (optimized for dependencies):
+1. **Monitoring Dashboard** (port 8081) - Starts first to track all other services
+2. **Discord Bot** (Node.js subprocess) - Connects to AI server and Discord
+3. **ASR-7 AI Interface** (port 8080) - Main Flask application (daemon or main thread)
+4. **Documentation Website** (port 8000) - HTTP server (blocking call, keeps main thread alive)
+
+**Threading Model**:
+- **Monitoring**: Daemon thread running `monitoring_dashboard.start_monitoring_dashboard()`
+- **Discord Bot**: Daemon thread running `subprocess.run(['node', 'bot.js'])`
+- **ASR-7**: Daemon thread running `app.run()` (if docs enabled) OR main thread (if docs disabled)
+- **Docs**: Blocking call to `httpd.serve_forever()` in main thread
+
+**Shutdown Management**:
+- **Graceful Shutdown**: Ctrl+C signal handler catches `KeyboardInterrupt`
+- **Monitoring Report Generation**: `atexit` hook calls `generate_shutdown_report()`
+  - Creates timestamped markdown report in `/report/` directory
+  - Contains final metrics snapshot, performance summary, error logs
+- **Service Cleanup**: All daemon threads terminate when main thread exits
+
+**Service Ports Summary**:
+| Service | Port | Technology |
+|---------|------|------------|
+| ASR-7 AI Interface | 8080 | Flask (Python) |
+| Documentation Website | 8000 | HTTP Server (Python) |
+| Monitoring Dashboard | 8081 | Flask (Python) |
+| Discord Bot | - | discord.js (Node.js) |
+
+**Requirements Check**:
+- Verifies Flask and requests packages installed
+- Auto-installs from `requirements.txt` if missing
+- Node.js and npm required for Discord bot
+
+**Process Management**:
+- Each service runs independently
+- Failures in one service don't crash others (except main AI crashes docs)
+- Logs startup status for each service
+- Clear console output showing access URLs
+
+---
+
 ## Main Application (`main.py`)
 
 ### EmbodiedAssaultronCore Class
@@ -594,6 +849,14 @@ def process_message(user_message, image_path=None) -> dict:
 - `GET /api/voice/status` - Voice system status (exempt from rate limit)
 - `GET /api/voice/audio/<filename>` - Serve generated audio files
 - `GET /api/voice/events` - SSE stream for real-time audio notifications
+  - **Purpose**: Broadcasts voice-related events to connected clients (web UI, Discord bot)
+  - **Event Types**:
+    - `audio_ready` - Emitted when WAV file is generated (includes filename and URL)
+    - `agent_completion` - Sent when autonomous agent completes task
+    - `voice_notification` - Voice system status changes
+  - **Keepalive**: 30-second timeout to maintain connection
+  - **Used by**: Frontend for audio playback notifications, Discord bot for voice message triggering
+  - **Authentication**: Public endpoint (no auth required)
 
 ### Vision System Endpoints
 
@@ -649,6 +912,20 @@ def process_message(user_message, image_path=None) -> dict:
 - `GET /api/settings/provider` - Get current LLM provider
 - `POST /api/settings/provider` - Switch LLM provider (ollama/gemini/openrouter)
 
+### Monitoring Endpoints (auth required)
+
+- `POST /api/monitoring/discord_status` - Update Discord bot status
+  - **Body**: `{"active": true/false}`
+  - **Purpose**: Discord bot reports connection status to monitoring dashboard
+  - **Updates**: `discord_bot_active` flag in system status
+
+**Note**: Monitoring dashboard runs on separate port 8081 with its own API:
+- `GET /` (port 8081) - Monitoring dashboard UI
+- `GET /api/stats` (port 8081) - Current statistics summary
+- `GET /api/metrics/<metric_name>` (port 8081) - Time series data
+- `GET /api/stream` (port 8081) - SSE stream for real-time updates
+- `GET /api/export` (port 8081) - Export all metrics as JSON
+
 ---
 
 ## Configuration (`.env` and `config.py`)
@@ -678,6 +955,17 @@ AI_MODEL=gemma3:4b
 ```bash
 XVASYNTH_PATH=./Content/xVAsynth
 VOICE_MODEL=f4_robot_assaultron
+```
+
+### Discord Bot Configuration (.env)
+
+```bash
+DISCORD_BOT_TOKEN=your_bot_token
+DISCORD_CLIENT_ID=your_client_id
+DISCORD_GUILD_ID=optional_guild_id  # For guild-specific slash commands
+API_BASE_URL=http://127.0.0.1:8080  # AI server URL
+API_USERNAME=your_api_username       # For authenticating to AI server
+API_PASSWORD=your_api_password       # For authenticating to AI server
 ```
 
 `config.py` loads these values using `os.getenv()` with sensible defaults.
@@ -716,6 +1004,13 @@ Contains `ASSAULTRON_PROMPT` - the core system prompt defining ASR-7's personali
 **Chat Images**:
 - `chat_images/*.jpg|png|gif|webp` - User-uploaded image attachments
 
+**Monitoring Reports**:
+- `report/monitoring_report_*.md` - Generated on system shutdown with timestamp
+  - Full metrics summary (API, voice, LLM performance)
+  - Performance statistics (min/avg/max for all tracked metrics)
+  - Error logs
+  - System status snapshot
+
 ---
 
 ## Security Features
@@ -743,6 +1038,15 @@ Contains `ASSAULTRON_PROMPT` - the core system prompt defining ASR-7's personali
 - Rate limiting: Configurable (default 10/hour)
 - Domain whitelist: `ALLOWED_EMAIL_DOMAINS`
 - Only sends if `EMAIL_ENABLED=true`
+
+### Discord Bot Security
+
+- **Token-based Authentication**: Securely connects to Discord using `DISCORD_BOT_TOKEN`
+- **HTTP Basic Auth**: Authenticates to AI server using username/password
+- **No System Access**: Bot has no command execution privileges on host system
+- **Sandboxed Audio Conversion**: Temporary WAV/OGG files cleaned up after processing
+- **Rate Limit Compliance**: Respects Discord API rate limits
+- **No Privilege Escalation**: Limited to Discord API and AI server communication only
 
 ---
 
@@ -782,11 +1086,29 @@ numpy>=1.24.0
 google-generativeai>=0.3.0  # For Gemini support
 ```
 
+### Discord Bot (Node.js)
+
+```json
+{
+  "dependencies": {
+    "discord.js": "^14.x",
+    "dotenv": "^16.x",
+    "axios": "^1.x",
+    "eventsource": "^2.x"
+  }
+}
+```
+
+**System Dependencies**:
+- **FFmpeg** - Required for WAV to OGG Opus conversion for Discord voice messages
+  - Used by Discord bot for audio format conversion
+
 ### Optional
 
 - Ollama (local LLM server)
 - Brave Search API key (for web search)
 - Discord webhook URLs (for notifications)
+- Discord bot token (for Discord integration)
 
 ---
 
@@ -832,6 +1154,8 @@ google-generativeai>=0.3.0  # For Gemini support
   "mood": {"curiosity": 0.5, "irritation": 0.0, ...}
 }
 ```
+
+**Note**: All steps in this flow are tracked by the monitoring system, recording API response times, LLM inference duration, voice processing time, and any errors encountered. Metrics are available in real-time on the monitoring dashboard (port 8081).
 
 ---
 
@@ -914,6 +1238,25 @@ google-generativeai>=0.3.0  # For Gemini support
 - **Image Generation**: Create visualizations for concepts
 - **Video Understanding**: Process video streams for complex scenarios
 
+### Monitoring & Observability Enhancements
+
+- **Alerting System**: Notifications for performance degradation thresholds
+- **Historical Metrics Database**: Persistent storage beyond in-memory (SQLite/PostgreSQL)
+- **Grafana/Prometheus Integration**: Industry-standard monitoring dashboards
+- **Custom Metric Thresholds**: User-configurable alerts for API latency, error rates
+- **Distributed Tracing**: Request correlation across components
+- **Performance Profiling**: Automatic detection of bottlenecks
+
+### Discord Bot Enhancements
+
+- **Multi-Server Support**: Per-server conversation context and settings
+- **Voice Channel Integration**: Join voice channels to speak audio directly
+- **Reaction-Based Interactions**: React to messages for quick responses
+- **Discord Slash Command Autocomplete**: Context-aware parameter suggestions
+- **Threaded Conversations**: Keep long discussions organized in Discord threads
+- **Server-Specific Personalities**: Different behavior per Discord server
+- **Role-Based Permissions**: Control who can use certain commands
+
 ---
 
 ## Developer Notes
@@ -958,11 +1301,23 @@ The architecture successfully bridges the gap between abstract AI reasoning and 
 
 ---
 
-**Document Version**: 1.1
-**Last Updated**: 2026-02-10
-**Architecture Status**: Production (Embodied Agent v2.0)
+**Document Version**: 1.2
+**Last Updated**: 2026-02-13
+**Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure)
 
-**Changelog v1.1**:
+**Changelog v1.2** (2026-02-13):
+- **Added Monitoring & Observability System**: Complete documentation of production-grade metrics collection, live dashboard (port 8081), and performance tracking
+- **Added Discord Bot Integration**: Full Discord bot with voice message support, slash commands (/voice, /llm), SSE integration, and FFmpeg audio conversion
+- **Added Multi-Service Architecture**: Documented run.py service orchestrator with toggleable services (ASR, Docs, Discord Bot, Monitoring)
+- **Updated API Endpoints**: Added /api/voice/events (SSE stream), /api/monitoring/discord_status, and monitoring dashboard endpoints
+- **Updated Configuration**: Added Discord bot environment variables (DISCORD_BOT_TOKEN, etc.)
+- **Updated Dependencies**: Added Node.js packages (discord.js, axios, eventsource) and FFmpeg system dependency
+- **Updated Security Features**: Documented Discord bot security model
+- **Updated Data Persistence**: Added monitoring report generation (report/*.md)
+- **Updated Future Enhancements**: Added monitoring alerting, Grafana integration, Discord voice channel support, and multi-server context
+- **Enhanced Execution Flow**: Added note about monitoring tracking all pipeline steps
+
+**Changelog v1.1** (2026-02-10):
 - Corrected memory limits: Long-term memories max 10 (not 50), conversation history max 100
 - Moved all LLM and voice configuration to .env for better deployment practices
 - Clarified mood state integration: Mood DOES influence AI responses with behavioral guidance

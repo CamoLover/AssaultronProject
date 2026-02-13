@@ -4,6 +4,292 @@ A comprehensive visual guide to the Assaultron Project's embodied AI architectur
 
 ---
 
+## Multi-Service Architecture
+
+```mermaid
+graph TB
+    subgraph "run.py - Service Orchestrator"
+        RunPy[run.py Launcher]
+        Flags{Configuration Flags}
+    end
+
+    subgraph "Service 1: Monitoring Dashboard - Port 8081"
+        MonDash[monitoring_dashboard.py]
+        MonService[monitoring_service.py<br/>MetricsCollector]
+        DashUI[Dashboard UI<br/>Live Charts & Stats]
+    end
+
+    subgraph "Service 2: Discord Bot - Node.js"
+        DiscordBot[discord/bot.js]
+        DiscordAPI[Discord API<br/>Gateway Connection]
+        SSEListener[SSE Event Listener<br/>/api/voice/events]
+        FFmpeg[FFmpeg Converter<br/>WAV → OGG Opus]
+    end
+
+    subgraph "Service 3: ASR-7 AI Interface - Port 8080"
+        MainApp[main.py<br/>EmbodiedAssaultronCore]
+        CognitiveLayer[Cognitive Layer]
+        BehavioralLayer[Behavioral Layer]
+        VoiceSystem[Voice System]
+        VisionSystem[Vision System]
+    end
+
+    subgraph "Service 4: Documentation - Port 8000"
+        DocsServer[HTTP Server<br/>SimpleHTTPRequestHandler]
+        DocsHTML[docs/**/*.html]
+    end
+
+    subgraph "External Systems"
+        DiscordServers[Discord Servers]
+        Webcam[Webcam Device]
+        xVAsynth[xVAsynth TTS]
+    end
+
+    RunPy --> Flags
+    Flags -->|START_MONITORING=True| MonDash
+    Flags -->|START_DISCORD_BOT=True| DiscordBot
+    Flags -->|START_ASR=True| MainApp
+    Flags -->|START_DOCS=True| DocsServer
+
+    MonDash --> MonService
+    MonService --> DashUI
+
+    DiscordBot --> DiscordAPI
+    DiscordBot --> SSEListener
+    DiscordBot --> FFmpeg
+    DiscordAPI <--> DiscordServers
+
+    SSEListener --> MainApp
+    DiscordBot -->|POST /api/chat| MainApp
+    DiscordBot -->|POST /api/monitoring/discord_status| MainApp
+
+    MainApp --> CognitiveLayer
+    MainApp --> BehavioralLayer
+    MainApp --> VoiceSystem
+    MainApp --> VisionSystem
+    MainApp -->|Record Metrics| MonService
+
+    VoiceSystem --> xVAsynth
+    VisionSystem --> Webcam
+
+    DocsServer --> DocsHTML
+
+    classDef orchestrator fill:#fce4ec,stroke:#c2185b,stroke-width:3px
+    classDef service fill:#e3f2fd,stroke:#1565c0,stroke-width:2px
+    classDef external fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
+
+    class RunPy,Flags orchestrator
+    class MonDash,MonService,DashUI,DiscordBot,MainApp,DocsServer service
+    class DiscordServers,Webcam,xVAsynth,DiscordAPI external
+```
+
+---
+
+## Monitoring System Architecture
+
+```mermaid
+graph TB
+    subgraph "Metrics Sources"
+        APICall[API Endpoints<br/>/api/chat, /api/voice, etc.]
+        VoiceSynth[Voice Synthesis<br/>xVAsynth]
+        LLMRequest[LLM Inference<br/>Ollama/Gemini/OpenRouter]
+        SystemDelay[System Components<br/>Cognitive/Behavioral/Motion]
+        Errors[Error Handlers<br/>try/except blocks]
+    end
+
+    subgraph "MetricsCollector - Thread-Safe"
+        Collector[MetricsCollector Singleton]
+        Lock[threading.Lock]
+
+        subgraph "Metrics Storage (deque maxlen=1000)"
+            APIMetrics[api_responses<br/>endpoint, duration, status]
+            VoiceMetrics[voice_processing<br/>text_length, duration, success]
+            LLMMetrics[llm_requests<br/>model, tokens, duration]
+            DelayMetrics[system_delays<br/>component, duration]
+            ErrorMetrics[errors<br/>timestamp, component, message]
+        end
+
+        subgraph "Counters"
+            TotalMsgs[total_messages]
+            TotalAPIs[total_api_calls]
+            TotalVoice[total_voice_generated]
+            TotalTokens[total_llm_tokens]
+            TotalErrors[total_errors]
+        end
+
+        subgraph "System Status"
+            AIActive[ai_active: bool]
+            VoiceEnabled[voice_enabled: bool]
+            DiscordActive[discord_bot_active: bool]
+            CurrentReqs[current_requests: int]
+        end
+    end
+
+    subgraph "Monitoring Dashboard - Port 8081"
+        FlaskApp[Flask App<br/>monitoring_dashboard.py]
+
+        subgraph "API Endpoints"
+            StatsAPI[GET /api/stats]
+            StreamSSE[GET /api/stream<br/>SSE every 1s]
+            MetricsAPI[GET /api/metrics/:name]
+            ExportAPI[GET /api/export]
+        end
+
+        subgraph "Dashboard UI"
+            StatusPanel[Live Status Panel<br/>Uptime, Service Indicators]
+            ChartsPanel[Performance Charts<br/>Chart.js Visualizations]
+            ErrorsPanel[Recent Errors Log<br/>Last 50 errors]
+            DarkMode[Dark Mode Toggle<br/>localStorage]
+        end
+    end
+
+    subgraph "Report Generation"
+        ShutdownHook[atexit Hook<br/>in run.py]
+        ReportGen[generate_shutdown_report]
+        MarkdownFile[report/monitoring_report_*.md]
+    end
+
+    APICall -->|record_api_response| Collector
+    VoiceSynth -->|record_voice_processing| Collector
+    LLMRequest -->|record_llm_request| Collector
+    SystemDelay -->|record_system_delay| Collector
+    Errors -->|record_error| Collector
+
+    Collector --> Lock
+    Lock --> APIMetrics
+    Lock --> VoiceMetrics
+    Lock --> LLMMetrics
+    Lock --> DelayMetrics
+    Lock --> ErrorMetrics
+    Lock --> TotalMsgs
+    Lock --> TotalAPIs
+    Lock --> TotalVoice
+    Lock --> TotalTokens
+    Lock --> TotalErrors
+    Lock --> AIActive
+    Lock --> VoiceEnabled
+    Lock --> DiscordActive
+    Lock --> CurrentReqs
+
+    FlaskApp --> StatsAPI
+    FlaskApp --> StreamSSE
+    FlaskApp --> MetricsAPI
+    FlaskApp --> ExportAPI
+
+    StatsAPI --> StatusPanel
+    StreamSSE --> ChartsPanel
+    MetricsAPI --> ChartsPanel
+    ExportAPI --> ReportGen
+
+    StatusPanel --> DarkMode
+    ChartsPanel --> ErrorsPanel
+
+    ShutdownHook --> ReportGen
+    ReportGen --> MarkdownFile
+
+    Collector --> StatsAPI
+    Collector --> StreamSSE
+
+    classDef source fill:#e3f2fd,stroke:#1565c0
+    classDef storage fill:#fff3e0,stroke:#ef6c00
+    classDef dashboard fill:#e8f5e9,stroke:#2e7d32
+    classDef report fill:#f3e5f5,stroke:#4a148c
+
+    class APICall,VoiceSynth,LLMRequest,SystemDelay,Errors source
+    class Collector,Lock,APIMetrics,VoiceMetrics,LLMMetrics,DelayMetrics,ErrorMetrics,TotalMsgs,TotalAPIs,TotalVoice,TotalTokens,TotalErrors,AIActive,VoiceEnabled,DiscordActive,CurrentReqs storage
+    class FlaskApp,StatsAPI,StreamSSE,MetricsAPI,ExportAPI,StatusPanel,ChartsPanel,ErrorsPanel,DarkMode dashboard
+    class ShutdownHook,ReportGen,MarkdownFile report
+```
+
+---
+
+## Discord Bot Integration & Voice Messages
+
+```mermaid
+sequenceDiagram
+    actor DiscordUser
+    participant Discord as Discord Servers
+    participant Bot as discord/bot.js
+    participant SSE as SSE Connection<br/>/api/voice/events
+    participant AI as ASR-7 AI Server<br/>Port 8080
+    participant xVA as xVAsynth
+    participant FFmpeg as FFmpeg Converter
+    participant CDN as Discord CDN
+
+    Note over DiscordUser,CDN: Initialization
+    Bot->>Discord: Login with DISCORD_BOT_TOKEN
+    Discord-->>Bot: Bot online
+    Bot->>AI: POST /api/monitoring/discord_status {active: true}
+
+    Note over DiscordUser,CDN: User activates voice via slash command
+    DiscordUser->>Discord: /voice activate
+    Discord->>Bot: Slash command interaction
+    Bot->>AI: POST /api/voice/start
+    AI->>xVA: Start xVAsynth server
+    xVA-->>AI: Model loaded
+    AI-->>Bot: Voice system active
+    Bot->>SSE: Connect to /api/voice/events
+    Bot->>Discord: ✅ Voice activated! (embed)
+
+    Note over DiscordUser,CDN: Regular chat message
+    DiscordUser->>Discord: @ASR-7 Hey there!
+    Discord->>Bot: Message event
+    Bot->>Bot: Reset notification counter
+    Bot->>AI: POST /api/chat {message, source: "discord"}
+
+    AI->>AI: Process message through<br/>Cognitive → Behavioral → Motion
+    AI->>AI: Generate dialogue response
+    AI->>xVA: Synthesize speech async
+    xVA->>xVA: Generate WAV file
+    xVA-->>AI: audio_output/response.wav
+
+    AI->>SSE: Emit "audio_ready" event<br/>{filename, url}
+    SSE-->>Bot: Event received
+
+    Note over DiscordUser,CDN: Voice message conversion & upload
+    Bot->>AI: GET /api/voice/audio/response.wav
+    AI-->>Bot: WAV file bytes
+    Bot->>Bot: Save temp_voice.wav
+
+    Bot->>FFmpeg: Check ffmpeg availability
+    FFmpeg-->>Bot: Available
+
+    Bot->>FFmpeg: Convert WAV → OGG Opus<br/>48kHz, 64k bitrate
+    FFmpeg-->>Bot: temp_voice.ogg
+
+    Bot->>FFmpeg: Extract metadata<br/>duration via ffprobe
+    FFmpeg-->>Bot: duration, waveform data
+
+    Bot->>Discord: Request upload URL
+    Discord-->>Bot: Upload URL + file ID
+
+    Bot->>CDN: PUT upload OGG file
+    CDN-->>Bot: Upload complete
+
+    Bot->>Discord: POST message with<br/>IS_VOICE_MESSAGE flag<br/>+ metadata (duration, waveform)
+    Discord->>DiscordUser: Voice message appears
+
+    Bot->>Bot: Cleanup temp files
+
+    AI-->>Bot: JSON response {dialogue, states}
+    Bot->>Discord: "Hey there!" (text fallback)
+
+    Note over DiscordUser,CDN: LLM provider change
+    DiscordUser->>Discord: /llm change gemini
+    Discord->>Bot: Slash command
+    Bot->>AI: POST /api/settings/provider {provider: "gemini"}
+    AI-->>Bot: Provider switched
+    Bot->>Discord: ✅ LLM provider: gemini-2.5-flash
+
+    Note over DiscordUser,CDN: Agent task completion broadcast
+    AI->>AI: Agent completes task
+    AI->>SSE: Emit "agent_completion" event
+    SSE-->>Bot: Agent result message
+    Bot->>Discord: 🤖 Task complete: [result]
+```
+
+---
+
 ## System Overview
 
 ```mermaid
@@ -13,7 +299,12 @@ graph TB
         WS[WebSocket/SSE Events]
     end
 
-    subgraph "Flask API Layer"
+    subgraph "Multi-Channel Input"
+        WebInput[Web UI Messages]
+        DiscordInput[Discord Bot Messages]
+    end
+
+    subgraph "Flask API Layer - Port 8080"
         API[REST API Endpoints]
         RateLimit[Rate Limiter]
         Auth[Authentication]
@@ -62,7 +353,20 @@ graph TB
         Tools[Tool Registry]
     end
 
-    UI --> API
+    subgraph "Monitoring & Observability - Port 8081"
+        Monitor[Monitoring Service<br/>MetricsCollector]
+        Dashboard[Monitoring Dashboard<br/>Live UI]
+    end
+
+    subgraph "External Integrations"
+        DiscordBot[Discord Bot<br/>Node.js]
+        DiscordServers[Discord Servers]
+    end
+
+    UI --> WebInput
+    WebInput --> API
+    DiscordBot --> DiscordInput
+    DiscordInput --> API
     API --> Main
     Main --> CogEngine
     Main --> Arbiter
@@ -91,16 +395,30 @@ graph TB
     Agent --> Tools
 
     Voice --> WS
+    Voice -->|SSE events| DiscordBot
+    DiscordBot <--> DiscordServers
+
+    Main -->|Record metrics| Monitor
+    API -->|Record metrics| Monitor
+    Voice -->|Record metrics| Monitor
+    LLM -->|Record metrics| Monitor
+    Monitor --> Dashboard
+
+    DiscordBot -->|POST /api/monitoring/discord_status| API
 
     classDef cognitive fill:#e1f5ff,stroke:#01579b,stroke-width:2px
     classDef behavioral fill:#fff3e0,stroke:#e65100,stroke-width:2px
     classDef perception fill:#f3e5f5,stroke:#4a148c,stroke-width:2px
     classDef output fill:#e8f5e9,stroke:#1b5e20,stroke-width:2px
+    classDef monitoring fill:#fce4ec,stroke:#c2185b,stroke-width:2px
+    classDef external fill:#e0f2f1,stroke:#00695c,stroke-width:2px
 
     class CogEngine,LLM,Memory,History cognitive
     class Arbiter,Behaviors,Motion behavioral
     class Vision,Time perception
     class Voice,Notify output
+    class Monitor,Dashboard monitoring
+    class DiscordBot,DiscordServers external
 ```
 
 ---
@@ -1294,5 +1612,11 @@ mindmap
 
 *This architecture visualization is auto-generated from the ARCHITECTURE.md documentation. For detailed implementation notes, see the full architecture document.*
 
-**Last Updated**: 2026-02-10
-**Architecture Version**: 2.0 (Embodied Agent)
+**Last Updated**: 2026-02-13
+**Architecture Version**: 2.0 (Embodied Agent + Multi-Service Infrastructure)
+
+**New in v2.0.1** (2026-02-13):
+- Added Multi-Service Architecture diagram showing all 4 services orchestrated by run.py
+- Added Monitoring System Architecture diagram with metrics collection and dashboard
+- Added Discord Bot Integration & Voice Messages sequence diagram
+- Updated System Overview to include monitoring dashboard and Discord bot integration

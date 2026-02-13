@@ -121,7 +121,6 @@ async function sendVoiceFile(channel, audioUrl) {
         const ffmpegAvailable = await checkFfmpeg();
         if (!ffmpegAvailable) {
             console.error('FFmpeg not found! Please install FFmpeg to enable voice messages.');
-            console.error('See discord/install-ffmpeg.md for installation instructions.');
             await channel.send('⚠️ Voice message conversion failed: FFmpeg not installed. Please ask the administrator to install FFmpeg.');
             return;
         }
@@ -577,7 +576,6 @@ client.on('ready', async () => {
         console.log('✓ FFmpeg is available');
     } else {
         console.warn('⚠ FFmpeg not found - voice messages will not work!');
-        console.warn('  Install FFmpeg to enable voice messages. See discord/install-ffmpeg.md');
     }
 
     // Register slash commands
