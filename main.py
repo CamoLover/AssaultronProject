@@ -1739,6 +1739,10 @@ def start_vision():
         success = assaultron.vision_system.start_capture()
         if success:
             assaultron.log_event("Vision system started", "VISION")
+            
+            # Start background monitoring dynamically when vision is enabled
+            assaultron.start_background_monitoring()
+            
             return jsonify({
                 "success": True,
                 "message": "Vision capture started"
@@ -1779,6 +1783,11 @@ def toggle_vision():
         new_state = assaultron.vision_system.toggle_capture()
         status = "started" if new_state else "stopped"
         assaultron.log_event(f"Vision system {status}", "VISION")
+        
+        # Start background monitoring if vision was enabled
+        if new_state:
+            assaultron.start_background_monitoring()
+            
         return jsonify({
             "success": True,
             "enabled": new_state,

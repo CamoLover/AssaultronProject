@@ -1,6 +1,5 @@
 flask>=2.0.0
 psutil>=5.8.0
-pygame>=2.0.0
 requests>=2.25.0
 opencv-python>=4.8.0
 mediapipe>=0.10.9
