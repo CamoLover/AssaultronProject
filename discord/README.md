@@ -173,6 +173,15 @@ Switch the LLM provider. Changes are synced with the web UI.
 ```
 View current LLM provider and model.
 
+### Moderation Commands
+
+**Clear Messages:**
+```
+/clear number:10
+```
+Delete a specified number of messages (1-100) from the channel.
+*Note: Messages older than 14 days cannot be bulk deleted due to Discord API limitations.*
+
 ### Voice Message Flow
 
 1. Enable voice with `/voice activate`

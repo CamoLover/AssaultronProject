@@ -165,13 +165,15 @@ class AgentLogic:
                 "error": str(e)
             }
     
-    def _build_agent_prompt(self, task: str, history: List[Dict[str, str]]) -> str:
+    def _build_agent_prompt(self, task: str, history: List[Dict[str, str]], conversation_history: str = "", user_message: str = "") -> str:
         """
         Build the agent system prompt with tool descriptions.
 
         Args:
             task: User's task description
             history: Conversation history (thoughts, actions, observations)
+            conversation_history: Recent conversation history between User and AI
+            user_message: The original message from the user
 
         Returns:
             Formatted prompt for LLM
@@ -179,12 +181,26 @@ class AgentLogic:
         # Include ASR-7's personality
         personality = Config.ASSAULTRON_PROMPT
 
+        # Get memories
+        try:
+            memories = self.cognitive_engine.get_memory_summary(limit=15)
+        except Exception:
+            memories = ""
+
         prompt = f"""{personality}
 
 ## AUTONOMOUS TASK MODE
 
 You are now in AUTONOMOUS TASK MODE. You can execute tasks by using tools while maintaining your ASR-7 personality.
 When working on tasks, you should think and reason as ASR-7 would - with sass, confidence, and care for Evan.
+
+RECENT CONVERSATION HISTORY:
+{conversation_history}
+
+CORE MEMORIES (Important facts to remember):
+{memories}
+
+ORIGINAL USER REQUEST: "{user_message}"
 
 TASK: {task}
 
@@ -263,7 +279,7 @@ IMPORTANT RULES:
 PROJECT HISTORY (What you have built before):
 {self._format_project_history()}
 
-CONVERSATION HISTORY:
+INTERNAL AGENT HISTORY (Your thoughts/actions so far in this task):
 """
         
         # Add history
@@ -296,13 +312,21 @@ CONVERSATION HISTORY:
                     summary += f"  * Edited {action['input'].get('name')}\n"
         return summary
     
-    def execute_task(self, task: str, callback: Optional[Callable] = None) -> Dict[str, Any]:
+    def execute_task(
+        self, 
+        task: str, 
+        callback: Optional[Callable] = None, 
+        conversation_history: str = "",
+        user_message: str = ""
+    ) -> Dict[str, Any]:
         """
         Execute a task autonomously.
         
         Args:
             task: Task description from user
             callback: Optional callback function for progress updates
+            conversation_history: Recent conversation history
+            user_message: Original user message
             
         Returns:
             Final result dictionary
@@ -313,7 +337,7 @@ CONVERSATION HISTORY:
         self.observations = []
         self.is_running = True
         
-        logger.info(f"Starting autonomous task: {task}")
+        logger.info(f"Starting autonomous task: {task} (Original: {user_message[:50]}...)")
         
         history = []
         iteration = 0
@@ -324,7 +348,12 @@ CONVERSATION HISTORY:
                 logger.info(f"Agent iteration {iteration}/{self.max_iterations}")
                 
                 # Build prompt with history
-                prompt = self._build_agent_prompt(task, history)
+                prompt = self._build_agent_prompt(
+                    task, 
+                    history, 
+                    conversation_history=conversation_history,
+                    user_message=user_message
+                )
                 
                 # Call LLM for next step
                 try:

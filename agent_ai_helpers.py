@@ -97,7 +97,9 @@ def run_agent_in_background(
     voice_system=None,
     voice_enabled: bool = False,
     log_callback=None,
-    broadcast_callback=None
+    broadcast_callback=None,
+    user_message: str = "",
+    conversation_history: str = ""
 ):
     """
     Run the agent in a background thread and notify when complete.
@@ -113,6 +115,8 @@ def run_agent_in_background(
         voice_enabled: Whether voice is enabled
         log_callback: Function to call for logging
         broadcast_callback: Function to broadcast completion to clients (web UI, Discord)
+        user_message: Original user message
+        conversation_history: Formatted conversation history
     """
     progress_updates = []
     
@@ -128,8 +132,13 @@ def run_agent_in_background(
         try:
             log(f"Starting background agent task: {original_task}", "AGENT")
             
-            # Execute task with enhanced instructions
-            result = agent_logic.execute_task(enhanced_task, callback=progress_callback)
+            # Execute task with enhanced instructions and full context
+            result = agent_logic.execute_task(
+                enhanced_task, 
+                callback=progress_callback,
+                user_message=user_message,
+                conversation_history=conversation_history
+            )
             
             # Store result
             agent_tasks[task_id] = {

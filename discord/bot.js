@@ -352,6 +352,18 @@ async function registerCommands() {
                     ]
                 }
             ]
+        },
+        {
+            name: 'clear',
+            description: 'Clear messages from the channel',
+            options: [
+                {
+                    name: 'number',
+                    description: 'The number of messages to delete',
+                    type: 4, // INTEGER type
+                    required: true
+                }
+            ]
         }
     ];
 
@@ -502,6 +514,25 @@ client.on('interactionCreate', async interaction => {
                 }
             } catch (replyError) {
                 console.error('Could not send error reply:', replyError.message);
+            }
+        }
+    } else if (interaction.commandName === 'clear') {
+        const amount = interaction.options.getInteger('number');
+
+        if (amount < 1 || amount > 100) {
+            return interaction.reply({ content: 'You need to input a number between 1 and 100.', ephemeral: true });
+        }
+
+        try {
+            await interaction.channel.bulkDelete(amount, true);
+            return interaction.reply({ content: `Successfully deleted \`${amount}\` messages.`, ephemeral: true });
+        } catch (err) {
+            console.error(err);
+            // Check if already replied to avoid "Interaction already acknowledged" error
+            if (interaction.replied || interaction.deferred) {
+                return interaction.followUp({ content: 'There was an error trying to prune messages in this channel! (Note: Messages older than 14 days cannot be bulk deleted)', ephemeral: true });
+            } else {
+                return interaction.reply({ content: 'There was an error trying to prune messages in this channel! (Note: Messages older than 14 days cannot be bulk deleted)', ephemeral: true });
             }
         }
     }

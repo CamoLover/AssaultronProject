@@ -427,6 +427,14 @@ class EmbodiedAssaultronCore:
                 # Start agent in background
                 task_id = f"task_{int(time.time())}_{len(self.agent_tasks)}"
                 
+                # Get conversation context for the agent
+                recent_history = self.cognitive_engine.conversation_history[-10:]
+                formatted_history = []
+                for exchange in recent_history:
+                    formatted_history.append(f"User: {exchange['user']}")
+                    formatted_history.append(f"AI: {exchange['assistant']}")
+                history_context = "\n".join(formatted_history)
+
                 agent_ai_helpers.run_agent_in_background(
                     agent_logic=self.agent_logic,
                     agent_tasks=self.agent_tasks,
@@ -437,7 +445,9 @@ class EmbodiedAssaultronCore:
                     voice_system=self.voice_system,
                     voice_enabled=self.voice_enabled,
                     log_callback=self.log_event,
-                    broadcast_callback=self._broadcast_agent_completion
+                    broadcast_callback=self._broadcast_agent_completion,
+                    user_message=user_message,
+                    conversation_history=history_context
                 )
                 
                 # Queue voice message for acknowledgment if enabled
