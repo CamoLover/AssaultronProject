@@ -219,3 +219,6 @@ chat_images/
 # Application logs
 logs/
 *.log
+
+# Monitoring reports
+/report

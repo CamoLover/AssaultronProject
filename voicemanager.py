@@ -686,6 +686,9 @@ class VoiceManager:
         Returns:
             str: Path to generated audio file, or None if failed
         """
+        # Track voice synthesis timing for monitoring
+        voice_start_time = time.time()
+
         if not self.is_initialized:
             self.log("Voice system not initialized", "ERROR")
             return None
@@ -758,6 +761,22 @@ class VoiceManager:
                 self.last_synthesis_file = str(expected_file)
                 self.last_synthesis_filename = expected_file.name
 
+                # Calculate total voice synthesis time
+                voice_duration_ms = (time.time() - voice_start_time) * 1000
+
+                # Record monitoring metrics
+                try:
+                    from monitoring_service import get_monitoring_service, MONITORING_ENABLED
+                    if MONITORING_ENABLED:
+                        monitoring = get_monitoring_service()
+                        monitoring.get_collector().record_voice_processing(
+                            text_length=len(text),
+                            duration_ms=voice_duration_ms,
+                            success=True
+                        )
+                except ImportError:
+                    pass
+
                 # Trigger callback to notify frontend
                 if self.on_audio_ready_callback:
                     try:
@@ -768,6 +787,22 @@ class VoiceManager:
                 return str(expected_file)
             else:
                 self.log(f"Audio file not generated: {output_filename}", "ERROR")
+
+                # Record failed voice synthesis
+                try:
+                    from monitoring_service import get_monitoring_service, MONITORING_ENABLED
+                    if MONITORING_ENABLED:
+                        monitoring = get_monitoring_service()
+                        voice_duration_ms = (time.time() - voice_start_time) * 1000
+                        monitoring.get_collector().record_voice_processing(
+                            text_length=len(text),
+                            duration_ms=voice_duration_ms,
+                            success=False
+                        )
+                        monitoring.get_collector().record_error('voice_synthesis_failed', 'voice', 'Audio file not generated')
+                except ImportError:
+                    pass
+
                 return None
                 
         except Exception as e:

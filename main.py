@@ -41,9 +41,37 @@ from sandbox_manager import SandboxManager
 from agent_logic import AgentLogic
 import agent_ai_helpers
 
+# Import monitoring service
+try:
+    from monitoring_service import get_monitoring_service
+    monitoring = get_monitoring_service()
+    MONITORING_ENABLED = True
+except ImportError:
+    MONITORING_ENABLED = False
+    monitoring = None
+
 
 app = Flask(__name__)
 config = Config()
+
+
+# ============================================================================
+# MONITORING - Global request tracking
+# ============================================================================
+
+@app.before_request
+def before_request_monitoring():
+    """Track request start time for all API endpoints"""
+    if MONITORING_ENABLED and request.path.startswith('/api/'):
+        request._monitoring_start_time = time.time()
+
+@app.after_request
+def after_request_monitoring(response):
+    """Record metrics for all API endpoints"""
+    if MONITORING_ENABLED and request.path.startswith('/api/') and hasattr(request, '_monitoring_start_time'):
+        duration_ms = (time.time() - request._monitoring_start_time) * 1000
+        monitoring.get_collector().record_api_response(request.path, duration_ms, response.status_code)
+    return response
 
 
 # ============================================================================
@@ -168,6 +196,10 @@ class EmbodiedAssaultronCore:
             "last_response_time": 0
         }
 
+        # Update monitoring
+        if MONITORING_ENABLED:
+            monitoring.get_collector().update_system_status(ai_active=False)
+
         # Initialize embodied agent layers
         self.log_event("Initializing Embodied Agent Architecture...", "SYSTEM")
 
@@ -184,6 +216,10 @@ class EmbodiedAssaultronCore:
         self.ai_active = True
         self.log_event("Cognitive Engine initialized", "SYSTEM")
 
+        # Update monitoring
+        if MONITORING_ENABLED:
+            monitoring.get_collector().update_system_status(ai_active=True)
+
         # Behavioral Layer (behavior selection)
         self.behavior_arbiter = BehaviorArbiter()
         self.log_event(f"Behavior Arbiter initialized with {len(self.behavior_arbiter.behaviors)} behaviors", "SYSTEM")
@@ -196,6 +232,10 @@ class EmbodiedAssaultronCore:
         self.voice_system = VoiceManager(logger=self)
         self.voice_enabled = False
         self.voice_event_queues = []  # SSE clients listening for audio ready events
+
+        # Update monitoring
+        if MONITORING_ENABLED:
+            monitoring.get_collector().update_system_status(voice_enabled=False)
 
         # Register callback for real-time audio notifications
         self.voice_system.set_audio_ready_callback(self._broadcast_audio_ready)
@@ -460,6 +500,9 @@ class EmbodiedAssaultronCore:
             self.log_event(f"Cognitive: Processing with {provider_label}...", "COGNITIVE")
             memory_summary = self.cognitive_engine.get_memory_summary()
 
+            # Track LLM timing
+            llm_start = time.time()
+
             cognitive_state = self.cognitive_engine.process_input(
                 user_message=user_message,
                 world_state=world_state,
@@ -471,6 +514,20 @@ class EmbodiedAssaultronCore:
                 vision_image_b64=vision_image_b64,
                 attachment_image_path=image_path
             )
+
+            # Record LLM metrics
+            llm_duration = (time.time() - llm_start) * 1000
+            if MONITORING_ENABLED:
+                # Rough estimate for tokens (will be more accurate with actual token count)
+                prompt_tokens = len(user_message.split()) * 2
+                response_tokens = len(cognitive_state.dialogue.split()) * 2
+                monitoring.get_collector().record_llm_request(
+                    model=provider_label,
+                    prompt_tokens=prompt_tokens,
+                    response_tokens=response_tokens,
+                    duration_ms=llm_duration
+                )
+                monitoring.get_collector().record_system_delay('cognitive_layer', llm_duration)
 
             self.log_event(
                 f"Cognitive state: goal={cognitive_state.goal}, emotion={cognitive_state.emotion}",
@@ -519,6 +576,7 @@ class EmbodiedAssaultronCore:
             self._check_and_send_notifications(cognitive_state, world_state)
 
             # Step 8: Voice synthesis (if enabled)
+            # Note: Voice timing is tracked inside VoiceManager.synthesize_voice()
             if self.voice_enabled:
                 self.voice_system.synthesize_async(cognitive_state.dialogue)
 
@@ -1000,8 +1058,22 @@ def chat():
     # Store message source for voice system
     assaultron.last_message_source = source
 
+    # Auto-detect Discord bot activity
+    if MONITORING_ENABLED and source == 'discord':
+        monitoring.get_collector().update_system_status(discord_bot_active=True)
+
+    # Track message pipeline start
+    pipeline_start = time.time()
+
     # Process through embodied agent pipeline
     result = assaultron.process_message(message, image_path=image_path)
+
+    # Calculate timing
+    pipeline_duration = (time.time() - pipeline_start) * 1000
+
+    # Record monitoring metrics
+    if MONITORING_ENABLED:
+        monitoring.get_collector().record_message_pipeline('full_pipeline', pipeline_duration)
 
     if result["success"]:
         # Return response in format compatible with existing web UI
@@ -1016,6 +1088,10 @@ def chat():
             "voice_enabled": assaultron.voice_enabled
         })
     else:
+        # Record error
+        if MONITORING_ENABLED:
+            monitoring.get_collector().record_error('chat_error', 'api', result.get("error", "Unknown error"))
+
         return jsonify({
             "response": result["dialogue"],
             "error": result.get("error"),
@@ -1454,6 +1530,10 @@ def start_voice_server():
         if result["success"]:
             assaultron.voice_enabled = True
             assaultron.log_event("Assaultron voice system online", "VOICE")
+
+            # Update monitoring
+            if MONITORING_ENABLED:
+                monitoring.get_collector().update_system_status(voice_enabled=True)
             # Send notification that voice is activated
             assaultron._broadcast_voice_notification("Voice system activated")
             return jsonify({
@@ -1482,6 +1562,11 @@ def stop_voice_server():
         assaultron.voice_system.shutdown()
         assaultron.voice_enabled = False
         assaultron.log_event("Voice system stopped", "VOICE")
+
+        # Update monitoring
+        if MONITORING_ENABLED:
+            monitoring.get_collector().update_system_status(voice_enabled=False)
+
         return jsonify({"success": True, "voice_enabled": False})
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1554,6 +1639,27 @@ def voice_events():
                 assaultron.voice_event_queues.remove(client_queue)
 
     return Response(event_stream(), mimetype='text/event-stream')
+
+
+# ============================================================================
+# MONITORING ENDPOINTS
+# ============================================================================
+
+@app.route('/api/monitoring/discord_status', methods=['POST'])
+@auth.login_required
+def update_discord_status():
+    """Update Discord bot status in monitoring system"""
+    try:
+        data = request.get_json()
+        active = data.get('active', False)
+
+        if MONITORING_ENABLED:
+            monitoring.get_collector().update_system_status(discord_bot_active=active)
+            return jsonify({"success": True, "discord_bot_active": active}), 200
+        else:
+            return jsonify({"success": False, "error": "Monitoring not enabled"}), 503
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 
 # ============================================================================

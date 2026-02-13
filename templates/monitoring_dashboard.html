@@ -1,0 +1,649 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Assaultron Monitoring Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <style>
+        /* Dark Mode Variables - Match index.html exactly */
+        :root {
+            --bg-primary: #ffffff;
+            --bg-secondary: #f9fafb;
+            --bg-tertiary: #f3f4f6;
+            --bg-panel: #ffffff;
+            --text-primary: #111827;
+            --text-secondary: #4b5563;
+            --text-tertiary: #6b7280;
+            --border-color: #d1d5db;
+            --border-color-light: #e5e7eb;
+            --scrollbar-track: #f1f1f1;
+            --scrollbar-thumb: #cbd5e1;
+            --scrollbar-thumb-hover: #94a3b8;
+            --card-bg: #ffffff;
+            --input-bg: #ffffff;
+            --input-border: #d1d5db;
+            --button-secondary-bg: #e5e7eb;
+            --button-secondary-text: #374151;
+            --button-secondary-hover: #d1d5db;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+
+        body.dark-mode {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --bg-panel: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #cbd5e1;
+            --text-tertiary: #94a3b8;
+            --border-color: #475569;
+            --border-color-light: #334155;
+            --scrollbar-track: #1e293b;
+            --scrollbar-thumb: #475569;
+            --scrollbar-thumb-hover: #64748b;
+            --card-bg: #1e293b;
+            --input-bg: #0f172a;
+            --input-border: #475569;
+            --button-secondary-bg: #334155;
+            --button-secondary-text: #e2e8f0;
+            --button-secondary-hover: #475569;
+            --shadow-color: rgba(0, 0, 0, 0.3);
+        }
+
+        /* Premium Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--scrollbar-track);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-thumb);
+            border-radius: 4px;
+            border: 2px solid var(--scrollbar-track);
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--scrollbar-thumb-hover);
+        }
+
+        * {
+            scrollbar-width: thin;
+            scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+        }
+
+        body.dark-mode ::-webkit-scrollbar-track {
+            background: #1e293b;
+        }
+
+        body.dark-mode ::-webkit-scrollbar-thumb {
+            background: #475569;
+            border: 2px solid #1e293b;
+        }
+
+        body.dark-mode ::-webkit-scrollbar-thumb:hover {
+            background: #64748b;
+        }
+
+        /* Pulse animation */
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: .5; }
+        }
+
+        .pulse {
+            animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        /* Chart container */
+        .chart-container {
+            height: 180px;
+            margin-top: 1rem;
+        }
+    </style>
+</head>
+
+<body class="min-h-screen font-mono transition-colors duration-200"
+    style="background-color: var(--bg-primary); color: var(--text-primary);">
+
+    <!-- Top Bar -->
+    <div class="border-b transition-colors duration-200"
+        style="background-color: var(--bg-tertiary); border-color: var(--border-color);">
+        <nav class="flex justify-between items-center px-4 py-3">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-chart-line text-blue-500 text-xl"></i>
+                <h1 class="text-lg font-bold tracking-wider uppercase" style="color: var(--text-primary);">Assaultron
+                    Monitoring Dashboard</h1>
+                <span class="flex items-center gap-1 text-[10px] uppercase font-bold"
+                    style="color: var(--text-tertiary);">
+                    <span class="inline-block w-2 h-2 bg-green-500 rounded-full pulse"></span>
+                    Live
+                </span>
+            </div>
+            <div class="flex items-center gap-3">
+                <button onclick="toggleDarkMode()" id="darkModeToggle"
+                    class="py-2 px-3 text-xs font-bold rounded transition-all hover:scale-105"
+                    style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text);">
+                    <i class="fas fa-moon"></i> DARK
+                </button>
+            </div>
+        </nav>
+    </div>
+
+    <!-- Main Container -->
+    <div class="p-4 lg:p-6">
+        <div class="max-w-7xl mx-auto">
+
+            <!-- Status Bar -->
+            <div class="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
+
+                <!-- Uptime -->
+                <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                    style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                    <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-3 py-2 flex justify-between items-center">
+                        <h3 class="font-bold text-white text-[10px] tracking-widest uppercase">Uptime</h3>
+                        <i class="fas fa-clock text-white text-xs opacity-80"></i>
+                    </div>
+                    <div class="p-4 text-center">
+                        <div class="text-2xl font-bold font-mono" style="color: var(--text-primary);" id="uptime">
+                            --:--:--</div>
+                        <div class="text-[9px] uppercase font-bold mt-1" style="color: var(--text-tertiary);">Hours:Min:Sec</div>
+                    </div>
+                </div>
+
+                <!-- AI Status -->
+                <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                    style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                    <div class="bg-gradient-to-r from-purple-600 to-pink-600 px-3 py-2 flex justify-between items-center">
+                        <h3 class="font-bold text-white text-[10px] tracking-widest uppercase">AI Core</h3>
+                        <div id="ai-indicator" class="h-2 w-2 rounded-full bg-red-300 shadow-lg"></div>
+                    </div>
+                    <div class="p-4 text-center">
+                        <div class="text-lg font-bold uppercase" id="ai-status">
+                            <span class="text-red-600">Offline</span>
+                        </div>
+                        <div class="text-[9px] uppercase font-bold mt-1" style="color: var(--text-tertiary);">Status</div>
+                    </div>
+                </div>
+
+                <!-- Voice -->
+                <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                    style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                    <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-2 flex justify-between items-center">
+                        <h3 class="font-bold text-white text-[10px] tracking-widest uppercase">Voice Synth</h3>
+                        <div id="voice-indicator" class="h-2 w-2 rounded-full bg-red-300 shadow-lg"></div>
+                    </div>
+                    <div class="p-4 text-center">
+                        <div class="text-lg font-bold uppercase" id="voice-status">
+                            <span class="text-red-600">Offline</span>
+                        </div>
+                        <div class="text-[9px] uppercase font-bold mt-1" style="color: var(--text-tertiary);">Status</div>
+                    </div>
+                </div>
+
+                <!-- Discord -->
+                <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                    style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                    <div class="bg-gradient-to-r from-indigo-600 to-blue-600 px-3 py-2 flex justify-between items-center">
+                        <h3 class="font-bold text-white text-[10px] tracking-widest uppercase">Discord Bot</h3>
+                        <div id="discord-indicator" class="h-2 w-2 rounded-full bg-red-300 shadow-lg"></div>
+                    </div>
+                    <div class="p-4 text-center">
+                        <div class="text-lg font-bold uppercase" id="discord-status">
+                            <span class="text-red-600">Offline</span>
+                        </div>
+                        <div class="text-[9px] uppercase font-bold mt-1" style="color: var(--text-tertiary);">Status</div>
+                    </div>
+                </div>
+
+                <!-- Messages -->
+                <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                    style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                    <div class="bg-gradient-to-r from-orange-500 to-red-500 px-3 py-2 flex justify-between items-center">
+                        <h3 class="font-bold text-white text-[10px] tracking-widest uppercase">Messages</h3>
+                        <i class="fas fa-comments text-white text-xs opacity-80"></i>
+                    </div>
+                    <div class="p-4 text-center">
+                        <div class="text-2xl font-bold font-mono" style="color: var(--text-primary);" id="total-messages">0</div>
+                        <div class="text-[9px] uppercase font-bold mt-1" style="color: var(--text-tertiary);">Total Count</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Metrics Grid -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+                <!-- API Performance -->
+                <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                    style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                    <div class="bg-gradient-to-r from-gray-800 to-gray-900 px-4 py-2.5 flex justify-between items-center">
+                        <h3 class="font-bold text-white text-xs tracking-widest uppercase">
+                            <i class="fas fa-bolt mr-2"></i>API Performance
+                        </h3>
+                        <span class="text-[10px] font-bold bg-blue-500 text-white px-2 py-0.5 rounded uppercase">Active</span>
+                    </div>
+                    <div class="p-4 transition-colors duration-200"
+                        style="background: linear-gradient(to bottom, var(--bg-secondary), var(--card-bg));">
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center text-xs">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Avg Response</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="api-avg">0 ms</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Min Response</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="api-min">0 ms</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Max Response</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="api-max">0 ms</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs pt-2 border-t"
+                                style="border-color: var(--border-color-light);">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Total Calls</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="api-count">0</span>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="api-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Voice Processing -->
+                <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                    style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                    <div class="bg-gradient-to-r from-emerald-600 to-teal-600 px-4 py-2.5 flex justify-between items-center">
+                        <h3 class="font-bold text-white text-xs tracking-widest uppercase">
+                            <i class="fas fa-microphone mr-2"></i>Voice Processing
+                        </h3>
+                        <span class="text-[10px] font-bold bg-white bg-opacity-20 text-white px-2 py-0.5 rounded uppercase">TTS</span>
+                    </div>
+                    <div class="p-4 transition-colors duration-200"
+                        style="background: linear-gradient(to bottom, var(--bg-secondary), var(--card-bg));">
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center text-xs">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Avg Processing</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="voice-avg">0 ms</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Max Processing</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="voice-max">0 ms</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs pt-2 border-t"
+                                style="border-color: var(--border-color-light);">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Total Generated</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="voice-count">0</span>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="voice-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- LLM Performance -->
+                <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                    style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                    <div class="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 flex justify-between items-center">
+                        <h3 class="font-bold text-white text-xs tracking-widest uppercase">
+                            <i class="fas fa-brain mr-2"></i>LLM Performance
+                        </h3>
+                        <span class="text-[10px] font-bold bg-white bg-opacity-20 text-white px-2 py-0.5 rounded uppercase">Neural</span>
+                    </div>
+                    <div class="p-4 transition-colors duration-200"
+                        style="background: linear-gradient(to bottom, var(--bg-secondary), var(--card-bg));">
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center text-xs">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Avg Response</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="llm-avg">0 ms</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Avg Tokens/Req</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="llm-tokens">0</span>
+                            </div>
+                            <div class="flex justify-between items-center text-xs pt-2 border-t"
+                                style="border-color: var(--border-color-light);">
+                                <span style="color: var(--text-tertiary);" class="uppercase font-bold text-[10px]">Total Tokens</span>
+                                <span class="font-mono font-bold" style="color: var(--text-primary);" id="llm-total-tokens">0</span>
+                            </div>
+                        </div>
+                        <div class="chart-container">
+                            <canvas id="llm-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recent Errors -->
+                <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                    style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                    <div class="bg-gradient-to-r from-red-600 to-orange-600 px-4 py-2.5 flex justify-between items-center">
+                        <h3 class="font-bold text-white text-xs tracking-widest uppercase">
+                            <i class="fas fa-exclamation-triangle mr-2"></i>Recent Errors
+                        </h3>
+                        <span class="text-[10px] font-bold bg-white bg-opacity-20 text-white px-2 py-0.5 rounded uppercase">Log</span>
+                    </div>
+                    <div class="p-4 transition-colors duration-200"
+                        style="background: linear-gradient(to bottom, var(--bg-secondary), var(--card-bg));">
+                        <div class="overflow-y-auto max-h-64 text-xs font-mono" id="error-log"
+                            style="color: var(--text-secondary);">
+                            <p class="italic text-[10px]" style="color: var(--text-tertiary);">No errors recorded</p>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Export Section -->
+            <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg"
+                style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                <div class="bg-gradient-to-r from-gray-700 to-gray-800 px-4 py-2.5 flex justify-between items-center">
+                    <h3 class="font-bold text-white text-xs tracking-widest uppercase">
+                        <i class="fas fa-download mr-2"></i>Data Export
+                    </h3>
+                    <span class="text-[10px] font-bold bg-white bg-opacity-20 text-white px-2 py-0.5 rounded uppercase">Tools</span>
+                </div>
+                <div class="p-4 transition-colors duration-200"
+                    style="background: linear-gradient(to bottom, var(--bg-secondary), var(--card-bg));">
+                    <div class="flex gap-3">
+                        <button onclick="exportReport()"
+                            class="flex items-center justify-center gap-2 px-4 py-2.5 bg-blue-600 text-white rounded shadow-md text-xs font-bold hover:bg-blue-700 transition-all hover:shadow-lg uppercase">
+                            <i class="fas fa-file-alt"></i>
+                            Markdown Report
+                        </button>
+                        <button onclick="exportJSON()"
+                            class="flex items-center justify-center gap-2 px-4 py-2.5 bg-indigo-600 text-white rounded shadow-md text-xs font-bold hover:bg-indigo-700 transition-all hover:shadow-lg uppercase">
+                            <i class="fas fa-code"></i>
+                            JSON Export
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Footer -->
+            <div class="mt-6 text-center text-[10px] font-mono" style="color: var(--text-tertiary);">
+                <p class="uppercase tracking-wider">Assaultron Monitoring Dashboard v2.0 • Real-time Updates Every Second</p>
+            </div>
+
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script>
+        // Dark mode toggle
+        function toggleDarkMode() {
+            document.body.classList.toggle('dark-mode');
+            const isDark = document.body.classList.contains('dark-mode');
+            localStorage.setItem('darkMode', isDark);
+
+            // Update button text and icon
+            updateDarkModeButton(isDark);
+
+            // Update all charts with new colors
+            updateAllChartColors();
+        }
+
+        // Update dark mode button
+        function updateDarkModeButton(isDark) {
+            const btn = document.getElementById('darkModeToggle');
+            if (isDark) {
+                btn.innerHTML = '<i class="fas fa-sun"></i> LIGHT';
+            } else {
+                btn.innerHTML = '<i class="fas fa-moon"></i> DARK';
+            }
+        }
+
+        // Load dark mode preference
+        if (localStorage.getItem('darkMode') === 'true' || !localStorage.getItem('darkMode')) {
+            document.body.classList.add('dark-mode');
+            updateDarkModeButton(true);
+        }
+
+        // Chart color helper
+        function getChartColors() {
+            const isDark = document.body.classList.contains('dark-mode');
+            return {
+                grid: isDark ? 'rgba(71, 85, 105, 0.2)' : 'rgba(229, 231, 235, 0.8)',
+                text: isDark ? '#94a3b8' : '#6b7280'
+            };
+        }
+
+        // Chart configurations
+        const getChartConfig = (borderColor, bgColor) => {
+            const colors = getChartColors();
+            return {
+                type: 'line',
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    scales: {
+                        x: {
+                            display: false
+                        },
+                        y: {
+                            beginAtZero: true,
+                            ticks: {
+                                color: colors.text,
+                                font: { size: 10, family: 'monospace' }
+                            },
+                            grid: {
+                                color: colors.grid,
+                                borderDash: [3, 3]
+                            }
+                        }
+                    }
+                }
+            };
+        };
+
+        // Initialize charts
+        const apiChart = new Chart(document.getElementById('api-chart'), {
+            ...getChartConfig('#3b82f6', 'rgba(59, 130, 246, 0.1)'),
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Response Time (ms)',
+                    data: [],
+                    borderColor: '#3b82f6',
+                    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    borderWidth: 2
+                }]
+            }
+        });
+
+        const voiceChart = new Chart(document.getElementById('voice-chart'), {
+            ...getChartConfig('#10b981', 'rgba(16, 185, 129, 0.1)'),
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Processing Time (ms)',
+                    data: [],
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    borderWidth: 2
+                }]
+            }
+        });
+
+        const llmChart = new Chart(document.getElementById('llm-chart'), {
+            ...getChartConfig('#a855f7', 'rgba(168, 85, 247, 0.1)'),
+            data: {
+                labels: [],
+                datasets: [{
+                    label: 'Response Time (ms)',
+                    data: [],
+                    borderColor: '#a855f7',
+                    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+                    tension: 0.4,
+                    fill: true,
+                    borderWidth: 2
+                }]
+            }
+        });
+
+        function updateAllChartColors() {
+            const colors = getChartColors();
+            [apiChart, voiceChart, llmChart].forEach(chart => {
+                chart.options.scales.y.ticks.color = colors.text;
+                chart.options.scales.y.grid.color = colors.grid;
+                chart.update();
+            });
+        }
+
+        // Connect to SSE stream
+        const eventSource = new EventSource('/api/stream');
+
+        eventSource.onmessage = function(event) {
+            const data = JSON.parse(event.data);
+            updateDashboard(data);
+        };
+
+        eventSource.onerror = function(error) {
+            console.error('SSE Error:', error);
+        };
+
+        function updateDashboard(data) {
+            // Update uptime
+            const uptime = formatUptime(data.uptime_seconds);
+            document.getElementById('uptime').textContent = uptime;
+
+            // Update status indicators
+            updateStatus('ai', data.system_status.ai_active);
+            updateStatus('voice', data.system_status.voice_enabled);
+            updateStatus('discord', data.system_status.discord_bot_active);
+
+            // Update counters
+            document.getElementById('total-messages').textContent = data.counters.total_messages.toLocaleString();
+            document.getElementById('api-count').textContent = data.counters.total_api_calls.toLocaleString();
+            document.getElementById('voice-count').textContent = data.counters.total_voice_generated.toLocaleString();
+            document.getElementById('llm-total-tokens').textContent = data.counters.total_llm_tokens.toLocaleString();
+
+            // Update metrics
+            const metrics = data.recent_metrics;
+            if (metrics.api_avg_ms !== undefined) {
+                document.getElementById('api-avg').textContent = metrics.api_avg_ms.toFixed(2) + ' ms';
+                document.getElementById('api-min').textContent = metrics.api_min_ms.toFixed(2) + ' ms';
+                document.getElementById('api-max').textContent = metrics.api_max_ms.toFixed(2) + ' ms';
+            }
+
+            if (metrics.voice_avg_ms !== undefined) {
+                document.getElementById('voice-avg').textContent = metrics.voice_avg_ms.toFixed(2) + ' ms';
+                document.getElementById('voice-max').textContent = metrics.voice_max_ms.toFixed(2) + ' ms';
+            }
+
+            if (metrics.llm_avg_ms !== undefined) {
+                document.getElementById('llm-avg').textContent = metrics.llm_avg_ms.toFixed(2) + ' ms';
+                document.getElementById('llm-tokens').textContent = metrics.llm_avg_tokens.toFixed(0);
+            }
+
+            // Update charts periodically
+            updateCharts();
+        }
+
+        function updateStatus(type, isActive) {
+            const statusEl = document.getElementById(`${type}-status`);
+            const indicatorEl = document.getElementById(`${type}-indicator`);
+
+            if (isActive) {
+                statusEl.innerHTML = '<span class="text-green-600">Online</span>';
+                indicatorEl.className = 'h-2 w-2 rounded-full bg-green-400 shadow-lg';
+            } else {
+                statusEl.innerHTML = '<span class="text-red-600">Offline</span>';
+                indicatorEl.className = 'h-2 w-2 rounded-full bg-red-300 shadow-lg';
+            }
+        }
+
+        function formatUptime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = Math.floor(seconds % 60);
+            return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        let chartUpdateCounter = 0;
+        function updateCharts() {
+            // Update charts every 5 seconds
+            chartUpdateCounter++;
+            if (chartUpdateCounter % 5 !== 0) return;
+
+            fetch('/api/metrics/api_responses?minutes=10')
+                .then(r => r.json())
+                .then(data => {
+                    const last20 = data.slice(-20);
+                    apiChart.data.labels = last20.map((_, i) => i);
+                    apiChart.data.datasets[0].data = last20.map(d => d.duration_ms);
+                    apiChart.update('none');
+                })
+                .catch(err => console.error('Error fetching API metrics:', err));
+
+            fetch('/api/metrics/voice_processing?minutes=10')
+                .then(r => r.json())
+                .then(data => {
+                    const last20 = data.slice(-20).filter(d => d.success);
+                    voiceChart.data.labels = last20.map((_, i) => i);
+                    voiceChart.data.datasets[0].data = last20.map(d => d.duration_ms);
+                    voiceChart.update('none');
+                })
+                .catch(err => console.error('Error fetching voice metrics:', err));
+
+            fetch('/api/metrics/llm_requests?minutes=10')
+                .then(r => r.json())
+                .then(data => {
+                    const last20 = data.slice(-20);
+                    llmChart.data.labels = last20.map((_, i) => i);
+                    llmChart.data.datasets[0].data = last20.map(d => d.duration_ms);
+                    llmChart.update('none');
+                })
+                .catch(err => console.error('Error fetching LLM metrics:', err));
+        }
+
+        function exportReport() {
+            fetch('/api/export')
+                .then(r => r.json())
+                .then(data => {
+                    alert('Report will be generated on server shutdown (Ctrl+C in run.py)');
+                })
+                .catch(err => {
+                    console.error('Export error:', err);
+                    alert('Error generating report');
+                });
+        }
+
+        function exportJSON() {
+            fetch('/api/export')
+                .then(r => r.json())
+                .then(data => {
+                    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `assaultron_metrics_${new Date().toISOString()}.json`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                })
+                .catch(err => {
+                    console.error('Export error:', err);
+                    alert('Error exporting data');
+                });
+        }
+
+        // Initial chart update
+        setTimeout(updateCharts, 2000);
+    </script>
+</body>
+
+</html>

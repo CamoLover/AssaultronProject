@@ -8,12 +8,17 @@ import sys
 import subprocess
 import os
 import threading
+import signal
+import atexit
+from datetime import datetime
 
 # ============================================
 # CONFIGURATION - What to start
 # ============================================
-START_ASR = True      # Start ASR-7 AI interface (main.py)
-START_DOCS = True    # Start documentation website
+START_ASR = True            # Start ASR-7 AI interface (main.py)
+START_DOCS = True           # Start documentation website
+START_DISCORD_BOT = True    # Start the discord bot
+START_MONITORING = True     # Start monitoring dashboard
 
 def check_requirements():
     """Check if required packages are installed"""
@@ -64,11 +69,62 @@ def start_docs():
     except KeyboardInterrupt:
         print("\nDocs server stopped")
 
+def start_discord_bot():
+    """Start the Discord Bot (Node.js)"""
+    print("\n" + "="*60)
+    print("STARTING DISCORD BOT")
+    print("="*60)
+    print("Bot will connect to Discord servers")
+    print()
+
+    discord_dir = os.path.join(os.path.dirname(__file__), 'discord')
+
+    try:
+        # Start the bot
+        subprocess.run(['node', 'bot.js'], cwd=discord_dir, check=True)
+    except KeyboardInterrupt:
+        print("\nDiscord bot stopped")
+    except Exception as e:
+        print(f"\nDiscord bot error: {e}")
+
+def start_monitoring():
+    """Start the monitoring dashboard"""
+    print("\n" + "="*60)
+    print("STARTING MONITORING DASHBOARD")
+    print("="*60)
+    print("Access at: http://localhost:8081")
+    print()
+
+    from monitoring_dashboard import start_monitoring_dashboard
+    try:
+        start_monitoring_dashboard()
+    except KeyboardInterrupt:
+        print("\nMonitoring dashboard stopped")
+
+def generate_shutdown_report():
+    """Generate monitoring report on shutdown"""
+    if START_MONITORING:
+        try:
+            from monitoring_service import get_monitoring_service
+            monitoring = get_monitoring_service()
+
+            print("\n" + "="*60)
+            print("GENERATING MONITORING REPORT")
+            print("="*60)
+            report_path = monitoring.generate_markdown_report()
+            print(f"Report saved to: {report_path}")
+            print("="*60)
+        except Exception as e:
+            print(f"Failed to generate monitoring report: {e}")
+
 def main():
     print("=" * 60)
     print("ASSAULTRON PROJECT - AI COMPANION SYSTEM")
     print("=" * 60)
     print()
+
+    # Register shutdown report generator
+    atexit.register(generate_shutdown_report)
 
     # Display what will be started
     services = []
@@ -76,10 +132,14 @@ def main():
         services.append("ASR-7 AI Interface (http://localhost:8080)")
     if START_DOCS:
         services.append("Documentation Website (http://localhost:8000)")
+    if START_DISCORD_BOT:
+        services.append("Discord bot (ASR-7#8233)")
+    if START_MONITORING:
+        services.append("Monitoring dashboard (http://localhost:8081)")
 
     if not services:
         print("ERROR: No services enabled!")
-        print("Please set START_ASR=True or START_DOCS=True in run.py")
+        print("Please set START_ASR=True or any other services in run.py")
         return
 
     print("Starting services:")
@@ -96,16 +156,28 @@ def main():
         print()
         check_requirements()
 
-    print("Press Ctrl+C to stop all servers")
+    print("Press Ctrl+C to stop all servers and generate monitoring report")
     print()
 
     threads = []
 
     try:
+        # Start monitoring first (so it can track everything)
+        if START_MONITORING:
+            monitoring_thread = threading.Thread(target=start_monitoring, daemon=True)
+            monitoring_thread.start()
+            threads.append(monitoring_thread)
+
+        # Start Discord bot if enabled
+        if START_DISCORD_BOT:
+            discord_thread = threading.Thread(target=start_discord_bot, daemon=True)
+            discord_thread.start()
+            threads.append(discord_thread)
+
         # Start ASR-7 if enabled
         if START_ASR:
-            if START_DOCS:
-                # Run in thread if we're starting both
+            # Run in thread if we're starting multiple services
+            if START_DOCS or START_DISCORD_BOT or START_MONITORING:
                 asr_thread = threading.Thread(target=start_asr, daemon=True)
                 asr_thread.start()
                 threads.append(asr_thread)
@@ -114,12 +186,17 @@ def main():
                 start_asr()
                 return
 
-        # Start docs if enabled
+        # Start docs if enabled (blocking call)
         if START_DOCS:
             start_docs()
+        else:
+            # If docs is not started, keep main thread alive
+            while True:
+                threading.Event().wait(1)
 
     except KeyboardInterrupt:
         print("\n\nAssaultron system shutdown initiated...")
+        print("Generating monitoring report...")
         print("Goodbye, Commander.")
 
 if __name__ == "__main__":

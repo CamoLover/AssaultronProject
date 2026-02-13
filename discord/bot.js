@@ -586,6 +586,14 @@ client.on('ready', async () => {
     // Set bot status
     client.user.setActivity('for mentions | /voice /llm', { type: 3 }); // Type 3 = WATCHING
 
+    // Notify monitoring service that Discord bot is active
+    try {
+        await apiClient.post('/api/monitoring/discord_status', { active: true });
+        console.log('✓ Registered with monitoring service');
+    } catch (error) {
+        console.warn('⚠ Could not register with monitoring service:', error.message);
+    }
+
     // Initialize SSE connection for agent completions and voice events
     // This runs independently of voice activation
     console.log('Connecting to event stream for agent completions...');
