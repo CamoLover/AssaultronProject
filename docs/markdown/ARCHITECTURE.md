@@ -194,7 +194,7 @@ BodyCommand → Hardware Translation → Hardware State Dictionary
 - **Server Management**: Starts/stops xVAsynth server (localhost:8008)
 - **Model Loading**: Loads Fallout 4 Assaultron voice model (`f4_robot_assaultron.json`)
 - **Async Synthesis**: Queue-based audio generation to prevent blocking
-- **Real-time Events**: Server-Sent Events (SSE) to notify frontend when audio is ready
+- **Callback Notification**: Fires `on_audio_ready_callback` when synthesis completes; Flask (`main.py`) translates this into Server-Sent Events (SSE) via `/api/voice/events`
 
 **Audio Pipeline**:
 ```
@@ -215,7 +215,7 @@ Dialogue Text → xVAsynth API → WAV File → audio_output/ → Frontend Playb
 **Components**:
 - **Object Detection**: MediaPipe EfficientDet-Lite0 (CPU-optimized, fast)
 - **Camera Management**: Enumerate, select, start/stop capture
-- **Real-time Processing**: Background thread captures frames at ~10 FPS
+- **Real-time Processing**: Background thread captures frames at 30 FPS; object detection runs at ~10 FPS
 - **Entity Tracking**: Converts detections to `DetectedEntity` objects
 - **Scene Analysis**: Generates scene descriptions and threat assessments
 
@@ -316,6 +316,7 @@ Action: Final Answer: "Website created! Check out lego_website.html"
 - **Slash Commands**:
   - `/voice activate|deactivate|status` - Control xVAsynth voice system
   - `/llm change [provider]|status` - Switch between ollama/gemini/openrouter
+  - `/clear [number]` - Delete a specified number of messages (1-100) from the channel
   - Uses Discord embeds for formatted responses
 
 **Voice Message Integration**:
@@ -794,8 +795,10 @@ def process_message(user_message, image_path=None) -> dict:
 
 **Task Detection** (for autonomous agent):
 - Uses LLM to classify if message is an actionable task
-- Keywords: "create", "make", "write", "research", "build"
-- Fallback to keyword matching if LLM fails
+- Fallback to keyword matching if LLM fails, using a two-part system:
+  - **Action verbs** (20+): create, make, build, write, generate, develop, code, program, design, implement, construct, research, find, search, look up, investigate, analyze, test, run, execute, deploy
+  - **Creation indicators** (14+): website, web page, html, css, javascript, php, file, folder, directory, script, program, app, application, project, code, document, poem, story, article, report, summary
+  - Task detected when **both** an action verb AND a creation indicator are present
 - Returns enhanced task description with personality
 
 ---
@@ -811,6 +814,12 @@ def process_message(user_message, image_path=None) -> dict:
 - `GET /api/logs` - Recent system logs
 - `GET /api/history` - Conversation history
 - `POST /api/history/clear` - Clear conversation history
+
+**Memory & Debug**:
+- `GET /api/memory` - Get memory context (last 20 entries)
+- `GET /api/debug/last_response` - Debug: last raw LLM response
+- `GET /api/tools/available` - List available agent tools
+- `GET /chat_images/<filename>` - Serve uploaded chat image attachments
 
 **Health & Monitoring**:
 - `GET /health` - Health check with system metrics
@@ -987,7 +996,7 @@ Contains `ASSAULTRON_PROMPT` - the core system prompt defining ASR-7's personali
 
 **Runtime State**:
 - `conversation_history.json` - Conversation exchanges (max 100, last 8 sent to LLM)
-- `memories.json` - Long-term core memories (max 10 stored, last 15 sent to LLM, LLM-managed)
+- `memories.json` - Long-term core memories (max 10 via AI-managed path, max 50 via manual add; last 15 sent to LLM, LLM-managed)
 - `mood_state.json` - Current mood state (persists across sessions)
 
 **Agent Workspace**:
@@ -1301,9 +1310,17 @@ The architecture successfully bridges the gap between abstract AI reasoning and 
 
 ---
 
-**Document Version**: 1.2
-**Last Updated**: 2026-02-13
+**Document Version**: 1.3
+**Last Updated**: 2026-02-14
 **Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure)
+
+**Changelog v1.3** (2026-02-14):
+- **Fixed Memory Limits**: Corrected memories.json description — max 10 via AI-managed path, max 50 via manual add_memory()
+- **Fixed Task Detection Keywords**: Replaced incomplete 5-keyword list with actual two-part system (20+ action verbs AND 14+ creation indicators)
+- **Added Missing API Endpoints**: Documented /api/memory, /api/debug/last_response, /api/tools/available, /chat_images/<filename>
+- **Fixed Vision Capture Rate**: Clarified webcam captures at 30 FPS, object detection processes at ~10 FPS
+- **Fixed Voice SSE Attribution**: Corrected voicemanager.py uses callback pattern; Flask translates to SSE in /api/voice/events
+- **Added /clear Slash Command**: Documented Discord bot /clear [number] command for message deletion
 
 **Changelog v1.2** (2026-02-13):
 - **Added Monitoring & Observability System**: Complete documentation of production-grade metrics collection, live dashboard (port 8081), and performance tracking
