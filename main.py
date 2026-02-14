@@ -649,6 +649,25 @@ class EmbodiedAssaultronCore:
         Returns:
             Tuple (is_task, task_description)
         """
+        # Check if user explicitly wants to bypass agent invocation
+        message_lower_check = message.lower()
+        no_agent_phrases = [
+            "don't use agent", "dont use agent",
+            "don't call agent", "dont call agent",
+            "don't use the agent", "dont use the agent",
+            "don't call the agent", "dont call the agent",
+            "don't start agent", "dont start agent",
+            "don't start the agent", "dont start the agent",
+            "don't run agent", "dont run agent",
+            "don't run the agent", "dont run the agent",
+            "don't trigger agent", "dont trigger agent",
+            "don't trigger the agent", "dont trigger the agent",
+            "no agent", "without agent", "skip agent",
+            "not for agent", "not for the agent",
+        ]
+        if any(phrase in message_lower_check for phrase in no_agent_phrases):
+            return False, ""
+
         # Quick check for obvious non-tasks to save LLM calls
         if len(message.split()) < 2:
             return False, ""

@@ -794,6 +794,7 @@ def process_message(user_message, image_path=None) -> dict:
 ```
 
 **Task Detection** (for autonomous agent):
+- **Agent Override Check**: Before any detection logic runs, the system checks for explicit opt-out phrases in the user's message. If phrases like "don't use agent", "don't call agent", "no agent", "skip agent", "without agent", etc. are detected, the task detection immediately returns `False` — bypassing both LLM classification and keyword fallback. This allows users to include task-like language without triggering the autonomous agent.
 - Uses LLM to classify if message is an actionable task
 - Fallback to keyword matching if LLM fails, using a two-part system:
   - **Action verbs** (20+): create, make, build, write, generate, develop, code, program, design, implement, construct, research, find, search, look up, investigate, analyze, test, run, execute, deploy
@@ -1310,9 +1311,12 @@ The architecture successfully bridges the gap between abstract AI reasoning and 
 
 ---
 
-**Document Version**: 1.3
+**Document Version**: 1.4
 **Last Updated**: 2026-02-14
 **Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure)
+
+**Changelog v1.4** (2026-02-14):
+- **Added Agent Override Check**: Documented new opt-out phrase detection in task detection — users can bypass agent invocation with phrases like "don't use agent", "no agent", "skip agent", etc.
 
 **Changelog v1.3** (2026-02-14):
 - **Fixed Memory Limits**: Corrected memories.json description — max 10 via AI-managed path, max 50 via manual add_memory()
