@@ -3350,27 +3350,7 @@
 
             if (isAISpeaking && audioAnalyser && audioDataArray) {
                 // REAL-TIME AUDIO VISUALIZATION using Web Audio API
-                // Get frequency data from the actual audio being played
-                audioAnalyser.getByteFrequencyData(audioDataArray);
-
-                // Draw frequency bars (mirrored from center)
-                ctx.fillStyle = '#10b981';
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = '#10b981';
-
-                const barWidth = width / audioBufferLength;
-                let x = 0;
-
-                for (let i = 0; i < audioBufferLength; i++) {
-                    const barHeight = (audioDataArray[i] / 255) * (height * 0.4);
-                    ctx.fillRect(x, centerY - barHeight, barWidth - 1, barHeight);
-                    ctx.fillRect(x, centerY, barWidth - 1, barHeight);
-                    x += barWidth;
-                }
-
-                ctx.shadowBlur = 0;
-
-                // Also draw waveform overlay
+                // Get waveform data from the actual audio being played
                 audioAnalyser.getByteTimeDomainData(audioDataArray);
 
                 ctx.strokeStyle = '#34d399';
@@ -3380,7 +3360,7 @@
                 ctx.beginPath();
 
                 const sliceWidth = width / audioBufferLength;
-                x = 0;
+                let x = 0;
 
                 for (let i = 0; i < audioBufferLength; i++) {
                     const v = audioDataArray[i] / 128.0; // Normalize to 0-2 range
