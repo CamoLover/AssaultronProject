@@ -328,6 +328,21 @@
             color: #34d399;
         }
 
+        /* Microphone button listening state */
+        #immersionMicBtn.listening {
+            background: rgba(239, 68, 68, 0.8) !important;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+            50% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+        }
+
         /* Global Dark Mode Compatibility */
         body.dark-mode .bg-white {
             background-color: var(--card-bg) !important;
@@ -966,6 +981,82 @@
                                 <button onclick="testSpeech()"
                                     class="absolute right-1 top-1 bottom-1 px-3 rounded text-[10px] font-bold hover:bg-emerald-500 hover:text-white transition-colors uppercase"
                                     style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text);">TEST</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Speech-to-Text Control -->
+                    <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg" style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                        <div class="bg-gradient-to-r from-blue-600 to-indigo-600 px-4 py-2.5 flex justify-between items-center">
+                            <h3 class="font-bold text-white text-xs tracking-widest uppercase">Speech Recognition</h3>
+                            <div id="sttStatusIndicator" class="h-2 w-2 rounded-full bg-gray-300 shadow-lg"></div>
+                        </div>
+                        <div class="p-4 space-y-4">
+                            <div class="text-xs" style="color: var(--text-tertiary);">
+                                <p class="mb-3">Mistral Voxtral realtime transcription</p>
+                                <div class="flex items-center gap-2 mb-3">
+                                    <span class="text-[10px] uppercase font-bold" style="color: var(--text-tertiary);">Status</span>
+                                    <span id="sttStatus" class="font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200 bg-gray-100 text-gray-600">INACTIVE</span>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <button id="startSttBtn" onclick="startSTT()"
+                                    class="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-blue-600 text-white rounded shadow-md text-xs font-bold hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z">
+                                        </path>
+                                    </svg>
+                                    START LISTENING
+                                </button>
+                                <button id="stopSttBtn" onclick="stopSTT()"
+                                    class="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-red-600 text-white rounded shadow-md text-xs font-bold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg"
+                                    disabled>
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z">
+                                        </path>
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                    STOP
+                                </button>
+                            </div>
+
+                            <!-- Microphone device selection -->
+                            <div>
+                                <label class="block text-[10px] uppercase font-bold mb-1.5" style="color: var(--text-tertiary);">Microphone Device</label>
+                                <select id="sttDeviceSelect" onchange="changeSTTDevice()"
+                                    class="w-full px-3 py-2 rounded text-xs border focus:outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                                    style="background-color: var(--input-bg); border-color: var(--input-border); color: var(--text-primary);">
+                                    <option value="">Loading devices...</option>
+                                </select>
+                            </div>
+
+                            <!-- Volume test visualization -->
+                            <div>
+                                <div class="flex justify-between items-center mb-1.5">
+                                    <span class="text-[10px] uppercase font-bold" style="color: var(--text-tertiary);">Mic Level Test</span>
+                                    <span id="sttVolumePercent" class="text-xs font-mono" style="color: var(--text-secondary);">0%</span>
+                                </div>
+                                <div class="w-full h-3 rounded-lg overflow-hidden border" style="background-color: var(--bg-tertiary); border-color: var(--border-color-light);">
+                                    <div id="sttVolumeBar" class="h-full bg-gradient-to-r from-green-500 to-green-400 transition-all duration-75" style="width: 0%;"></div>
+                                </div>
+                                <p class="text-[10px] mt-1 italic" style="color: var(--text-tertiary);">Speak to test microphone input</p>
+                            </div>
+
+                            <!-- Auto-send configuration -->
+                            <div class="flex items-center gap-2 px-3 py-2 rounded" style="background-color: var(--bg-tertiary);">
+                                <input class="form-check-input" type="checkbox" id="sttAutoSendCheckbox" checked onchange="toggleSTTAutoSend()">
+                                <label class="text-xs cursor-pointer" for="sttAutoSendCheckbox" style="color: var(--text-secondary);">
+                                    Auto-send transcriptions in immersive mode
+                                </label>
+                            </div>
+
+                            <!-- Live transcript display -->
+                            <div id="sttLiveTranscript" class="p-3 rounded min-h-[60px] text-xs font-mono transition-all" style="background: rgba(0,0,0,0.3); color: #34d399;">
+                                <span class="text-gray-500 italic">Live transcription appears here...</span>
                             </div>
                         </div>
                     </div>
@@ -1690,6 +1781,9 @@
             <button id="immersionAttachImageBtn" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-right: 10px; font-size: 18px;">
                 <i class="fas fa-paperclip"></i>
             </button>
+            <button id="immersionMicBtn" onclick="toggleImmersionSTT()" style="background: rgba(255,255,255,0.1); border: 1px solid rgba(255,255,255,0.3); color: white; padding: 10px 15px; border-radius: 4px; cursor: pointer; margin-right: 10px; font-size: 18px; transition: all 0.3s ease;">
+                <i class="fas fa-microphone"></i>
+            </button>
             <input type="text" id="immersionChatInput" placeholder="ENTER COMMAND OR COMMUNICATION..."
                 class="immersion-chat-input">
             <button id="immersionSendBtn" class="immersion-send-btn">
@@ -1718,6 +1812,23 @@
         let audioSource = null;
         let audioDataArray = null;
         let audioBufferLength = 0;
+
+        // Speech-to-Text state
+        let sttEventSource = null;  // SSE connection for STT events
+        let sttIsListening = false;
+        let sttGloballyEnabled = false;  // STT toggle in Embodied tab
+        let sttAutoSendEnabled = true;  // Auto-send transcriptions (default: true)
+        let sttWasPaused = false;  // Track if STT was paused during AI speech
+        let sttCurrentTranscript = '';  // Buffer for current transcription
+        let sttImmersionActive = false;  // STT specifically for immersive mode
+        let sttSilenceTimer = null;  // Timer for detecting end of speech
+        let sttSilenceThreshold = 10;  // Volume below this is considered silence
+        let sttSilenceDelay = 2000;  // 2 seconds of silence before auto-send
+        let sttLastVolume = 0;  // Last volume level
+
+        // AI Response state
+        let aiIsResponding = false;  // Track if AI is currently generating response
+        let aiVoiceIsPlaying = false;  // Track if AI voice is currently playing
 
         // DOM elements
         const logsPanel = document.getElementById('logsPanel');
@@ -2558,10 +2669,25 @@
                         if (audioContext.state === 'suspended') {
                             audioContext.resume();
                         }
+
+                        // Don't pause STT - user can speak while AI is talking
+                        // The message will be queued and sent after AI finishes
                     });
 
                     audioPlayer.addEventListener('ended', () => {
                         isAISpeaking = false;
+                        aiVoiceIsPlaying = false;  // Voice finished playing
+                        aiIsResponding = false;  // AI response complete
+
+                        // Check if there's a queued message from STT
+                        if (sttImmersionActive && sttCurrentTranscript && sttCurrentTranscript.trim()) {
+                            addLog('STT', 'AI finished speaking - sending queued message');
+                            setTimeout(() => {
+                                if (sttCurrentTranscript && sttCurrentTranscript.trim()) {
+                                    sendImmersionMessage();
+                                }
+                            }, 100);  // Small delay to ensure state is cleared
+                        }
                     });
 
                     audioPlayer.addEventListener('pause', () => {
@@ -2571,6 +2697,18 @@
                     audioPlayer.addEventListener('error', (e) => {
                         addLog('ERROR', 'Failed to play voice audio');
                         isAISpeaking = false;
+                        aiVoiceIsPlaying = false;  // Clear voice state on error
+                        aiIsResponding = false;  // Clear response state on error
+
+                        // Check if there's a queued message from STT
+                        if (sttImmersionActive && sttCurrentTranscript && sttCurrentTranscript.trim()) {
+                            addLog('STT', 'AI voice error - sending queued message');
+                            setTimeout(() => {
+                                if (sttCurrentTranscript && sttCurrentTranscript.trim()) {
+                                    sendImmersionMessage();
+                                }
+                            }, 100);
+                        }
                     });
                 }
 
@@ -2593,6 +2731,485 @@
                 isAISpeaking = false;
             }
         }
+
+        // ============================================================================
+        // SPEECH-TO-TEXT FUNCTIONS
+        // ============================================================================
+
+        async function startSTT() {
+            try {
+                const startBtn = document.getElementById('startSttBtn');
+                const stopBtn = document.getElementById('stopSttBtn');
+                const statusEl = document.getElementById('sttStatus');
+                const indicatorEl = document.getElementById('sttStatusIndicator');
+
+                startBtn.disabled = true;
+                statusEl.textContent = 'INITIALIZING...';
+                statusEl.className = 'font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200 bg-yellow-100 text-yellow-600';
+
+                // Clear transcript buffer before starting (fresh start)
+                try {
+                    await fetch('/api/stt/clear', { method: 'POST' });
+                    sttCurrentTranscript = '';
+                } catch (err) {
+                    console.error('Failed to clear transcript buffer:', err);
+                }
+
+                const response = await fetch('/api/stt/start', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    sttIsListening = true;
+                    sttGloballyEnabled = true;
+                    addLog('STT', 'Speech-to-text started');
+
+                    // Update UI
+                    statusEl.textContent = 'LISTENING';
+                    statusEl.className = 'font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200 bg-green-100 text-green-600';
+                    indicatorEl.className = 'h-2 w-2 rounded-full bg-green-500 shadow-lg';
+                    stopBtn.disabled = false;
+
+                    // Connect to STT event stream
+                    initSTTEventStream();
+
+                } else {
+                    throw new Error(data.error || 'Failed to start STT');
+                }
+
+            } catch (error) {
+                addLog('ERROR', `STT startup failed: ${error.message}`);
+
+                const startBtn = document.getElementById('startSttBtn');
+                const statusEl = document.getElementById('sttStatus');
+                startBtn.disabled = false;
+                statusEl.textContent = 'ERROR';
+                statusEl.className = 'font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200 bg-red-100 text-red-600';
+            }
+        }
+
+        async function stopSTT() {
+            try {
+                const response = await fetch('/api/stt/stop', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    sttIsListening = false;
+                    sttGloballyEnabled = false;
+                    addLog('STT', 'Speech-to-text stopped');
+
+                    // Disconnect event stream
+                    if (sttEventSource) {
+                        sttEventSource.close();
+                        sttEventSource = null;
+                    }
+
+                    // Update UI
+                    const startBtn = document.getElementById('startSttBtn');
+                    const stopBtn = document.getElementById('stopSttBtn');
+                    const statusEl = document.getElementById('sttStatus');
+                    const indicatorEl = document.getElementById('sttStatusIndicator');
+
+                    statusEl.textContent = 'INACTIVE';
+                    statusEl.className = 'font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200 bg-gray-100 text-gray-600';
+                    indicatorEl.className = 'h-2 w-2 rounded-full bg-gray-300 shadow-lg';
+                    startBtn.disabled = false;
+                    stopBtn.disabled = true;
+
+                    // Clear transcript
+                    document.getElementById('sttLiveTranscript').innerHTML = '<span class="text-gray-500 italic">Live transcription appears here...</span>';
+                    sttCurrentTranscript = '';
+
+                } else {
+                    throw new Error(data.error || 'Failed to stop STT');
+                }
+
+            } catch (error) {
+                addLog('ERROR', `STT stop failed: ${error.message}`);
+            }
+        }
+
+        async function pauseSTT() {
+            if (!sttIsListening) return;
+
+            try {
+                const response = await fetch('/api/stt/pause', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    sttWasPaused = true;
+
+                    const statusEl = document.getElementById('sttStatus');
+                    statusEl.textContent = 'PAUSED (AI SPEAKING)';
+                    statusEl.className = 'font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200 bg-orange-100 text-orange-600';
+
+                    addLog('STT', 'Paused during AI speech');
+                }
+            } catch (error) {
+                console.error('Failed to pause STT:', error);
+            }
+        }
+
+        async function resumeSTT() {
+            if (!sttWasPaused) return;
+
+            try {
+                const response = await fetch('/api/stt/resume', {
+                    method: 'POST'
+                });
+
+                if (response.ok) {
+                    sttWasPaused = false;
+
+                    const statusEl = document.getElementById('sttStatus');
+                    statusEl.textContent = 'LISTENING';
+                    statusEl.className = 'font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200 bg-green-100 text-green-600';
+
+                    addLog('STT', 'Resumed after AI speech');
+                }
+            } catch (error) {
+                console.error('Failed to resume STT:', error);
+            }
+        }
+
+        function toggleSTTAutoSend() {
+            const checkbox = document.getElementById('sttAutoSendCheckbox');
+            sttAutoSendEnabled = checkbox.checked;
+
+            // Save to localStorage
+            localStorage.setItem('sttAutoSendEnabled', sttAutoSendEnabled);
+
+            addLog('STT', `Auto-send ${sttAutoSendEnabled ? 'enabled' : 'disabled'}`);
+        }
+
+        async function loadSTTDevices() {
+            try {
+                const response = await fetch('/api/stt/devices');
+                const data = await response.json();
+
+                const select = document.getElementById('sttDeviceSelect');
+                select.innerHTML = '';
+
+                if (data.devices && data.devices.length > 0) {
+                    // Add system default option
+                    const defaultOption = document.createElement('option');
+                    defaultOption.value = '';
+                    defaultOption.textContent = 'System Default';
+                    select.appendChild(defaultOption);
+
+                    // Add each device
+                    data.devices.forEach(device => {
+                        const option = document.createElement('option');
+                        option.value = device.index;
+                        option.textContent = `${device.name} (${device.channels}ch, ${device.sample_rate}Hz)`;
+                        select.appendChild(option);
+                    });
+
+                    // Load saved device from localStorage
+                    const savedDevice = localStorage.getItem('sttDeviceIndex');
+                    if (savedDevice !== null) {
+                        select.value = savedDevice;
+                    }
+
+                    addLog('STT', `Found ${data.devices.length} microphone devices`);
+                } else {
+                    const option = document.createElement('option');
+                    option.value = '';
+                    option.textContent = 'No devices found';
+                    select.appendChild(option);
+                    select.disabled = true;
+                }
+
+            } catch (error) {
+                console.error('Failed to load STT devices:', error);
+                const select = document.getElementById('sttDeviceSelect');
+                select.innerHTML = '<option value="">Error loading devices</option>';
+                select.disabled = true;
+            }
+        }
+
+        async function changeSTTDevice() {
+            const select = document.getElementById('sttDeviceSelect');
+            const deviceIndex = select.value;
+
+            try {
+                const response = await fetch('/api/stt/set_device', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        device_index: deviceIndex === '' ? null : parseInt(deviceIndex)
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    // Save to localStorage
+                    localStorage.setItem('sttDeviceIndex', deviceIndex);
+
+                    addLog('STT', `Device changed to: ${data.device_name}`);
+                } else {
+                    addLog('ERROR', `Failed to change device: ${data.error}`);
+                }
+
+            } catch (error) {
+                addLog('ERROR', `Device change error: ${error.message}`);
+            }
+        }
+
+        async function toggleImmersionSTT() {
+            const micBtn = document.getElementById('immersionMicBtn');
+            const immersionInput = document.getElementById('immersionChatInput');
+
+            if (!sttImmersionActive) {
+                // CLEAR EVERYTHING before activating
+                sttCurrentTranscript = '';
+                immersionInput.value = '';
+
+                // Clear Embodied tab transcript too
+                const transcriptEl = document.getElementById('sttLiveTranscript');
+                if (transcriptEl) {
+                    transcriptEl.innerHTML = '<span class="text-gray-500 italic">Live transcription appears here...</span>';
+                }
+
+                // Clear backend transcript buffer
+                try {
+                    await fetch('/api/stt/clear', { method: 'POST' });
+                } catch (err) {
+                    console.error('Failed to clear transcript buffer:', err);
+                }
+
+                // Activate STT for immersive mode
+                if (!sttIsListening) {
+                    // Start STT if not already running
+                    await startSTT();
+                }
+
+                sttImmersionActive = true;
+                micBtn.classList.add('listening');
+                addLog('STT', 'Immersive mode listening activated - transcript cleared');
+
+            } else {
+                // Deactivate STT for immersive mode
+                sttImmersionActive = false;
+                micBtn.classList.remove('listening');
+
+                // Clear any pending silence timer
+                if (sttSilenceTimer) {
+                    clearTimeout(sttSilenceTimer);
+                    sttSilenceTimer = null;
+                }
+
+                // Clear current transcript
+                sttCurrentTranscript = '';
+                immersionInput.value = '';
+
+                addLog('STT', 'Immersive mode listening deactivated');
+
+                // Stop STT entirely (user manually toggled off)
+                if (sttIsListening) {
+                    await stopSTT();
+                }
+            }
+        }
+
+        function initSTTEventStream() {
+            // Close existing connection if any
+            if (sttEventSource) {
+                sttEventSource.close();
+            }
+
+            // Connect to STT SSE endpoint
+            sttEventSource = new EventSource('/api/stt/events');
+
+            sttEventSource.onopen = () => {
+                addLog('STT', 'Connected to transcription stream');
+            };
+
+            sttEventSource.onmessage = (event) => {
+                try {
+                    const data = JSON.parse(event.data);
+
+                    if (data.type === 'connected') {
+                        console.log('STT event stream connected');
+                    }
+                    else if (data.type === 'audio_level') {
+                        // Update volume bar
+                        const volumeBar = document.getElementById('sttVolumeBar');
+                        const volumePercent = document.getElementById('sttVolumePercent');
+
+                        if (volumeBar && volumePercent) {
+                            const level = data.level || 0;
+                            volumeBar.style.width = `${level}%`;
+                            volumePercent.textContent = `${level}%`;
+                            sttLastVolume = level;
+                        }
+
+                        // Silence detection for immersive mode auto-send
+                        if (sttImmersionActive && immersionModeActive) {
+                            const level = data.level || 0;
+                            const SILENCE_THRESHOLD = 5; // Volume below 5% = silence
+
+                            if (level > SILENCE_THRESHOLD) {
+                                // User is speaking - cancel any pending timer
+                                if (sttSilenceTimer) {
+                                    clearTimeout(sttSilenceTimer);
+                                    sttSilenceTimer = null;
+                                }
+                            } else {
+                                // Silence detected - start timer if we have text and no timer running
+                                if (!sttSilenceTimer && sttCurrentTranscript && sttCurrentTranscript.trim()) {
+                                    sttSilenceTimer = setTimeout(() => {
+                                        if (sttCurrentTranscript && sttCurrentTranscript.trim()) {
+                                            // sendImmersionMessage will handle the blocking if AI is speaking
+                                            // If blocked, message stays in sttCurrentTranscript and will be sent when AI finishes
+                                            if (aiIsResponding || aiVoiceIsPlaying) {
+                                                addLog('STT', 'Message queued - waiting for AI to finish speaking');
+                                            } else {
+                                                addLog('STT', `Auto-sending after silence: "${sttCurrentTranscript}"`);
+                                                sendImmersionMessage();
+                                            }
+                                        }
+                                        sttSilenceTimer = null;
+                                    }, sttSilenceDelay);
+                                }
+                            }
+                        }
+                    }
+                    else if (data.type === 'transcription_partial') {
+                        // Update live transcript (Embodied tab only)
+                        const transcriptEl = document.getElementById('sttLiveTranscript');
+                        if (transcriptEl && !sttImmersionActive) {
+                            transcriptEl.textContent = data.full_text || data.text;
+                        }
+
+                        // Show partial transcript in immersive mode input (for visual feedback only)
+                        if (sttImmersionActive && immersionModeActive) {
+                            const immersionInput = document.getElementById('immersionChatInput');
+                            // Use full_text (accumulated by backend), not text (delta)
+                            const fullText = data.full_text || data.text || '';
+                            immersionInput.value = fullText;
+
+                            // Update transcript buffer so silence detection can use it
+                            sttCurrentTranscript = fullText;
+                        }
+                    }
+                    else if (data.type === 'transcription_complete') {
+                        // Complete transcription received - Mistral says you finished speaking
+                        const transcribedText = data.text;
+
+                        addLog('STT', `Transcription complete: "${transcribedText}"`);
+
+                        // Clear live transcript in Embodied tab
+                        const transcriptEl = document.getElementById('sttLiveTranscript');
+                        if (transcriptEl && !sttImmersionActive) {
+                            transcriptEl.innerHTML = '<span class="text-gray-500 italic">Live transcription appears here...</span>';
+                        }
+
+                        // In immersive mode - SET transcript and start silence timer
+                        if (sttImmersionActive && immersionModeActive) {
+                            // Update the transcript buffer
+                            sttCurrentTranscript = transcribedText;
+
+                            // Show in input
+                            const immersionInput = document.getElementById('immersionChatInput');
+                            immersionInput.value = transcribedText;
+
+                            // Start silence timer NOW (transcription complete = you stopped speaking)
+                            // Clear any existing timer first
+                            if (sttSilenceTimer) {
+                                clearTimeout(sttSilenceTimer);
+                            }
+
+                            // Only start timer if AI is not responding
+                            if (!aiIsResponding && !aiVoiceIsPlaying) {
+                                sttSilenceTimer = setTimeout(() => {
+                                    // Double-check AI is not responding before sending
+                                    if (aiIsResponding || aiVoiceIsPlaying) {
+                                        addLog('STT', 'Message pending - waiting for AI to finish');
+                                        sttSilenceTimer = null;
+                                        return;
+                                    }
+
+                                    // Send the message
+                                    if (sttCurrentTranscript && sttCurrentTranscript.trim()) {
+                                        addLog('STT', `Auto-sending: "${sttCurrentTranscript}"`);
+                                        sendImmersionMessage();
+                                    }
+                                    sttSilenceTimer = null;
+                                }, sttSilenceDelay);
+                            }
+                        }
+                    }
+                    else if (data.type === 'transcription_error') {
+                        addLog('ERROR', `STT error: ${data.error}`);
+                    }
+                    else if (data.type === 'transcription_started') {
+                        console.log('Transcription stream started');
+                    }
+                    else if (data.type === 'transcription_paused') {
+                        console.log('Transcription paused');
+                        // Reset volume bar when paused
+                        const volumeBar = document.getElementById('sttVolumeBar');
+                        const volumePercent = document.getElementById('sttVolumePercent');
+                        if (volumeBar && volumePercent) {
+                            volumeBar.style.width = '0%';
+                            volumePercent.textContent = '0%';
+                        }
+                    }
+                    else if (data.type === 'transcription_resumed') {
+                        console.log('Transcription resumed');
+                    }
+                    else if (data.type === 'transcription_stopped') {
+                        console.log('Transcription stopped');
+                        // Reset volume bar when stopped
+                        const volumeBar = document.getElementById('sttVolumeBar');
+                        const volumePercent = document.getElementById('sttVolumePercent');
+                        if (volumeBar && volumePercent) {
+                            volumeBar.style.width = '0%';
+                            volumePercent.textContent = '0%';
+                        }
+                    }
+
+                } catch (error) {
+                    console.error('STT event parse error:', error);
+                }
+            };
+
+            sttEventSource.onerror = (error) => {
+                console.error('STT event stream error:', error);
+                addLog('ERROR', 'STT connection lost. Reconnecting...');
+
+                // Attempt reconnection after delay
+                setTimeout(() => {
+                    if (sttIsListening && sttEventSource.readyState === EventSource.CLOSED) {
+                        initSTTEventStream();
+                    }
+                }, 3000);
+            };
+        }
+
+        // Load auto-send preference and STT devices from localStorage
+        window.addEventListener('load', () => {
+            const savedAutoSend = localStorage.getItem('sttAutoSendEnabled');
+            if (savedAutoSend !== null) {
+                sttAutoSendEnabled = savedAutoSend === 'true';
+                document.getElementById('sttAutoSendCheckbox').checked = sttAutoSendEnabled;
+            }
+
+            // Load available STT devices
+            loadSTTDevices();
+        });
+
+        // ============================================================================
+        // EMBODIED AGENT FUNCTIONS
+        // ============================================================================
 
         // Embodied Agent Functions
         async function updateEmbodiedAgentData() {
@@ -3307,9 +3924,32 @@
 
                 // Focus on immersion input
                 document.getElementById('immersionChatInput').focus();
+
+                // Auto-start STT if enabled in Embodied tab
+                if (sttGloballyEnabled && !sttIsListening) {
+                    // Don't await - let it start in background
+                    startSTT().catch(err => console.error('Failed to auto-start STT:', err));
+                }
+
+                // Update mic button visual state
+                const micBtn = document.getElementById('immersionMicBtn');
+                if (sttIsListening) {
+                    micBtn.classList.add('listening');
+                }
+
             } else {
                 overlay.classList.add('hidden');
                 stopSoundVisualizer();
+
+                // Stop STT when exiting immersive mode (optional - could keep running)
+                // Commented out to allow STT to stay active in Embodied tab
+                // if (sttIsListening) {
+                //     stopSTT();
+                // }
+
+                // Remove mic button visual state
+                const micBtn = document.getElementById('immersionMicBtn');
+                micBtn.classList.remove('listening');
             }
         }
 
@@ -3476,6 +4116,14 @@
 
             if (!message) return;
 
+            // Check if AI is already responding or voice is playing
+            if (aiIsResponding || aiVoiceIsPlaying) {
+                // Don't send yet - message stays queued in sttCurrentTranscript
+                // It will be sent automatically when AI voice finishes (in 'ended' event handler)
+                addLog('STT', 'Message queued - waiting for AI to finish speaking');
+                return;
+            }
+
             // Save reference to image file before clearing
             let imagePath = null;
             let imageFile = null;
@@ -3483,9 +4131,28 @@
                 imageFile = immersionImageInput.files[0];
             }
 
+            // Clear input and transcript IMMEDIATELY
             input.value = '';
+            sttCurrentTranscript = '';  // Clear STT transcript buffer
+
+            // Clear backend transcript buffer
+            if (sttIsListening) {
+                fetch('/api/stt/clear', { method: 'POST' }).catch(err => {
+                    console.error('Failed to clear backend transcript:', err);
+                });
+            }
+
+            // Clear any pending silence timer
+            if (sttSilenceTimer) {
+                clearTimeout(sttSilenceTimer);
+                sttSilenceTimer = null;
+            }
+
             sendBtn.disabled = true;
             sendBtn.textContent = 'TRANSMITTING';
+
+            // Mark AI as responding
+            aiIsResponding = true;
 
             // Mark user as active
             markUserActive();
@@ -3548,7 +4215,13 @@
                         const speakDuration = Math.min(data.response.length * 50, 10000);
                         setTimeout(() => {
                             isAISpeaking = false;
+                            aiIsResponding = false;  // Clear response state
                         }, speakDuration);
+                    } else {
+                        // Voice is enabled - set flag NOW to block new messages
+                        // Flag will be cleared when voice actually finishes playing
+                        aiVoiceIsPlaying = true;
+                        addLog('VOICE', 'Waiting for voice synthesis and playback...');
                     }
 
                     // Update embodied agent display if on that tab
@@ -3562,6 +4235,8 @@
                 addImmersionMessage('SYSTEM', `Error: ${error.message}`);
                 addChatMessage('SYSTEM', `Error: ${error.message}`);
                 isAISpeaking = false;
+                aiIsResponding = false;  // Clear response state on error
+                aiVoiceIsPlaying = false;
             }
 
             sendBtn.disabled = false;

@@ -16,6 +16,7 @@ import requests
 from config import Config
 import psutil
 from voicemanager import VoiceManager
+from stt_manager import MistralSTTManager
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -240,6 +241,26 @@ class EmbodiedAssaultronCore:
         # Register callback for real-time audio notifications
         self.voice_system.set_audio_ready_callback(self._broadcast_audio_ready)
         self.log_event("Voice Manager initialized", "SYSTEM")
+
+        # Speech-to-Text system
+        mistral_key = os.getenv("MISTRAL_KEY", "")
+        self.stt_manager = None
+        self.stt_event_queues = []  # SSE clients listening for STT events
+        if mistral_key:
+            try:
+                sample_rate = int(os.getenv("STT_SAMPLE_RATE", "16000"))
+                chunk_duration = int(os.getenv("STT_CHUNK_DURATION_MS", "480"))
+                self.stt_manager = MistralSTTManager(
+                    api_key=mistral_key,
+                    sample_rate=sample_rate,
+                    chunk_duration_ms=chunk_duration
+                )
+                self.log_event("STT Manager initialized (Mistral Voxtral)", "SYSTEM")
+            except Exception as e:
+                self.log_event(f"Failed to initialize STT Manager: {e}", "ERROR")
+                self.stt_manager = None
+        else:
+            self.log_event("STT Manager not initialized (MISTRAL_KEY not set)", "WARN")
 
         # Vision system (Perception Layer)
         self.vision_system = VisionSystem(logger=self)
@@ -1668,6 +1689,242 @@ def voice_events():
                 assaultron.voice_event_queues.remove(client_queue)
 
     return Response(event_stream(), mimetype='text/event-stream')
+
+
+# ============================================================================
+# SPEECH-TO-TEXT ENDPOINTS
+# ============================================================================
+
+@app.route('/api/stt/start', methods=['POST'])
+def start_stt():
+    """Start speech-to-text transcription"""
+    try:
+        if not assaultron.stt_manager:
+            return jsonify({
+                "success": False,
+                "error": "STT not available (MISTRAL_KEY not configured or dependencies missing)"
+            }), 503
+
+        success = assaultron.stt_manager.start_listening()
+
+        if success:
+            assaultron.log_event("STT started listening", "STT")
+            return jsonify({
+                "success": True,
+                "status": "listening"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to start STT"
+            }), 500
+
+    except Exception as e:
+        error_msg = f"STT startup exception: {str(e)}"
+        assaultron.log_event(error_msg, "ERROR")
+        return jsonify({"success": False, "error": error_msg}), 500
+
+
+@app.route('/api/stt/stop', methods=['POST'])
+def stop_stt():
+    """Stop speech-to-text transcription"""
+    try:
+        if not assaultron.stt_manager:
+            return jsonify({"success": False, "error": "STT not available"}), 503
+
+        success = assaultron.stt_manager.stop_listening()
+
+        if success:
+            assaultron.log_event("STT stopped listening", "STT")
+            return jsonify({
+                "success": True,
+                "status": "stopped"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to stop STT"
+            }), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/stt/pause', methods=['POST'])
+def pause_stt():
+    """Temporarily pause STT (e.g., during AI speech)"""
+    try:
+        if not assaultron.stt_manager:
+            return jsonify({"success": False, "error": "STT not available"}), 503
+
+        success = assaultron.stt_manager.pause_listening()
+
+        if success:
+            assaultron.log_event("STT paused", "STT")
+            return jsonify({
+                "success": True,
+                "status": "paused"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to pause STT"
+            }), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/stt/resume', methods=['POST'])
+def resume_stt():
+    """Resume STT after pause"""
+    try:
+        if not assaultron.stt_manager:
+            return jsonify({"success": False, "error": "STT not available"}), 503
+
+        success = assaultron.stt_manager.resume_listening()
+
+        if success:
+            assaultron.log_event("STT resumed", "STT")
+            return jsonify({
+                "success": True,
+                "status": "listening"
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to resume STT"
+            }), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/stt/status')
+@limiter.exempt  # Exempt from rate limiting
+def stt_status():
+    """Get STT status"""
+    try:
+        if not assaultron.stt_manager:
+            return jsonify({
+                "available": False,
+                "error": "STT not configured"
+            })
+
+        status = assaultron.stt_manager.get_status()
+        status["available"] = True
+        return jsonify(status)
+
+    except Exception as e:
+        return jsonify({"available": False, "error": str(e)})
+
+
+@app.route('/api/stt/events')
+@limiter.exempt
+def stt_events():
+    """Server-Sent Events stream for real-time transcription"""
+    def event_stream():
+        # Create a queue for this client
+        client_queue = Queue()
+
+        # Add queue to STT manager and broadcast list
+        if assaultron.stt_manager:
+            assaultron.stt_manager.add_event_queue(client_queue)
+        assaultron.stt_event_queues.append(client_queue)
+
+        try:
+            # Send initial connection message
+            yield f"data: {json.dumps({'type': 'connected'})}\n\n"
+
+            # Listen for events
+            while True:
+                try:
+                    # Wait for events with timeout to send keepalive
+                    message = client_queue.get(timeout=30)
+                    yield f"data: {json.dumps(message)}\n\n"
+                except:
+                    # Send keepalive comment every 30 seconds
+                    yield ": keepalive\n\n"
+        except GeneratorExit:
+            # Client disconnected
+            if assaultron.stt_manager:
+                assaultron.stt_manager.remove_event_queue(client_queue)
+            if client_queue in assaultron.stt_event_queues:
+                assaultron.stt_event_queues.remove(client_queue)
+
+    return Response(event_stream(), mimetype='text/event-stream')
+
+
+@app.route('/api/stt/devices')
+@limiter.exempt
+def list_stt_devices():
+    """List available microphone devices"""
+    try:
+        if not assaultron.stt_manager:
+            return jsonify({"devices": [], "error": "STT not available"}), 503
+
+        from stt_manager import MistralSTTManager
+        devices = MistralSTTManager.list_audio_devices()
+
+        return jsonify({"devices": devices})
+
+    except Exception as e:
+        return jsonify({"devices": [], "error": str(e)}), 500
+
+
+@app.route('/api/stt/set_device', methods=['POST'])
+def set_stt_device():
+    """Change the microphone device"""
+    try:
+        if not assaultron.stt_manager:
+            return jsonify({"success": False, "error": "STT not available"}), 503
+
+        data = request.get_json()
+        device_index = data.get('device_index')
+
+        # Convert to int or None
+        if device_index is not None and device_index != "":
+            device_index = int(device_index)
+        else:
+            device_index = None
+
+        success = assaultron.stt_manager.set_device(device_index)
+
+        if success:
+            device_info = assaultron.stt_manager.get_current_device()
+            device_name = device_info['name'] if device_info else "System Default"
+
+            assaultron.log_event(f"STT device changed to: {device_name}", "STT")
+
+            return jsonify({
+                "success": True,
+                "device_index": device_index,
+                "device_name": device_name
+            })
+        else:
+            return jsonify({
+                "success": False,
+                "error": "Failed to set device"
+            }), 500
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+@app.route('/api/stt/clear', methods=['POST'])
+def clear_stt_transcript():
+    """Clear the STT transcript buffer (useful when switching modes)"""
+    try:
+        if not assaultron.stt_manager:
+            return jsonify({"success": False, "error": "STT not available"}), 503
+
+        assaultron.stt_manager.clear_transcript_buffer()
+        assaultron.log_event("Transcript buffer cleared", "STT")
+
+        return jsonify({"success": True})
+
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 
 # ============================================================================

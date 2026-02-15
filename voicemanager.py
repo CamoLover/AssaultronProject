@@ -752,7 +752,7 @@ class VoiceManager:
                 pass
             
             # Wait for file generation (file may be written despite server error)
-            time.sleep(0.2)
+            time.sleep(0.05)
             
             # Check if file was created with .wav extension
             expected_file = Path(output_filename)
