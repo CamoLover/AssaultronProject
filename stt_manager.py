@@ -47,7 +47,8 @@ class MistralSTTManager:
     Manages speech-to-text transcription using Mistral Voxtral.
     """
 
-    def __init__(self, api_key: str, sample_rate: int = 16000, chunk_duration_ms: int = 480):
+    def __init__(self, api_key: str, sample_rate: int = 16000, chunk_duration_ms: int = 480,
+                 max_retries: int = 3, retry_delay: float = 2.0):
         """
         Initialize the STT manager.
 
@@ -55,6 +56,8 @@ class MistralSTTManager:
             api_key: Mistral API key
             sample_rate: Audio sample rate in Hz (default: 16000)
             chunk_duration_ms: Audio chunk duration in milliseconds (default: 480)
+            max_retries: Maximum retry attempts on connection failure (default: 3)
+            retry_delay: Initial retry delay in seconds (default: 2.0)
         """
         if not MISTRAL_AVAILABLE:
             raise ImportError("mistralai package is required for STT. Install with: pip install 'mistralai[realtime]'")
@@ -66,6 +69,8 @@ class MistralSTTManager:
         self.sample_rate = sample_rate
         self.chunk_duration_ms = chunk_duration_ms
         self.model = "voxtral-mini-transcribe-realtime-2602"
+        self.max_retries = max_retries
+        self.retry_delay = retry_delay
 
         # Initialize Mistral client
         self.client = Mistral(api_key=self.api_key)
@@ -83,6 +88,10 @@ class MistralSTTManager:
         self._listen_thread = None
         self._stop_event = threading.Event()
         self._pause_event = threading.Event()
+
+        # Retry tracking
+        self._retry_count = 0
+        self._last_error_time = 0
 
         # Event queues for broadcasting transcription events
         self.event_queues = []
@@ -227,80 +236,118 @@ class MistralSTTManager:
 
     async def _transcribe_stream(self):
         """
-        Main transcription loop. Captures audio and streams to Mistral API.
+        Main transcription loop with automatic retry on failure.
+        Captures audio and streams to Mistral API.
         """
-        try:
-            audio_stream = self._iter_microphone(device_index=self.selected_device_index)
-            self._current_transcript = ""  # Use instance variable for tracking
+        while not self._stop_event.is_set() and self._retry_count <= self.max_retries:
+            try:
+                audio_stream = self._iter_microphone(device_index=self.selected_device_index)
+                self._current_transcript = ""  # Use instance variable for tracking
 
-            logger.info("Starting transcription stream...")
-            self._broadcast_event({"type": "transcription_started"})
+                logger.info(f"Starting transcription stream (attempt {self._retry_count + 1}/{self.max_retries + 1})...")
+                self._broadcast_event({"type": "transcription_started"})
 
-            async for event in self.client.audio.realtime.transcribe_stream(
-                audio_stream=audio_stream,
-                model=self.model,
-                audio_format=self.audio_format,
-            ):
-                if isinstance(event, RealtimeTranscriptionSessionCreated):
-                    logger.info("Transcription session created")
-                    self._broadcast_event({"type": "session_created"})
+                async for event in self.client.audio.realtime.transcribe_stream(
+                    audio_stream=audio_stream,
+                    model=self.model,
+                    audio_format=self.audio_format,
+                ):
+                    # Reset retry count on successful connection
+                    if self._retry_count > 0:
+                        logger.info("Connection recovered successfully")
+                        self._retry_count = 0
 
-                elif isinstance(event, TranscriptionStreamTextDelta):
-                    # Partial transcription (real-time delta)
-                    self._current_transcript += event.text
-                    logger.debug(f"Transcription delta: {event.text}")
+                    if isinstance(event, RealtimeTranscriptionSessionCreated):
+                        logger.info("Transcription session created")
+                        self._broadcast_event({"type": "session_created"})
 
-                    # Broadcast partial transcription
+                    elif isinstance(event, TranscriptionStreamTextDelta):
+                        # Partial transcription (real-time delta)
+                        self._current_transcript += event.text
+                        logger.debug(f"Transcription delta: {event.text}")
+
+                        # Broadcast partial transcription
+                        self._broadcast_event({
+                            "type": "transcription_partial",
+                            "text": event.text,
+                            "full_text": self._current_transcript
+                        })
+
+                        if self.on_transcription_partial:
+                            self.on_transcription_partial(event.text)
+
+                    elif isinstance(event, TranscriptionStreamDone):
+                        # Transcription complete
+                        logger.info(f"Transcription complete: {self._current_transcript}")
+
+                        # Broadcast complete transcription
+                        self._broadcast_event({
+                            "type": "transcription_complete",
+                            "text": self._current_transcript
+                        })
+
+                        if self.on_transcription_complete:
+                            self.on_transcription_complete(self._current_transcript)
+
+                        # Reset for next phrase
+                        self._current_transcript = ""
+
+                    elif isinstance(event, RealtimeTranscriptionError):
+                        error_msg = str(event)
+                        logger.error(f"STT error: {error_msg}")
+
+                        # Check if it's an EngineDeadError
+                        if "EngineDeadError" in error_msg or "EngineCore" in error_msg:
+                            logger.warning("Detected vLLM engine failure - will retry connection")
+                            raise Exception(f"Engine failure: {error_msg}")
+
+                        self._broadcast_event({
+                            "type": "transcription_error",
+                            "error": error_msg
+                        })
+
+                        if self.on_transcription_error:
+                            self.on_transcription_error(error_msg)
+
+                    elif isinstance(event, UnknownRealtimeEvent):
+                        logger.warning(f"Unknown event: {event}")
+                        continue
+
+                # If we get here, stream ended normally
+                break
+
+            except Exception as e:
+                error_str = str(e)
+                logger.error(f"Transcription stream error: {error_str}")
+
+                # Check if we should retry
+                if self._retry_count < self.max_retries and not self._stop_event.is_set():
+                    self._retry_count += 1
+                    retry_wait = self.retry_delay * (2 ** (self._retry_count - 1))  # Exponential backoff
+
+                    logger.warning(f"Retrying in {retry_wait:.1f}s (attempt {self._retry_count}/{self.max_retries})...")
                     self._broadcast_event({
-                        "type": "transcription_partial",
-                        "text": event.text,
-                        "full_text": self._current_transcript
+                        "type": "transcription_retry",
+                        "error": error_str,
+                        "retry_count": self._retry_count,
+                        "retry_delay": retry_wait
                     })
 
-                    if self.on_transcription_partial:
-                        self.on_transcription_partial(event.text)
-
-                elif isinstance(event, TranscriptionStreamDone):
-                    # Transcription complete
-                    logger.info(f"Transcription complete: {self._current_transcript}")
-
-                    # Broadcast complete transcription
-                    self._broadcast_event({
-                        "type": "transcription_complete",
-                        "text": self._current_transcript
-                    })
-
-                    if self.on_transcription_complete:
-                        self.on_transcription_complete(self._current_transcript)
-
-                    # Reset for next phrase
-                    self._current_transcript = ""
-
-                elif isinstance(event, RealtimeTranscriptionError):
-                    error_msg = str(event)
-                    logger.error(f"Transcription error: {error_msg}")
-
+                    await asyncio.sleep(retry_wait)
+                    continue
+                else:
+                    # Max retries exceeded or stop requested
+                    logger.error(f"Transcription failed after {self._retry_count} retries")
                     self._broadcast_event({
                         "type": "transcription_error",
-                        "error": error_msg
+                        "error": f"Connection failed after {self._retry_count} retries: {error_str}"
                     })
+                    break
 
-                    if self.on_transcription_error:
-                        self.on_transcription_error(error_msg)
-
-                elif isinstance(event, UnknownRealtimeEvent):
-                    logger.warning(f"Unknown event: {event}")
-                    continue
-
-        except Exception as e:
-            logger.error(f"Transcription stream error: {e}")
-            self._broadcast_event({
-                "type": "transcription_error",
-                "error": str(e)
-            })
-        finally:
-            self.is_listening = False
-            logger.info("Transcription stream ended")
+        # Reset state
+        self.is_listening = False
+        self._retry_count = 0
+        logger.info("Transcription stream ended")
 
     def _transcribe_thread_target(self):
         """
@@ -331,6 +378,7 @@ class MistralSTTManager:
             self.is_paused = False
             self._stop_event.clear()
             self._pause_event.clear()
+            self._retry_count = 0  # Reset retry counter on new start
 
             # Start transcription thread
             self._listen_thread = threading.Thread(
@@ -437,6 +485,29 @@ class MistralSTTManager:
         self._current_transcript = ""
         logger.info("Transcript buffer cleared")
         self._broadcast_event({"type": "transcript_cleared"})
+
+    def reconnect(self) -> bool:
+        """
+        Manually reconnect to the STT service.
+        Useful for recovering from errors or refreshing the connection.
+
+        Returns:
+            bool: True if reconnection initiated successfully
+        """
+        was_listening = self.is_listening
+
+        if not was_listening:
+            logger.warning("Cannot reconnect - not currently listening")
+            return False
+
+        logger.info("Reconnecting STT service...")
+        self.stop_listening()
+
+        # Small delay to ensure clean shutdown
+        import time
+        time.sleep(0.5)
+
+        return self.start_listening()
 
     def _broadcast_event(self, event: dict):
         """
