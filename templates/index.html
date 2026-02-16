@@ -3150,6 +3150,9 @@
                     else if (data.type === 'transcription_error') {
                         addLog('ERROR', `STT error: ${data.error}`);
                     }
+                    else if (data.type === 'transcription_retry') {
+                        addLog('WARNING', `STT connection lost - retrying in ${data.retry_delay.toFixed(1)}s (attempt ${data.retry_count})`);
+                    }
                     else if (data.type === 'transcription_started') {
                         console.log('Transcription stream started');
                     }
