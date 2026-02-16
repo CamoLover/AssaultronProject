@@ -8,7 +8,8 @@ The Assaultron Project ASR-7 is an **embodied AI agent system** implementing a b
 **Architecture Pattern**: Layered Embodied Agent (Cognitive → Behavioral → Motion)
 **Primary Language**: Python 3.9+
 **AI Models**: Multi-provider support (Ollama local, Google Gemini, OpenRouter/DeepSeek)
-**Voice**: xVAsynth with Fallout 4 Assaultron voice model
+**Voice Output**: xVAsynth with Fallout 4 Assaultron voice model (TTS)
+**Voice Input**: Mistral Voxtral for real-time speech-to-text transcription (STT)
 **Vision**: MediaPipe EfficientDet-Lite0 for real-time object detection
 
 ---
@@ -188,7 +189,7 @@ BodyCommand → Hardware Translation → Hardware State Dictionary
 
 ### Voice System (`voicemanager.py`)
 
-**Purpose**: TTS (Text-to-Speech) using xVAsynth for character-authentic voice.
+**Purpose**: TTS (Text-to-Speech) using xVAsynth for character-authentic voice output.
 
 **Components**:
 - **Server Management**: Starts/stops xVAsynth server (localhost:8008)
@@ -205,6 +206,54 @@ Dialogue Text → xVAsynth API → WAV File → audio_output/ → Frontend Playb
 - Handles port conflicts and server startup retries
 - Monitors server logs via threaded stdout/stderr readers
 - Provides fallback for startup failures
+
+---
+
+### Speech-to-Text System (`stt_manager.py`)
+
+**Purpose**: Real-time voice input using Mistral's Voxtral API for bidirectional voice communication.
+
+**Components**:
+- **MistralSTTManager class**: Manages real-time transcription with async/threading architecture
+- **Mistral Voxtral API**: Model `voxtral-mini-transcribe-realtime-2602` for streaming transcription
+- **PyAudio Integration**: Captures microphone audio (16kHz, PCM 16-bit mono)
+- **Async Transcription**: Streams audio chunks to Mistral API for real-time processing
+- **Event Broadcasting**: SSE (Server-Sent Events) for real-time updates to multiple clients
+
+**Key Features**:
+- **Real-time Streaming**: Not batch processing - continuous audio streaming with immediate transcription
+- **Audio Visualization**: RMS (Root Mean Square) volume calculation at 10Hz for live volume meters
+- **Device Selection**: Enumerate and select from available microphone input devices
+- **Pause/Resume**: Pause transcription during AI speech to prevent feedback loops
+- **Transcript Buffer**: Accumulates partial transcriptions into full text
+- **Configurable Audio**: Adjustable sample rate and chunk duration via environment variables
+
+**Audio Pipeline**:
+```
+Microphone → PyAudio (16kHz PCM) → 480ms chunks → Mistral Voxtral API → Transcription deltas → Full transcript
+```
+
+**Event Types**:
+- `transcription_started` - Session created, ready to transcribe
+- `transcription_partial` - Real-time text delta + accumulated full text
+- `transcription_complete` - Final transcript for completed phrase
+- `transcription_error` - API errors or processing failures
+- `audio_level` - Volume meter updates (0-100%) at 10Hz
+- `transcription_paused` / `transcription_resumed` - Pause state changes
+- `transcription_stopped` - Session ended
+
+**Implementation Notes**:
+- Uses async/await pattern with threading for non-blocking operation
+- Calculates RMS (Root Mean Square) for normalized volume levels (0-100%)
+- Thread-safe event broadcasting to multiple SSE client queues
+- Graceful device switching (stops current stream, changes device, restarts)
+- Optional system - gracefully degrades if `mistralai` or `pyaudio` packages unavailable
+
+**Integration with Voice System**:
+- Voice Output (TTS): xVAsynth generates speech responses
+- Voice Input (STT): Mistral Voxtral captures user speech
+- Together they enable full bidirectional voice conversation
+- STT pauses during TTS playback to avoid transcribing AI's own voice
 
 ---
 
@@ -868,6 +917,30 @@ def process_message(user_message, image_path=None) -> dict:
   - **Used by**: Frontend for audio playback notifications, Discord bot for voice message triggering
   - **Authentication**: Public endpoint (no auth required)
 
+### Speech-to-Text Endpoints
+
+- `POST /api/stt/start` - Start microphone capture and real-time transcription
+- `POST /api/stt/stop` - Stop capturing audio and end transcription session
+- `POST /api/stt/pause` - Pause transcription (e.g., while AI is speaking to avoid feedback)
+- `POST /api/stt/resume` - Resume transcription after pause
+- `GET /api/stt/status` - Get STT system status (listening, paused, model info)
+- `GET /api/stt/events` - SSE stream for transcription events
+  - **Purpose**: Broadcasts real-time transcription updates to connected clients
+  - **Event Types**:
+    - `transcription_started` - Session created, ready to transcribe
+    - `transcription_partial` - Real-time text delta with accumulated full text
+    - `transcription_complete` - Final transcript for completed phrase
+    - `transcription_error` - API errors or processing failures
+    - `audio_level` - Volume meter updates (0-100%) at 10Hz
+    - `transcription_paused` / `transcription_resumed` - Pause state changes
+    - `transcription_stopped` - Session ended
+  - **Keepalive**: 30-second timeout to maintain connection
+  - **Used by**: Frontend for live transcription display and volume visualization
+  - **Authentication**: Public endpoint (no auth required)
+- `GET /api/stt/devices` - List available microphone input devices
+- `POST /api/stt/set_device` - Change active microphone device (restarts stream if listening)
+- `POST /api/stt/clear` - Clear transcript buffer manually
+
 ### Vision System Endpoints
 
 - `GET /api/vision/status` - Vision system status
@@ -966,6 +1039,23 @@ AI_MODEL=gemma3:4b
 XVASYNTH_PATH=./Content/xVAsynth
 VOICE_MODEL=f4_robot_assaultron
 ```
+
+### Speech-to-Text Configuration (.env)
+
+```bash
+# Mistral Voxtral API
+MISTRAL_KEY=your_mistral_api_key_here
+
+# Audio capture settings
+STT_SAMPLE_RATE=16000           # Audio sample rate in Hz (recommended: 16000)
+STT_CHUNK_DURATION_MS=480       # Audio chunk duration in milliseconds
+```
+
+**STT Notes**:
+- `MISTRAL_KEY` required for STT functionality - system gracefully disables STT if not provided
+- Sample rate 16000Hz recommended by Mistral Voxtral for optimal accuracy
+- Chunk duration 480ms balances transcription latency and accuracy
+- System checks for `mistralai[realtime]` and `pyaudio` packages - logs warnings if unavailable
 
 ### Discord Bot Configuration (.env)
 
@@ -1089,6 +1179,19 @@ numpy>=1.24.0
 ### Voice
 
 - xVAsynth (bundled in `Content/xVAsynth/`)
+
+### Speech-to-Text
+
+```
+mistralai[realtime]>=1.0.0  # Mistral Voxtral API with real-time streaming
+pyaudio>=0.2.14             # Microphone audio capture
+```
+
+**System Dependencies**:
+- **PyAudio**: Requires system audio libraries (PortAudio)
+  - Windows: Included with pip install
+  - Linux: `sudo apt-get install portaudio19-dev python3-pyaudio`
+  - macOS: `brew install portaudio`
 
 ### AI
 
@@ -1311,9 +1414,18 @@ The architecture successfully bridges the gap between abstract AI reasoning and 
 
 ---
 
-**Document Version**: 1.4
-**Last Updated**: 2026-02-14
-**Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure)
+**Document Version**: 1.5
+**Last Updated**: 2026-02-16
+**Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure + Bidirectional Voice I/O)
+
+**Changelog v1.5** (2026-02-16):
+- **Added Speech-to-Text System**: Full voice input capability using Mistral Voxtral API for real-time transcription
+- **Added STT API Endpoints**: 9 new endpoints for transcription control, device management, and real-time event streaming
+- **Added Real-time Transcription**: Streaming audio processing with partial deltas and complete phrase transcripts
+- **Added Audio Visualization**: RMS volume level calculation at 10Hz with SSE broadcasting for live volume meters
+- **Updated Dependencies**: Added mistralai[realtime] and pyaudio packages with platform-specific installation notes
+- **Updated System Architecture**: Bidirectional voice communication - TTS output + STT input for natural conversation
+- **Added Device Management**: Microphone device enumeration and selection with graceful stream switching
 
 **Changelog v1.4** (2026-02-14):
 - **Added Agent Override Check**: Documented new opt-out phrase detection in task detection — users can bypass agent invocation with phrases like "don't use agent", "no agent", "skip agent", etc.

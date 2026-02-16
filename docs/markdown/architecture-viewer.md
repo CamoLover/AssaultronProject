@@ -342,8 +342,9 @@ graph TB
         Time[Time Awareness]
     end
 
-    subgraph "Output Systems"
-        Voice[Voice System<br/>xVAsynth]
+    subgraph "Input/Output Systems"
+        Voice[Voice Output<br/>xVAsynth TTS]
+        STT[Voice Input<br/>Mistral Voxtral STT]
         Notify[Notification Manager<br/>Discord Webhooks]
     end
 
@@ -372,8 +373,11 @@ graph TB
     Main --> Arbiter
     Main --> Vision
     Main --> Voice
+    Main --> STT
     Main --> Notify
     Main --> Agent
+
+    STT --> Main
 
     CogEngine --> LLM
     CogEngine --> Memory
@@ -904,6 +908,59 @@ sequenceDiagram
 
 ---
 
+## Speech-to-Text System Architecture
+
+```mermaid
+sequenceDiagram
+    participant User as User (Microphone)
+    participant PyAudio as PyAudio Capture
+    participant STT as STT Manager
+    participant Mistral as Mistral Voxtral API
+    participant SSE as SSE Events
+    participant UI as Frontend UI
+
+    Note over User,UI: Initialization
+    User->>UI: Click "Start STT"
+    UI->>STT: POST /api/stt/start
+    STT->>PyAudio: Open audio stream (16kHz, mono)
+    PyAudio-->>STT: Stream ready
+    STT->>Mistral: Create transcription session
+    Mistral-->>STT: Session created
+    STT->>SSE: Emit transcription_started
+    SSE-->>UI: Status update
+
+    Note over User,UI: Real-time Transcription
+    loop Every 480ms
+        User->>PyAudio: Speak into microphone
+        PyAudio->>STT: Audio chunk (PCM 16-bit)
+        STT->>STT: Calculate RMS volume
+        STT->>SSE: Emit audio_level (0-100%)
+        SSE-->>UI: Update volume visualizer
+        STT->>Mistral: Stream audio chunk
+        Mistral->>Mistral: Process audio
+        Mistral-->>STT: Text delta
+        STT->>STT: Accumulate transcript
+        STT->>SSE: Emit transcription_partial
+        SSE-->>UI: Display partial text
+    end
+
+    Note over User,UI: Phrase Complete
+    User->>PyAudio: Pause speaking
+    Mistral-->>STT: TranscriptionStreamDone
+    STT->>SSE: Emit transcription_complete
+    SSE-->>UI: Full transcript available
+    UI->>UI: Auto-send to chat (if enabled)
+
+    Note over User,UI: Stop Transcription
+    User->>UI: Click "Stop STT"
+    UI->>STT: POST /api/stt/stop
+    STT->>PyAudio: Close audio stream
+    STT->>SSE: Emit transcription_stopped
+    SSE-->>UI: Status update
+```
+
+---
+
 ## Notification System Flow
 
 ```mermaid
@@ -1063,13 +1120,23 @@ graph TB
         Hands[POST /api/hardware/hands]
     end
 
-    subgraph "Voice"
+    subgraph "Voice & Speech"
         VoiceStart[POST /api/voice/start]
         VoiceStop[POST /api/voice/stop]
         Speak[POST /api/voice/speak]
         VoiceStatus[GET /api/voice/status<br/>Exempt rate limit]
         Audio["GET /api/voice/audio/:file"]
         VoiceEvents[GET /api/voice/events<br/>SSE Stream]
+
+        SttStart[POST /api/stt/start]
+        SttStop[POST /api/stt/stop]
+        SttPause[POST /api/stt/pause]
+        SttResume[POST /api/stt/resume]
+        SttStatus[GET /api/stt/status]
+        SttEvents[GET /api/stt/events<br/>SSE Stream]
+        SttDevices[GET /api/stt/devices]
+        SttSetDevice[POST /api/stt/set_device]
+        SttClear[POST /api/stt/clear]
     end
 
     subgraph "Vision"
@@ -1299,6 +1366,7 @@ graph TB
         GeminiAPI[Google Generative AI<br/>Python SDK]
         OpenRouterAPI[OpenRouter API<br/>HTTP Requests]
         MediaPipe[MediaPipe<br/>Object Detection]
+        MistralSTT[Mistral Voxtral<br/>Speech-to-Text]
     end
 
     subgraph "Computer Vision"
@@ -1315,6 +1383,7 @@ graph TB
         Threading[Threading<br/>Async Operations]
         PSUtil[PSUtil<br/>System Metrics]
         Logging[Logging<br/>Rotating File Handler]
+        PyAudio[PyAudio<br/>Microphone Capture]
     end
 
     subgraph "Data"
@@ -1341,10 +1410,12 @@ graph TB
     OpenCV --> NumPy
 
     xVAsynth --> Python
+    MistralSTT --> Python
 
     Threading --> Python
     PSUtil --> Python
     Logging --> Python
+    PyAudio --> Python
 
     JSON --> Python
     DotEnv --> Python
@@ -1600,7 +1671,10 @@ mindmap
 |---------|---------------------|---------|---------|
 | **LLM Provider** | `LLM_PROVIDER` | `gemini` | Choose AI backend: ollama/gemini/openrouter |
 | **Gemini API** | `GEMINI_API_KEY` | - | Google Gemini API authentication |
-| **Voice Model** | `VOICE_MODEL` | `f4_robot_assaultron` | xVAsynth character voice |
+| **Voice Model** | `VOICE_MODEL` | `f4_robot_assaultron` | xVAsynth character voice (TTS output) |
+| **Mistral API** | `MISTRAL_KEY` | - | Mistral Voxtral STT authentication |
+| **STT Sample Rate** | `STT_SAMPLE_RATE` | `16000` | Audio capture sample rate (Hz) |
+| **STT Chunk Duration** | `STT_CHUNK_DURATION_MS` | `480` | Audio chunk size (milliseconds) |
 | **Vision Confidence** | - | `0.5` | Object detection threshold (runtime config) |
 | **Email Enabled** | `EMAIL_ENABLED` | `false` | Enable/disable email functionality |
 | **Git Enabled** | `GIT_ENABLED` | `false` | Enable/disable git operations |
@@ -1612,8 +1686,16 @@ mindmap
 
 *This architecture visualization is auto-generated from the ARCHITECTURE.md documentation. For detailed implementation notes, see the full architecture document.*
 
-**Last Updated**: 2026-02-13
-**Architecture Version**: 2.0 (Embodied Agent + Multi-Service Infrastructure)
+**Last Updated**: 2026-02-16
+**Architecture Version**: 2.1 (Embodied Agent + Multi-Service Infrastructure + Bidirectional Voice I/O)
+
+**New in v2.1** (2026-02-16):
+- Added Speech-to-Text System using Mistral Voxtral API for real-time voice input
+- Added STT System Architecture sequence diagram showing microphone → transcription flow
+- Updated System Overview to include "Input/Output Systems" with both Voice Output (TTS) and Voice Input (STT)
+- Added STT endpoints to "Voice & Speech" API map (9 new endpoints)
+- Updated Technology Stack with Mistral Voxtral STT and PyAudio components
+- Updated Configuration Quick Reference with MISTRAL_KEY, STT_SAMPLE_RATE, STT_CHUNK_DURATION_MS
 
 **New in v2.0.1** (2026-02-13):
 - Added Multi-Service Architecture diagram showing all 4 services orchestrated by run.py
