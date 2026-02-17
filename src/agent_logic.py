@@ -13,10 +13,10 @@ import logging
 from typing import Dict, Any, List, Optional, Callable
 from datetime import datetime
 import requests
-from config import Config
+from .config import Config
 import os
 from pathlib import Path
-from agent_tools import get_tool_functions
+from .agent_tools import get_tool_functions
 
 logger = logging.getLogger('assaultron.agent')
 

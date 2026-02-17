@@ -212,11 +212,11 @@ class MonitoringService:
 
     def generate_markdown_report(self, output_path: str = None):
         """Generate a comprehensive markdown report"""
-        # Default to /report directory with timestamp
+        # Default to /debug/reports directory with timestamp
         if output_path is None:
-            os.makedirs('report', exist_ok=True)
+            os.makedirs('debug/reports', exist_ok=True)
             timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-            output_path = f"report/monitoring_report_{timestamp}.md"
+            output_path = f"debug/reports/monitoring_report_{timestamp}.md"
 
         stats = self.metrics_collector.get_stats()
         all_metrics = self.metrics_collector.get_all_metrics()

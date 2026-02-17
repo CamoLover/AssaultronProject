@@ -32,8 +32,8 @@ class VoiceManager:
         self.model_info = None
         
         # Voice synthesis configuration
-        self.audio_output_dir = Path("audio_output")
-        self.audio_output_dir.mkdir(exist_ok=True)
+        self.audio_output_dir = Path("ai-data/audio_output")
+        self.audio_output_dir.mkdir(exist_ok=True, parents=True)
         
         # Status tracking
         self.is_initialized = False

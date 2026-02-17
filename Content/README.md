@@ -10,6 +10,7 @@ This directory contains the AI components for the Assaultron project.
 - Download xVAsynth from: https://github.com/DanRuta/xVA-Synth
 - Extract to the `xVAsynth` folder
 - Voice models will be added later for Assaultron-specific speech
+- xVAsynth.exe should be at the root of xVAsynth folder
 
 ## Setup Instructions
 

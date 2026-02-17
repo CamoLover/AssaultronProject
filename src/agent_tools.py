@@ -5,8 +5,8 @@ Provides email and git functionality with proper error handling and logging
 
 import logging
 from typing import Dict, Any, Optional, List
-from email_manager import get_email_manager
-from git_manager import get_git_manager
+from .email_manager import get_email_manager
+from .git_manager import get_git_manager
 
 logger = logging.getLogger('assaultron.agent_tools')
 

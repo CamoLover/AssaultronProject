@@ -8,11 +8,11 @@ import json
 import time
 from datetime import datetime
 import logging
-from monitoring_service import get_monitoring_service
+from .monitoring_service import get_monitoring_service
 
 logger = logging.getLogger('assaultron.monitoring_dashboard')
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='templates')
 
 
 @app.route('/')

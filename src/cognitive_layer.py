@@ -14,9 +14,9 @@ from typing import Dict, List, Any, Optional
 import requests
 from datetime import datetime
 
-from virtual_body import CognitiveState, WorldState, BodyState, MoodState
-from config import Config
-from time_awareness import get_time_context, format_time_context_for_prompt
+from .virtual_body import CognitiveState, WorldState, BodyState, MoodState
+from .config import Config
+from .time_awareness import get_time_context, format_time_context_for_prompt
 
 # Optional import for Gemini
 try:
@@ -56,11 +56,11 @@ class CognitiveEngine:
         self.base_system_prompt = system_prompt
 
         # Conversation state
-        self.history_file = "conversation_history.json"
+        self.history_file = "ai-data/conversation_history.json"
         self.conversation_history: List[Dict[str, str]] = self._load_history()
-        
+
         # Long-term memories
-        self.memory_file = "memories.json"
+        self.memory_file = "ai-data/memories.json"
 
         # Load memories into context from disk
         self.memory_context: List[Dict[str, Any]] = self._load_long_term_memories()
@@ -517,7 +517,7 @@ If you need the user's attention when they're not actively talking to you, set:
 - "needs_attention": true
 - "attention_reason": "Brief reason why you need their attention"
 
-This will send them a Windows desktop notification. Use this when:
+This will send them a Discord webhook notification. Use this when:
 - You detect something important they should know about
 - You have urgent information or concerns
 - You want to proactively check in on them

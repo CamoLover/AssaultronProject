@@ -11,7 +11,7 @@ operate purely on symbolic states.
 from typing import Dict, Any, Optional
 from datetime import datetime, timedelta
 
-from virtual_body import BodyState, BodyCommand, Posture, Luminance, HandState
+from .virtual_body import BodyState, BodyCommand, Posture, Luminance, HandState
 
 
 # ============================================================================

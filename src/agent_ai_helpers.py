@@ -6,7 +6,7 @@ Provides helper functions for seamless agent-AI conversation flow
 import threading
 from datetime import datetime
 from typing import Tuple
-from virtual_body import WorldState, BodyState, MoodState
+from .virtual_body import WorldState, BodyState, MoodState
 
 
 def generate_task_acknowledgment(cognitive_engine, task_description: str, mood_state: MoodState) -> str:

@@ -208,17 +208,22 @@ __marimo__/
 
 Content/xVAsynth/
 Content/Ollama/
-audio_output/
-memories.json
-conversation_history.json
 Content/xVAsynth.zip
-mood_state.json
-/sandbox
-chat_images/
+Content/efficientdet_lite0.tflite
 
-# Application logs
-logs/
+# AI data (runtime generated)
+ai-data/audio_output/
+ai-data/memories.json
+ai-data/conversation_history.json
+ai-data/mood_state.json
+ai-data/chat_images/
+
+# Source code sandbox
+src/sandbox/
+
+# Application logs and debug
+debug/logs/
 *.log
 
 # Monitoring reports
-/report
+debug/reports/

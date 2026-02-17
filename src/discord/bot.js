@@ -14,8 +14,8 @@ const execAsync = promisify(exec);
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 
-// Load environment variables from parent directory
-dotenv.config({ path: join(__dirname, '..', '.env') });
+// Load environment variables from project root (two levels up)
+dotenv.config({ path: join(__dirname, '../..', '.env') });
 
 // Configuration
 const DISCORD_BOT_TOKEN = process.env.DISCORD_BOT_TOKEN;

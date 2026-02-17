@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
 
-from virtual_body import (
+from .virtual_body import (
     CognitiveState, BodyState, BodyCommand,
     Posture, Luminance, HandState
 )

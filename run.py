@@ -38,6 +38,10 @@ def start_asr():
     print("Access at: http://localhost:8080")
     print()
 
+    # Add src to path for imports
+    import sys
+    sys.path.insert(0, os.path.dirname(__file__))
+
     from main import app
     try:
         app.run(debug=True, host='127.0.0.1', port=8080, use_reloader=False)
@@ -77,7 +81,7 @@ def start_discord_bot():
     print("Bot will connect to Discord servers")
     print()
 
-    discord_dir = os.path.join(os.path.dirname(__file__), 'discord')
+    discord_dir = os.path.join(os.path.dirname(__file__), 'src', 'discord')
 
     try:
         # Start the bot
@@ -95,7 +99,7 @@ def start_monitoring():
     print("Access at: http://localhost:8081")
     print()
 
-    from monitoring_dashboard import start_monitoring_dashboard
+    from src.monitoring_dashboard import start_monitoring_dashboard
     try:
         start_monitoring_dashboard()
     except KeyboardInterrupt:
@@ -105,7 +109,7 @@ def generate_shutdown_report():
     """Generate monitoring report on shutdown"""
     if START_MONITORING:
         try:
-            from monitoring_service import get_monitoring_service
+            from src.monitoring_service import get_monitoring_service
             monitoring = get_monitoring_service()
 
             print("\n" + "="*60)

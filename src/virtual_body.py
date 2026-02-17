@@ -370,7 +370,7 @@ class VirtualWorld:
         self.state_history: List[Dict[str, Any]] = []
         self.mood_history: List[Dict[str, Any]] = []
         self.max_history = 100
-        self.mood_file = "mood_state.json"
+        self.mood_file = "ai-data/mood_state.json"
 
     def update_body(self, command: BodyCommand) -> None:
         """
@@ -546,8 +546,8 @@ class VirtualWorld:
         try:
             import os
             import json
-            if os.path.exists("mood_state.json"):
-                with open("mood_state.json", 'r', encoding='utf-8') as f:
+            if os.path.exists("ai-data/mood_state.json"):
+                with open("ai-data/mood_state.json", 'r', encoding='utf-8') as f:
                     data = json.load(f)
                     return MoodState.from_dict(data)
         except Exception as e:

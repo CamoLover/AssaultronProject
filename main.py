@@ -13,10 +13,10 @@ import time
 import json
 from datetime import datetime
 import requests
-from config import Config
+from src.config import Config
 import psutil
-from voicemanager import VoiceManager
-from stt_manager import MistralSTTManager
+from src.voicemanager import VoiceManager
+from src.stt_manager import MistralSTTManager
 import logging
 from logging.handlers import RotatingFileHandler
 import os
@@ -27,24 +27,24 @@ from functools import wraps
 from queue import Queue
 
 # Import new embodied agent layers
-from virtual_body import (
+from src.virtual_body import (
     VirtualWorld, BodyState, WorldState, CognitiveState, BodyCommand,
     analyze_user_message_for_world_cues
 )
-from cognitive_layer import CognitiveEngine, extract_memory_from_message
-from behavioral_layer import BehaviorArbiter, describe_behavior_library
-from motion_controller import MotionController, HardwareStateValidator
-from vision_system import VisionSystem
-from notification_manager import NotificationManager
+from src.cognitive_layer import CognitiveEngine, extract_memory_from_message
+from src.behavioral_layer import BehaviorArbiter, describe_behavior_library
+from src.motion_controller import MotionController, HardwareStateValidator
+from src.vision_system import VisionSystem
+from src.notification_manager import NotificationManager
 
 # Import autonomous agent components
-from sandbox_manager import SandboxManager
-from agent_logic import AgentLogic
-import agent_ai_helpers
+from src.sandbox_manager import SandboxManager
+from src.agent_logic import AgentLogic
+import src.agent_ai_helpers as agent_ai_helpers
 
 # Import monitoring service
 try:
-    from monitoring_service import get_monitoring_service
+    from src.monitoring_service import get_monitoring_service
     monitoring = get_monitoring_service()
     MONITORING_ENABLED = True
 except ImportError:
@@ -52,7 +52,7 @@ except ImportError:
     monitoring = None
 
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder='src/templates')
 config = Config()
 
 
@@ -135,8 +135,9 @@ def setup_logging():
     console_handler.setFormatter(console_formatter)
 
     # File handler with rotation (10MB max, keep 5 backups)
+    os.makedirs('debug/logs', exist_ok=True)
     file_handler = RotatingFileHandler(
-        'logs/assaultron.log',
+        'debug/logs/assaultron.log',
         maxBytes=10*1024*1024,  # 10MB
         backupCount=5,
         encoding='utf-8'
@@ -150,7 +151,7 @@ def setup_logging():
 
     # Error file handler (errors only)
     error_handler = RotatingFileHandler(
-        'logs/assaultron_errors.log',
+        'debug/logs/assaultron_errors.log',
         maxBytes=10*1024*1024,
         backupCount=3,
         encoding='utf-8'
@@ -285,7 +286,7 @@ class EmbodiedAssaultronCore:
         self.background_thread = None
         
         # Autonomous Agent System
-        sandbox_path = os.getenv("SANDBOX_PATH", "./sandbox")
+        sandbox_path = os.getenv("SANDBOX_PATH", "./src/sandbox")
         self.sandbox_manager = SandboxManager(sandbox_path)
         self.agent_logic = AgentLogic(self.cognitive_engine, self.sandbox_manager)
         self.agent_tasks = {}  # Track running agent tasks
@@ -1054,13 +1055,13 @@ def upload_chat_image():
 
     # Create chat_images directory if it doesn't exist
     import os
-    os.makedirs('chat_images', exist_ok=True)
+    os.makedirs('ai-data/chat_images', exist_ok=True)
 
     # Generate unique filename
     from datetime import datetime
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S_%f")
     filename = f"chat_{timestamp}.{file_ext}"
-    filepath = os.path.join('chat_images', filename)
+    filepath = os.path.join('ai-data/chat_images', filename)
 
     # Save file
     try:
@@ -1077,7 +1078,7 @@ def upload_chat_image():
 @app.route('/chat_images/<path:filename>')
 def serve_chat_image(filename):
     """Serve uploaded chat images"""
-    return send_from_directory('chat_images', filename)
+    return send_from_directory('ai-data/chat_images', filename)
 
 
 @app.route('/api/chat', methods=['POST'])
