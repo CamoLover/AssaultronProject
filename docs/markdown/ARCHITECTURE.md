@@ -199,7 +199,7 @@ BodyCommand → Hardware Translation → Hardware State Dictionary
 
 **Audio Pipeline**:
 ```
-Dialogue Text → xVAsynth API → WAV File → audio_output/ → Frontend Playback
+Dialogue Text → xVAsynth API → WAV File → ai-data/audio_output/ → Frontend Playback
 ```
 
 **Implementation Notes**:
@@ -336,7 +336,7 @@ Action: Final Answer: "Website created! Check out lego_website.html"
 **Purpose**: Secure execution environment for agent file operations.
 
 **Security**:
-- All operations restricted to `SANDBOX_PATH` directory (default: `./sandbox`)
+- All operations restricted to `SANDBOX_PATH` directory (default: `./src/sandbox`)
 - Path validation prevents directory traversal attacks
 - Command execution sandboxed within workspace
 
@@ -348,7 +348,7 @@ Action: Final Answer: "Website created! Check out lego_website.html"
 
 ---
 
-### Discord Bot Integration (`discord/bot.js`)
+### Discord Bot Integration (`src/discord/bot.js`)
 
 **Purpose**: Multi-channel user interaction via Discord platform.
 
@@ -584,6 +584,15 @@ GIT_USER_EMAIL=
 GIT_ENABLED=false
 ```
 
+#### Autonomous Agent Configuration
+
+**Sandbox Path** (.env):
+```
+SANDBOX_PATH=./src/sandbox
+```
+
+All autonomous agent file operations are restricted to this directory for security.
+
 ---
 
 ### Monitoring & Observability System
@@ -688,7 +697,7 @@ GIT_ENABLED=false
 **Export Capabilities**:
 - **JSON Export**: Download all metrics via `/api/export` endpoint
 - **Markdown Reports**: Auto-generated on system shutdown
-  - Saved to `/report/monitoring_report_YYYYMMDD_HHMMSS.md`
+  - Saved to `debug/reports/monitoring_report_YYYYMMDD_HHMMSS.md`
   - Contains full metrics summary, performance stats, error logs
   - Triggered by `atexit` hook in `run.py`
 
@@ -739,7 +748,7 @@ START_MONITORING = True     # Monitoring dashboard on port 8081
 **Shutdown Management**:
 - **Graceful Shutdown**: Ctrl+C signal handler catches `KeyboardInterrupt`
 - **Monitoring Report Generation**: `atexit` hook calls `generate_shutdown_report()`
-  - Creates timestamped markdown report in `/report/` directory
+  - Creates timestamped markdown report in `debug/reports/` directory
   - Contains final metrics snapshot, performance summary, error logs
 - **Service Cleanup**: All daemon threads terminate when main thread exits
 
@@ -1073,7 +1082,7 @@ API_PASSWORD=your_api_password       # For authenticating to AI server
 ### Personality Prompt
 
 Contains `ASSAULTRON_PROMPT` - the core system prompt defining ASR-7's personality:
-- 10% Friendly, 45% Sarcastic, 45% Flirtatious
+- 25% Friendly, 70% Sarcastic, 5% Flirtatious
 - Embodied agent instructions (express goals/emotions, not hardware)
 - Vision integration rules
 - Time awareness guidelines
@@ -1086,26 +1095,26 @@ Contains `ASSAULTRON_PROMPT` - the core system prompt defining ASR-7's personali
 ### Files Created
 
 **Runtime State**:
-- `conversation_history.json` - Conversation exchanges (max 100, last 8 sent to LLM)
-- `memories.json` - Long-term core memories (max 10 via AI-managed path, max 50 via manual add; last 15 sent to LLM, LLM-managed)
-- `mood_state.json` - Current mood state (persists across sessions)
+- `ai-data/conversation_history.json` - Conversation exchanges (max 100, last 8 sent to LLM)
+- `ai-data/memories.json` - Long-term core memories (max 10 via AI-managed path, max 50 via manual add; last 15 sent to LLM, LLM-managed)
+- `ai-data/mood_state.json` - Current mood state (persists across sessions)
 
 **Agent Workspace**:
-- `sandbox/.agent_history.json` - Agent task history (last 50 tasks)
-- `sandbox/<user_projects>/` - Agent-created files and folders
+- `src/sandbox/.agent_history.json` - Agent task history (last 50 tasks)
+- `src/sandbox/<user_projects>/` - Agent-created files and folders
 
 **Audio Output**:
-- `audio_output/*.wav` - Generated voice audio files
+- `ai-data/audio_output/*.wav` - Generated voice audio files
 
 **Logs**:
-- `logs/assaultron.log` - Main log file (rotating, 10MB max, 5 backups)
-- `logs/assaultron_errors.log` - Errors only (rotating, 10MB max, 3 backups)
+- `debug/logs/assaultron.log` - Main log file (rotating, 10MB max, 5 backups)
+- `debug/logs/assaultron_errors.log` - Errors only (rotating, 10MB max, 3 backups)
 
 **Chat Images**:
-- `chat_images/*.jpg|png|gif|webp` - User-uploaded image attachments
+- `ai-data/chat_images/*.jpg|png|gif|webp` - User-uploaded image attachments
 
 **Monitoring Reports**:
-- `report/monitoring_report_*.md` - Generated on system shutdown with timestamp
+- `debug/reports/monitoring_report_*.md` - Generated on system shutdown with timestamp
   - Full metrics summary (API, voice, LLM performance)
   - Performance statistics (min/avg/max for all tracked metrics)
   - Error logs
@@ -1129,7 +1138,7 @@ Contains `ASSAULTRON_PROMPT` - the core system prompt defining ASR-7's personali
 
 ### Sandbox Security
 
-- All agent file operations restricted to `SANDBOX_PATH`
+- All agent file operations restricted to `SANDBOX_PATH` (default: `./src/sandbox`)
 - Path validation prevents directory traversal
 - Command execution sandboxed within workspace
 
@@ -1295,7 +1304,7 @@ google-generativeai>=0.3.0  # For Gemini support
 ### 4. Personality Consistency
 
 - ASR-7 personality enforced at every layer:
-  - Cognitive prompt maintains sarcastic/flirty tone (10% friendly, 45% sarcastic, 45% flirtatious)
+  - Cognitive prompt maintains sarcastic/flirty tone (25% friendly, 70% sarcastic, 5% flirtatious)
   - Agent tasks include personality enhancement
   - Memory extraction focuses on relationship with Evan
   - Time awareness adds character-appropriate comments
@@ -1399,7 +1408,7 @@ Edit `Config.ASSAULTRON_PROMPT` in `config.py`:
 
 ### Debugging
 
-- **Logs**: Check `logs/assaultron.log` for detailed execution traces
+- **Logs**: Check `debug/logs/assaultron.log` for detailed execution traces
 - **Behavior History**: `/api/embodied/behavior_history` shows behavior selections
 - **State History**: `/api/embodied/state_history` shows body transitions
 - **Cognitive Raw Response**: Enable debug logging to see unparsed LLM outputs
@@ -1414,9 +1423,21 @@ The architecture successfully bridges the gap between abstract AI reasoning and 
 
 ---
 
-**Document Version**: 1.5
-**Last Updated**: 2026-02-16
+**Document Version**: 1.6
+**Last Updated**: 2026-02-17
 **Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure + Bidirectional Voice I/O)
+
+**Changelog v1.6** (2026-02-17):
+- **Updated File Paths**: Corrected all file paths to reflect new directory structure
+  - Audio output: `audio_output/` → `ai-data/audio_output/`
+  - Sandbox path: `./sandbox` → `./src/sandbox`
+  - Discord bot: `discord/bot.js` → `src/discord/bot.js`
+  - Monitoring reports: `report/` → `debug/reports/`
+  - Log files: `logs/` → `debug/logs/`
+  - Conversation history, memories, mood state: Root → `ai-data/`
+  - Chat images: `chat_images/` → `ai-data/chat_images/`
+- **Updated Personality Configuration**: Adjusted personality ratio to 25% Friendly, 70% Sarcastic, 5% Flirtatious (from 10/45/45)
+- **Added Sandbox Configuration**: Documented `SANDBOX_PATH` environment variable in configuration section
 
 **Changelog v1.5** (2026-02-16):
 - **Added Speech-to-Text System**: Full voice input capability using Mistral Voxtral API for real-time transcription
