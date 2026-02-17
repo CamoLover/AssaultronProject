@@ -1,6 +1,10 @@
 #!/usr/bin/env python3
 """
 Assaultron Project - Main Runner
+
+Copyright (c) 2026 Evan Escabasse.
+Licensed under the MIT License - see LICENSE file for details.
+
 Simple launcher for the Assaultron AI interface
 """
 

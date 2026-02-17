@@ -1,6 +1,9 @@
 """
 Cognitive Layer - LLM Interface for Intent-Based Reasoning
 
+Copyright (c) 2026 Evan Escabasse.
+Licensed under the MIT License - see LICENSE file for details.
+
 This module handles all interaction with the LLM, ensuring that it reasons
 about goals, emotions, and intentions rather than hardware primitives.
 

@@ -1,6 +1,9 @@
 """
 Assaultron Main Server - Embodied Agent Architecture
 
+Copyright (c) 2026 Evan Escabasse.
+Licensed under the MIT License - see LICENSE file for details.
+
 This is the refactored main server that implements the behavior-based
 embodied agent system. The AI no longer uses tools to directly control
 hardware - instead it reasons about goals and emotions, which are then
