@@ -1264,15 +1264,25 @@ def edit_long_term_memory():
     data = request.get_json()
     index = data.get('index')
     content = data.get('content', '').strip()
-    
+
     if index is not None and 0 <= index < len(assaultron.cognitive_engine.memory_context) and content:
         old_content = assaultron.cognitive_engine.memory_context[index]["content"]
         assaultron.cognitive_engine.memory_context[index]["content"] = content
         assaultron.cognitive_engine._save_memories()
         assaultron.log_event(f"Core memory edited: {old_content} -> {content}", "MEMORY")
         return jsonify({"success": True})
-    
+
     return jsonify({"error": "Invalid parameters"}), 400
+
+
+@app.route('/api/embodied/long_term_memories/clear', methods=['POST'])
+def clear_all_long_term_memories():
+    """Clear all core memories"""
+    count = len(assaultron.cognitive_engine.memory_context)
+    assaultron.cognitive_engine.memory_context.clear()
+    assaultron.cognitive_engine._save_memories()
+    assaultron.log_event(f"All core memories cleared ({count} memories)", "MEMORY")
+    return jsonify({"success": True, "count": count})
 
 
 @app.route('/api/hardware/led', methods=['POST'])
