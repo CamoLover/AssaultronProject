@@ -114,9 +114,8 @@ limiter = Limiter(
 
 def setup_logging():
     """Configure application-wide logging with rotation and proper formatting"""
-    # Create logs directory if it doesn't exist
-    if not os.path.exists('logs'):
-        os.makedirs('logs')
+    # Get the project root directory (where main.py is located)
+    project_root = os.path.dirname(os.path.abspath(__file__))
 
     # Configure root logger
     logger = logging.getLogger()
@@ -135,9 +134,11 @@ def setup_logging():
     console_handler.setFormatter(console_formatter)
 
     # File handler with rotation (10MB max, keep 5 backups)
-    os.makedirs('debug/logs', exist_ok=True)
+    # Use absolute path to ensure logs go to the correct location
+    log_dir = os.path.join(project_root, 'debug', 'logs')
+    os.makedirs(log_dir, exist_ok=True)
     file_handler = RotatingFileHandler(
-        'debug/logs/assaultron.log',
+        os.path.join(log_dir, 'assaultron.log'),
         maxBytes=10*1024*1024,  # 10MB
         backupCount=5,
         encoding='utf-8'
@@ -151,7 +152,7 @@ def setup_logging():
 
     # Error file handler (errors only)
     error_handler = RotatingFileHandler(
-        'debug/logs/assaultron_errors.log',
+        os.path.join(log_dir, 'assaultron_errors.log'),
         maxBytes=10*1024*1024,
         backupCount=3,
         encoding='utf-8'
