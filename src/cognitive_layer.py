@@ -58,6 +58,12 @@ class CognitiveEngine:
         self.model = model
         self.base_system_prompt = system_prompt
 
+        # Language setting (default: English)
+        self.language = "en"
+
+        # Verbosity setting (1-5: 1=very brief, 3=balanced, 5=detailed)
+        self.verbosity = 2
+
         # Conversation state
         self.history_file = "ai-data/conversation_history.json"
         self.conversation_history: List[Dict[str, str]] = self._load_history()
@@ -88,15 +94,15 @@ class CognitiveEngine:
         """Switch between 'ollama', 'gemini', or 'openrouter' at runtime"""
         if provider not in ["ollama", "gemini", "openrouter"]:
             raise ValueError("Invalid provider. Use 'ollama', 'gemini', or 'openrouter'")
-        
+
         Config.LLM_PROVIDER = provider
-        
+
         # Configure Gemini if switching to it
         if provider == "gemini":
             if not GEMINI_AVAILABLE:
                 print("[COGNITIVE ERROR] Cannot switch to Gemini: library missing")
                 return False
-            
+
             if Config.GEMINI_API_KEY and "YOUR_API_KEY" not in Config.GEMINI_API_KEY:
                 genai.configure(api_key=Config.GEMINI_API_KEY)
                 print(f"[COGNITIVE] Switched to Gemini ({Config.GEMINI_MODEL})")
@@ -111,7 +117,26 @@ class CognitiveEngine:
                 return False
         else:
             print(f"[COGNITIVE] Switched to Local Ollama ({Config.AI_MODEL})")
-            
+
+        return True
+
+    def set_verbosity(self, level: int):
+        """
+        Set response verbosity level.
+
+        Args:
+            level: Verbosity level (1-5)
+                1 = Very brief (1 short sentence, 5-10 words)
+                2 = Short (1-2 sentences, 10-20 words) [DEFAULT]
+                3 = Balanced (2-3 sentences, 20-40 words)
+                4 = Detailed (3-4 sentences, 40-60 words)
+                5 = Elaborate (60+ words when appropriate)
+        """
+        if level not in [1, 2, 3, 4, 5]:
+            raise ValueError("Verbosity level must be between 1 and 5")
+
+        self.verbosity = level
+        print(f"[COGNITIVE] Verbosity set to level {level}")
         return True
 
     def process_input(
@@ -415,7 +440,31 @@ class CognitiveEngine:
         This adds structured output requirements and ensures the LLM
         reasons about goals/emotions rather than hardware.
         """
+        # Language instruction mapping
+        language_instructions = {
+            "en": "Your system language is set to English. You should respond in English unless explicitly asked otherwise.",
+            "fr": "Votre langue système est définie sur le français. Vous devez répondre en français sauf demande contraire explicite.",
+            "es": "El idioma de tu sistema está configurado en español. Debes responder en español a menos que se te pida explícitamente lo contrario."
+        }
+
+        language_instruction = language_instructions.get(self.language, language_instructions["en"])
+
+        # Verbosity instruction mapping
+        verbosity_instructions = {
+            1: "CRITICAL: Keep responses VERY BRIEF - 1 short sentence max (5-10 words). Be direct and concise.",
+            2: "Keep responses SHORT and to the point - 1-2 brief sentences (10-20 words total).",
+            3: "Respond naturally with balanced length - 2-3 sentences when appropriate (20-40 words).",
+            4: "You may give more detailed responses - 3-4 sentences when needed (40-60 words).",
+            5: "You can provide detailed, elaborate responses when the context calls for it (60+ words)."
+        }
+
+        verbosity_instruction = verbosity_instructions.get(self.verbosity, verbosity_instructions[2])
+
         cognitive_instructions = """
+
+""" + language_instruction + """
+
+""" + verbosity_instruction + """
 
 YOU ARE AN EMBODIED AGENT. You exist in a virtual body and must reason about your goals and emotions, NOT hardware.
 

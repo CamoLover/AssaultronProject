@@ -202,6 +202,9 @@ class EmbodiedAssaultronCore:
             "last_response_time": 0
         }
 
+        # Language setting (default: English)
+        self.language = "en"
+
         # Update monitoring
         if MONITORING_ENABLED:
             monitoring.get_collector().update_system_status(ai_active=False)
@@ -675,22 +678,49 @@ class EmbodiedAssaultronCore:
         Returns:
             Tuple (is_task, task_description)
         """
-        # Check if user explicitly wants to bypass agent invocation
+        # Check if user explicitly wants to bypass agent invocation (multilingual)
         message_lower_check = message.lower()
-        no_agent_phrases = [
-            "don't use agent", "dont use agent",
-            "don't call agent", "dont call agent",
-            "don't use the agent", "dont use the agent",
-            "don't call the agent", "dont call the agent",
-            "don't start agent", "dont start agent",
-            "don't start the agent", "dont start the agent",
-            "don't run agent", "dont run agent",
-            "don't run the agent", "dont run the agent",
-            "don't trigger agent", "dont trigger agent",
-            "don't trigger the agent", "dont trigger the agent",
-            "no agent", "without agent", "skip agent",
-            "not for agent", "not for the agent",
-        ]
+
+        # Multilingual no-agent phrases
+        no_agent_phrases_by_lang = {
+            "en": [
+                "don't use agent", "dont use agent",
+                "don't call agent", "dont call agent",
+                "don't use the agent", "dont use the agent",
+                "don't call the agent", "dont call the agent",
+                "don't start agent", "dont start agent",
+                "don't start the agent", "dont start the agent",
+                "don't run agent", "dont run agent",
+                "don't run the agent", "dont run the agent",
+                "don't trigger agent", "dont trigger agent",
+                "don't trigger the agent", "dont trigger the agent",
+                "no agent", "without agent", "skip agent",
+                "not for agent", "not for the agent",
+            ],
+            "fr": [
+                "n'utilise pas l'agent", "nutilise pas lagent",
+                "n'appelle pas l'agent", "nappelle pas lagent",
+                "ne démarre pas l'agent", "ne demarre pas lagent",
+                "n'utilise pas agent", "nutilise pas agent",
+                "n'appelle pas agent", "nappelle pas agent",
+                "ne lance pas l'agent", "ne lance pas lagent",
+                "pas d'agent", "sans agent", "sans l'agent",
+                "pas pour l'agent", "pas pour lagent",
+            ],
+            "es": [
+                "no uses el agente", "no uses agente",
+                "no llames al agente", "no llames agente",
+                "no inicies el agente", "no inicies agente",
+                "no ejecutes el agente", "no ejecutes agente",
+                "no actives el agente", "no actives agente",
+                "sin agente", "sin el agente",
+                "no para el agente", "no para agente",
+            ]
+        }
+
+        # Get phrases for current language, fallback to English
+        no_agent_phrases = no_agent_phrases_by_lang.get(self.language, no_agent_phrases_by_lang["en"])
+
         if any(phrase in message_lower_check for phrase in no_agent_phrases):
             return False, ""
 
@@ -698,8 +728,9 @@ class EmbodiedAssaultronCore:
         if len(message.split()) < 2:
             return False, ""
             
-        # Use LLM to classify intent
-        prompt = f"""Analyze the following user message and determine if it is a request for the autonomous agent to perform a specific task (like creating files, writing code, researching, etc.) or just a conversational statement/question.
+        # Use LLM to classify intent (multilingual prompts)
+        prompts_by_lang = {
+            "en": f"""Analyze the following user message and determine if it is a request for the autonomous agent to perform a specific task (like creating files, writing code, researching, etc.) or just a conversational statement/question.
 
 User Message: "{message}"
 
@@ -714,7 +745,42 @@ Respond with JSON only:
     "is_task": true/false,
     "task_description": "extracted task if true, else empty string",
     "reasoning": "brief explanation"
+}}""",
+            "fr": f"""Analysez le message de l'utilisateur suivant et déterminez s'il s'agit d'une demande pour que l'agent autonome effectue une tâche spécifique (comme créer des fichiers, écrire du code, faire des recherches, etc.) ou simplement d'une déclaration/question conversationnelle.
+
+Message de l'utilisateur : "{message}"
+
+Règles :
+1. "Crée un site web", "Écris un poème", "Recherche python" -> ACTIVE_TASK
+2. "J'ai besoin de corriger ça", "Je veux apprendre python", "Comment ça va ?" -> CONVERSATIONAL
+3. "Corrige le footer", "Mets à jour le fichier" -> ACTIVE_TASK (si cela implique que TU dois le faire)
+4. "Je vais le corriger", "Je code" -> CONVERSATIONAL
+
+Répondez uniquement avec du JSON :
+{{
+    "is_task": true/false,
+    "task_description": "tâche extraite si true, sinon chaîne vide",
+    "reasoning": "brève explication"
+}}""",
+            "es": f"""Analiza el siguiente mensaje del usuario y determina si es una solicitud para que el agente autónomo realice una tarea específica (como crear archivos, escribir código, investigar, etc.) o simplemente una declaración/pregunta conversacional.
+
+Mensaje del usuario: "{message}"
+
+Reglas:
+1. "Crea un sitio web", "Escribe un poema", "Investiga python" -> ACTIVE_TASK
+2. "Necesito arreglar esto", "Quiero aprender python", "¿Cómo estás?" -> CONVERSATIONAL
+3. "Arregla el footer", "Actualiza el archivo" -> ACTIVE_TASK (si implica que TÚ debes hacerlo)
+4. "Voy a arreglarlo", "Estoy programando" -> CONVERSATIONAL
+
+Responde solo con JSON:
+{{
+    "is_task": true/false,
+    "task_description": "tarea extraída si es true, sino cadena vacía",
+    "reasoning": "breve explicación"
 }}"""
+        }
+
+        prompt = prompts_by_lang.get(self.language, prompts_by_lang["en"])
 
         try:
             # We use a direct LLM call here for speed and specific formatting
@@ -736,35 +802,80 @@ Respond with JSON only:
         except Exception as e:
             self.log_event(f"Intent detection failed: {e}. Falling back to keyword search.", "ERROR")
             
-        # Fallback to keyword matching if LLM fails
+        # Fallback to keyword matching if LLM fails (multilingual)
         message_lower = message.lower()
-        
-        action_verbs = [
-            'create', 'make', 'build', 'write', 'generate', 'develop',
-            'code', 'program', 'design', 'implement', 'construct',
-            'research', 'find', 'search', 'look up', 'investigate',
-            'analyze', 'test', 'run', 'execute', 'deploy'
-        ]
-        
-        creation_indicators = [
-            'website', 'web page', 'html', 'css', 'javascript', 'php',
-            'file', 'folder', 'directory', 'script', 'program',
-            'app', 'application', 'project', 'code', 'document',
-            'poem', 'story', 'article', 'report', 'summary'
-        ]
-        
+
+        # Multilingual action verbs
+        action_verbs_by_lang = {
+            "en": [
+                'create', 'make', 'build', 'write', 'generate', 'develop',
+                'code', 'program', 'design', 'implement', 'construct',
+                'research', 'find', 'search', 'look up', 'investigate',
+                'analyze', 'test', 'run', 'execute', 'deploy'
+            ],
+            "fr": [
+                'crée', 'créer', 'faire', 'fais', 'construire', 'construis',
+                'écrire', 'écris', 'générer', 'génère', 'développer', 'développe',
+                'coder', 'code', 'programmer', 'programme', 'concevoir', 'conçois',
+                'implémenter', 'implémente', 'rechercher', 'recherche',
+                'trouver', 'trouve', 'chercher', 'cherche', 'investiguer', 'investigue',
+                'analyser', 'analyse', 'tester', 'teste', 'exécuter', 'exécute', 'déployer', 'déploie'
+            ],
+            "es": [
+                'crear', 'crea', 'hacer', 'haz', 'construir', 'construye',
+                'escribir', 'escribe', 'generar', 'genera', 'desarrollar', 'desarrolla',
+                'codificar', 'codifica', 'programar', 'programa', 'diseñar', 'diseña',
+                'implementar', 'implementa', 'investigar', 'investiga',
+                'buscar', 'busca', 'encontrar', 'encuentra', 'analizar', 'analiza',
+                'probar', 'prueba', 'ejecutar', 'ejecuta', 'desplegar', 'despliega'
+            ]
+        }
+
+        # Multilingual creation indicators
+        creation_indicators_by_lang = {
+            "en": [
+                'website', 'web page', 'html', 'css', 'javascript', 'php',
+                'file', 'folder', 'directory', 'script', 'program',
+                'app', 'application', 'project', 'code', 'document',
+                'poem', 'story', 'article', 'report', 'summary'
+            ],
+            "fr": [
+                'site web', 'page web', 'html', 'css', 'javascript', 'php',
+                'fichier', 'dossier', 'répertoire', 'script', 'programme',
+                'app', 'application', 'projet', 'code', 'document',
+                'poème', 'histoire', 'article', 'rapport', 'résumé'
+            ],
+            "es": [
+                'sitio web', 'página web', 'html', 'css', 'javascript', 'php',
+                'archivo', 'carpeta', 'directorio', 'script', 'programa',
+                'app', 'aplicación', 'proyecto', 'código', 'documento',
+                'poema', 'historia', 'artículo', 'reporte', 'informe', 'resumen'
+            ]
+        }
+
+        # Multilingual greetings
+        greetings_by_lang = {
+            "en": ['hello', 'hi', 'hey', 'greetings'],
+            "fr": ['bonjour', 'salut', 'coucou', 'salutations', 'bonsoir'],
+            "es": ['hola', 'hey', 'saludos', 'buenas']
+        }
+
+        # Get keywords for current language
+        action_verbs = action_verbs_by_lang.get(self.language, action_verbs_by_lang["en"])
+        creation_indicators = creation_indicators_by_lang.get(self.language, creation_indicators_by_lang["en"])
+        greetings = greetings_by_lang.get(self.language, greetings_by_lang["en"])
+
         has_action = any(verb in message_lower for verb in action_verbs)
         has_creation = any(indicator in message_lower for indicator in creation_indicators)
-        
+
         if has_action and has_creation:
             # Extract task description (remove greetings)
             task = message
-            greetings = ['hello', 'hi', 'hey', 'greetings']
             for greeting in greetings:
                 # Remove greeting at start of message
                 if task.lower().startswith(greeting):
                     task = task[len(greeting):].strip(' ,')
-            
+
             return True, task
         
         return False, ""
@@ -2163,7 +2274,7 @@ def handle_provider_settings():
         provider = data.get('provider')
         if not provider:
             return jsonify({"error": "Provider not specified"}), 400
-            
+
         try:
             success = assaultron.cognitive_engine.switch_provider(provider)
             if success:
@@ -2172,13 +2283,66 @@ def handle_provider_settings():
                 return jsonify({"error": "Failed to switch provider (check logs/keys)"}), 500
         except ValueError as e:
             return jsonify({"error": str(e)}), 400
-            
+
     # GET request
     current_model = Config.OPENROUTER_MODEL if Config.LLM_PROVIDER == "openrouter" else (Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL)
     return jsonify({
         "provider": Config.LLM_PROVIDER,
         "model": current_model
     })
+
+
+@app.route('/api/settings/language', methods=['GET', 'POST'])
+def handle_language_settings():
+    """Get or set the system language (en/fr/es)"""
+    if request.method == 'POST':
+        data = request.get_json()
+        language = data.get('language')
+        if not language:
+            return jsonify({"error": "Language not specified"}), 400
+
+        # Validate language
+        valid_languages = ['en', 'fr', 'es']
+        if language not in valid_languages:
+            return jsonify({"error": f"Invalid language. Must be one of: {', '.join(valid_languages)}"}), 400
+
+        # Update language in the interface, cognitive engine, and voice system
+        assaultron.language = language
+        assaultron.cognitive_engine.language = language
+        assaultron.voice_system.language = language
+        assaultron.log_event(f"Language changed to {language.upper()}", "SYSTEM")
+
+        return jsonify({"success": True, "language": language})
+
+    # GET request
+    return jsonify({"language": assaultron.language})
+
+
+@app.route('/api/settings/verbosity', methods=['GET', 'POST'])
+def handle_verbosity_settings():
+    """Get or set the AI response verbosity level (1-5)"""
+    if request.method == 'POST':
+        data = request.get_json()
+        level = data.get('level')
+        if level is None:
+            return jsonify({"error": "Verbosity level not specified"}), 400
+
+        # Validate level
+        try:
+            level = int(level)
+            if level < 1 or level > 5:
+                return jsonify({"error": "Verbosity level must be between 1 and 5"}), 400
+        except (ValueError, TypeError):
+            return jsonify({"error": "Invalid verbosity level"}), 400
+
+        # Update verbosity in cognitive engine
+        assaultron.cognitive_engine.set_verbosity(level)
+        assaultron.log_event(f"Verbosity set to level {level}", "SYSTEM")
+
+        return jsonify({"success": True, "level": level})
+
+    # GET request
+    return jsonify({"level": assaultron.cognitive_engine.verbosity})
 
 
 # ============================================================================
