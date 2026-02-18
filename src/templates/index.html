@@ -809,12 +809,22 @@
                     <button onclick="switchTab('vision')" id="tabVision"
                         class="tab-button py-2 px-4 text-sm font-bold border-b-2 border-transparent hover:border-gray-400">VISION</button>
                 </div>
-                <button onclick="toggleDarkMode()" id="darkModeToggle"
-                    class="py-2 px-3 text-xs font-bold rounded transition-all hover:scale-105"
-                    style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text);"
-                    title="Toggle Dark Mode">
-                    <i id="darkModeIcon" class="fas fa-moon"></i> DARK MODE
-                </button>
+                <div class="flex gap-2 items-center">
+                    <select id="languageSelector" onchange="changeLanguage()"
+                        class="py-2 px-3 text-xs font-bold rounded transition-all"
+                        style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text); border: 1px solid var(--border-color);"
+                        title="Select Language">
+                        <option value="en">EN</option>
+                        <option value="fr">FR</option>
+                        <option value="es">ES</option>
+                    </select>
+                    <button onclick="toggleDarkMode()" id="darkModeToggle"
+                        class="py-2 px-3 text-xs font-bold rounded transition-all hover:scale-105"
+                        style="background-color: var(--button-secondary-bg); color: var(--button-secondary-text);"
+                        title="Toggle Dark Mode">
+                        <i id="darkModeIcon" class="fas fa-moon"></i> DARK MODE
+                    </button>
+                </div>
             </nav>
         </div>
 
@@ -1138,6 +1148,42 @@
                                     </svg>
                                     SEND TEST ALERT
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Response Verbosity Control -->
+                    <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg" style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                        <div class="bg-gradient-to-r from-purple-600 to-pink-600 px-4 py-2.5 flex justify-between items-center">
+                            <h3 class="font-bold text-white text-xs tracking-widest uppercase">Response Length</h3>
+                            <span id="verbosityLevelBadge" class="text-[10px] font-bold bg-purple-900 text-white px-2 py-0.5 rounded uppercase">Short</span>
+                        </div>
+                        <div class="p-4 space-y-4">
+                            <div class="text-xs mb-3" style="color: var(--text-tertiary);">
+                                <p>Control how much the AI talks in responses</p>
+                            </div>
+
+                            <!-- Verbosity Slider -->
+                            <div>
+                                <div class="flex justify-between items-center mb-2">
+                                    <label class="text-[10px] uppercase font-bold" style="color: var(--text-tertiary);">Verbosity Level</label>
+                                    <span id="verbosityValue" class="text-xs font-mono font-bold" style="color: var(--text-primary);">2</span>
+                                </div>
+                                <input type="range" id="verbositySlider" min="1" max="5" value="2" step="1"
+                                    class="w-full h-2 rounded-lg appearance-none cursor-pointer bg-gradient-to-r from-purple-200 to-pink-200"
+                                    style="accent-color: #9333ea;"
+                                    oninput="updateVerbosityDisplay(this.value)"
+                                    onchange="setVerbosity(this.value)">
+                                <div class="flex justify-between text-[9px] mt-1 px-1" style="color: var(--text-tertiary);">
+                                    <span>Brief</span>
+                                    <span>Balanced</span>
+                                    <span>Detailed</span>
+                                </div>
+                            </div>
+
+                            <!-- Level Descriptions -->
+                            <div id="verbosityDesc" class="text-[10px] italic p-2 rounded transition-colors duration-200" style="color: var(--text-tertiary); background-color: var(--bg-secondary);">
+                                Short responses (1-2 sentences, 10-20 words)
                             </div>
                         </div>
                     </div>
@@ -2370,8 +2416,45 @@
             }
         }
 
+        // Language Selector Functions
+        async function changeLanguage() {
+            const languageSelector = document.getElementById('languageSelector');
+            const selectedLanguage = languageSelector.value;
+
+            try {
+                const response = await fetch('/api/settings/language', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ language: selectedLanguage })
+                });
+
+                if (response.ok) {
+                    localStorage.setItem('language', selectedLanguage);
+                    addLog('INFO', `Language changed to ${selectedLanguage.toUpperCase()}`);
+                } else {
+                    addLog('ERROR', 'Failed to change language');
+                }
+            } catch (error) {
+                addLog('ERROR', `Error changing language: ${error.message}`);
+            }
+        }
+
+        // Load language preference on page load
+        function loadLanguagePreference() {
+            const language = localStorage.getItem('language') || 'en';
+            const languageSelector = document.getElementById('languageSelector');
+            if (languageSelector) {
+                languageSelector.value = language;
+            }
+        }
+
         // Call on page load
-        document.addEventListener('DOMContentLoaded', loadDarkModePreference);
+        document.addEventListener('DOMContentLoaded', () => {
+            loadDarkModePreference();
+            loadLanguagePreference();
+        });
 
         // Voice System Functions
         async function startVoiceServer() {
@@ -4405,6 +4488,52 @@
                 }
             } catch (error) {
                 addLog('ERROR', `Notification test failed: ${error.message}`);
+            }
+        }
+
+        function updateVerbosityDisplay(level) {
+            const verbosityValue = document.getElementById('verbosityValue');
+            const verbosityDesc = document.getElementById('verbosityDesc');
+            const verbosityBadge = document.getElementById('verbosityLevelBadge');
+
+            verbosityValue.textContent = level;
+
+            const descriptions = {
+                1: 'Very brief responses (1 short sentence, 5-10 words)',
+                2: 'Short responses (1-2 sentences, 10-20 words)',
+                3: 'Balanced responses (2-3 sentences, 20-40 words)',
+                4: 'Detailed responses (3-4 sentences, 40-60 words)',
+                5: 'Elaborate responses (60+ words when appropriate)'
+            };
+
+            const labels = {
+                1: 'Very Brief',
+                2: 'Short',
+                3: 'Balanced',
+                4: 'Detailed',
+                5: 'Elaborate'
+            };
+
+            verbosityDesc.textContent = descriptions[level];
+            verbosityBadge.textContent = labels[level];
+        }
+
+        async function setVerbosity(level) {
+            try {
+                const response = await fetch('/api/settings/verbosity', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ level: parseInt(level) })
+                });
+
+                const data = await response.json();
+                if (data.success) {
+                    addLog('SUCCESS', `Verbosity set to level ${level}`);
+                } else {
+                    addLog('WARNING', 'Failed to set verbosity');
+                }
+            } catch (error) {
+                addLog('ERROR', `Failed to set verbosity: ${error.message}`);
             }
         }
 
