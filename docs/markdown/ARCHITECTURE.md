@@ -11,6 +11,7 @@ The Assaultron Project ASR-7 is an **embodied AI agent system** implementing a b
 **Voice Output**: xVAsynth with Fallout 4 Assaultron voice model (TTS)
 **Voice Input**: Mistral Voxtral for real-time speech-to-text transcription (STT)
 **Vision**: MediaPipe EfficientDet-Lite0 for real-time object detection
+**Supported Languages**: Multi-language support (English, French, Spanish) with runtime switching
 
 ---
 
@@ -47,6 +48,26 @@ The cognitive layer receives `MoodState` and formats behavioral guidance for the
 - **High attachment** → "more protective, affectionate tone"
 
 This influences the AI's dialogue tone, verbosity, and engagement level while maintaining character consistency.
+
+**Multi-Language Support**:
+The cognitive layer supports runtime language switching between English, French, and Spanish:
+- **Language Setting**: System-wide language preference (`self.language = "en"|"fr"|"es"`)
+- **Localized Prompts**: LLM receives language-specific system instructions
+- **Response Language**: AI responds in selected language unless explicitly asked otherwise
+- **Integrated Throughout**: Language affects:
+  - Agent task detection keywords (action verbs, creation indicators, opt-out phrases)
+  - Cognitive prompt formatting (language-specific instructions)
+  - Voice synthesis (language-aware TTS)
+
+**Response Verbosity Control**:
+The cognitive layer includes configurable verbosity levels (1-5) to control response length:
+- **Level 1**: Very brief (1 short sentence, 5-10 words)
+- **Level 2**: Short (1-2 sentences, 10-20 words) [DEFAULT]
+- **Level 3**: Balanced (2-3 sentences, 20-40 words)
+- **Level 4**: Detailed (3-4 sentences, 40-60 words)
+- **Level 5**: Elaborate (60+ words when appropriate)
+
+Verbosity instructions are injected into the cognitive prompt to guide response length.
 
 **Data Flow**:
 ```
@@ -201,6 +222,11 @@ BodyCommand → Hardware Translation → Hardware State Dictionary
 ```
 Dialogue Text → xVAsynth API → WAV File → ai-data/audio_output/ → Frontend Playback
 ```
+
+**Language Support**:
+- **Multi-language TTS**: Voice system supports language setting synchronized with main interface
+- **Language Property**: `self.language = "en"|"fr"|"es"` (runtime configurable)
+- **Integration**: Language setting affects voice synthesis parameters when language-specific models are available
 
 **Implementation Notes**:
 - Handles port conflicts and server startup retries
@@ -779,6 +805,15 @@ START_MONITORING = True     # Monitoring dashboard on port 8081
 
 **Purpose**: Orchestrates all systems and implements the main message processing pipeline.
 
+**Multi-Language Configuration**:
+- **Language Property**: `self.language = "en"|"fr"|"es"` (default: "en")
+- **Runtime Switching**: Language can be changed via `/api/settings/language` endpoint
+- **Cascading Updates**: Language change propagates to:
+  - Main interface (`assaultron.language`)
+  - Cognitive engine (`cognitive_engine.language`)
+  - Voice system (`voice_system.language`)
+- **System-wide Impact**: Affects AI responses, task detection, and voice synthesis
+
 **Initialization Sequence**:
 1. Setup logging with rotation
 2. Initialize virtual world (body + environment + mood)
@@ -852,12 +887,25 @@ def process_message(user_message, image_path=None) -> dict:
 ```
 
 **Task Detection** (for autonomous agent):
-- **Agent Override Check**: Before any detection logic runs, the system checks for explicit opt-out phrases in the user's message. If phrases like "don't use agent", "don't call agent", "no agent", "skip agent", "without agent", etc. are detected, the task detection immediately returns `False` — bypassing both LLM classification and keyword fallback. This allows users to include task-like language without triggering the autonomous agent.
-- Uses LLM to classify if message is an actionable task
-- Fallback to keyword matching if LLM fails, using a two-part system:
-  - **Action verbs** (20+): create, make, build, write, generate, develop, code, program, design, implement, construct, research, find, search, look up, investigate, analyze, test, run, execute, deploy
-  - **Creation indicators** (14+): website, web page, html, css, javascript, php, file, folder, directory, script, program, app, application, project, code, document, poem, story, article, report, summary
-  - Task detected when **both** an action verb AND a creation indicator are present
+- **Agent Override Check**: Before any detection logic runs, the system checks for explicit opt-out phrases in the user's message. Opt-out phrases are **language-aware**:
+  - **English**: "don't use agent", "no agent", "skip agent", "without agent", etc.
+  - **French**: "n'utilise pas l'agent", "pas d'agent", "sans agent", etc.
+  - **Spanish**: "no uses el agente", "sin agente", "no para el agente", etc.
+  - If detected, task detection immediately returns `False` — bypassing both LLM classification and keyword fallback
+- Uses **language-specific LLM prompts** to classify if message is an actionable task:
+  - **English**: "Analyze the following user message..."
+  - **French**: "Analysez le message de l'utilisateur suivant..."
+  - **Spanish**: "Analiza el siguiente mensaje del usuario..."
+- Fallback to **multilingual keyword matching** if LLM fails, using a two-part system:
+  - **Action verbs** (language-specific):
+    - English: create, make, build, write, generate, develop, code, program, etc.
+    - French: créer, faire, construire, écrire, générer, développer, coder, programmer, etc.
+    - Spanish: crear, hacer, construir, escribir, generar, desarrollar, codificar, programar, etc.
+  - **Creation indicators** (language-specific):
+    - English: website, file, folder, script, program, app, code, document, poem, etc.
+    - French: site web, fichier, dossier, script, programme, app, code, document, poème, etc.
+    - Spanish: sitio web, archivo, carpeta, script, programa, app, código, documento, poema, etc.
+  - Task detected when **both** an action verb AND a creation indicator are present in the selected language
 - Returns enhanced task description with personality
 
 ---
@@ -1003,6 +1051,16 @@ def process_message(user_message, image_path=None) -> dict:
 
 - `GET /api/settings/provider` - Get current LLM provider
 - `POST /api/settings/provider` - Switch LLM provider (ollama/gemini/openrouter)
+- `GET /api/settings/language` - Get current system language
+- `POST /api/settings/language` - Set system language (en/fr/es)
+  - **Body**: `{"language": "en"|"fr"|"es"}`
+  - **Purpose**: Changes system-wide language for AI responses and task detection
+  - **Updates**: Language setting in main interface, cognitive engine, and voice system
+- `GET /api/settings/verbosity` - Get current verbosity level
+- `POST /api/settings/verbosity` - Set response verbosity level (1-5)
+  - **Body**: `{"level": 1-5}`
+  - **Purpose**: Controls how verbose AI responses are (1=very brief, 5=elaborate)
+  - **Updates**: Verbosity setting in cognitive engine
 
 ### Monitoring Endpoints (auth required)
 
@@ -1017,6 +1075,57 @@ def process_message(user_message, image_path=None) -> dict:
 - `GET /api/metrics/<metric_name>` (port 8081) - Time series data
 - `GET /api/stream` (port 8081) - SSE stream for real-time updates
 - `GET /api/export` (port 8081) - Export all metrics as JSON
+
+---
+
+## Web User Interface (`src/templates/index.html`)
+
+**Purpose**: Interactive browser-based control panel for the Assaultron system.
+
+**Key Features**:
+
+### Language & Theme Controls
+
+**Language Selector**:
+- **Location**: Top navigation bar next to Dark Mode toggle
+- **Options**: English (EN), French (FR), Spanish (ES)
+- **Functionality**: Dropdown selector with instant language switching
+- **API Integration**: Calls `/api/settings/language` POST endpoint
+- **System-wide Effect**: Updates AI responses, task detection, and voice synthesis
+
+**Dark Mode Toggle**:
+- **Location**: Top navigation bar
+- **Functionality**: Toggle between light and dark themes
+- **Persistence**: Saved to localStorage for session continuity
+- **Visual Impact**: Changes color scheme across all UI components and charts
+
+### Response Verbosity Control
+
+**Verbosity Slider**:
+- **Location**: Settings tab, "Response Length" card
+- **Range**: 1-5 (Brief to Elaborate)
+- **Default**: Level 2 (Short)
+- **UI Components**:
+  - Interactive range slider with gradient styling (purple to pink)
+  - Live value display showing current level (1-5)
+  - Level labels: "Brief", "Balanced", "Detailed"
+  - Dynamic description text updating based on selected level
+  - Badge indicator showing current verbosity mode
+- **Level Descriptions**:
+  - Level 1: "Very brief responses (1 sentence, 5-10 words)"
+  - Level 2: "Short responses (1-2 sentences, 10-20 words)"
+  - Level 3: "Balanced responses (2-3 sentences, 20-40 words)"
+  - Level 4: "Detailed responses (3-4 sentences, 40-60 words)"
+  - Level 5: "Elaborate responses (60+ words when appropriate)"
+- **API Integration**: Calls `/api/settings/verbosity` POST endpoint
+- **Real-time Feedback**: Instant visual update with color-coded background and badge
+
+**JavaScript Functions**:
+- `changeLanguage()` - Handles language selector changes, sends POST request
+- `updateVerbosityDisplay(value)` - Updates UI elements based on slider position
+- `setVerbosity(level)` - Sends verbosity level to backend API
+- Error handling with user-friendly alerts for failed API calls
+- Success notifications for configuration changes
 
 ---
 
@@ -1423,9 +1532,30 @@ The architecture successfully bridges the gap between abstract AI reasoning and 
 
 ---
 
-**Document Version**: 1.6
-**Last Updated**: 2026-02-17
-**Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure + Bidirectional Voice I/O)
+**Document Version**: 1.7
+**Last Updated**: 2026-02-18
+**Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure + Bidirectional Voice I/O + Multi-Language Support)
+
+**Changelog v1.7** (2026-02-18):
+- **Added Multi-Language Support**: Complete system-wide language switching (English, French, Spanish)
+  - Added language property to main interface, cognitive engine, and voice system
+  - Implemented language-specific LLM prompts for cognitive processing
+  - Added multilingual task detection (action verbs, creation indicators, opt-out phrases)
+  - Documented language cascade updates across all system components
+- **Added Response Verbosity Control**: Configurable AI response length with 5 levels (1=very brief to 5=elaborate)
+  - Added verbosity property to cognitive engine with default level 2
+  - Implemented verbosity instructions injected into cognitive prompts
+  - Documented verbosity level descriptions and word count targets
+- **Added Language & Verbosity API Endpoints**:
+  - `GET/POST /api/settings/language` - Get/set system language (en/fr/es)
+  - `GET/POST /api/settings/verbosity` - Get/set response verbosity level (1-5)
+- **Added Web UI Controls**:
+  - Language selector dropdown in top navigation bar
+  - Verbosity slider with live visual feedback and level descriptions
+  - Real-time UI updates with color-coded indicators and badges
+- **Updated System Overview**: Added "Supported Languages" line to core architecture specifications
+- **Enhanced Voice System**: Documented language property integration for future language-specific voice models
+- **Updated Task Detection**: All detection logic now language-aware with multilingual keyword sets
 
 **Changelog v1.6** (2026-02-17):
 - **Updated File Paths**: Corrected all file paths to reflect new directory structure
