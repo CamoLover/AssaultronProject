@@ -215,6 +215,10 @@ BodyCommand → Hardware Translation → Hardware State Dictionary
 **Components**:
 - **Server Management**: Starts/stops xVAsynth server (localhost:8008)
 - **Model Loading**: Loads Fallout 4 Assaultron voice model (`f4_robot_assaultron.json`)
+- **GPU Initialization**: Sets device to CUDA before model loading for GPU acceleration
+  - Prevents CPU-to-GPU transfer delay during first synthesis
+  - Ensures model loads directly on GPU for faster initial response
+  - Gracefully falls back to CPU if CUDA unavailable
 - **Async Synthesis**: Queue-based audio generation to prevent blocking
 - **Callback Notification**: Fires `on_audio_ready_callback` when synthesis completes; Flask (`main.py`) translates this into Server-Sent Events (SSE) via `/api/voice/events`
 
@@ -1532,9 +1536,16 @@ The architecture successfully bridges the gap between abstract AI reasoning and 
 
 ---
 
-**Document Version**: 1.7
+**Document Version**: 1.8
 **Last Updated**: 2026-02-18
 **Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure + Bidirectional Voice I/O + Multi-Language Support)
+
+**Changelog v1.8** (2026-02-18):
+- **Enhanced Voice System GPU Initialization**: Added CUDA device pre-initialization before model loading
+  - xVAsynth now sets device to CUDA before loading voice model (prevents CPU->GPU transfer delay)
+  - First synthesis response significantly faster (no model transfer overhead)
+  - Graceful fallback to CPU if CUDA unavailable with warning logs
+  - Improves user experience by reducing latency on initial voice response
 
 **Changelog v1.7** (2026-02-18):
 - **Added Multi-Language Support**: Complete system-wide language switching (English, French, Spanish)

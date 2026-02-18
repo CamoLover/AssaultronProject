@@ -409,6 +409,18 @@ class VoiceManager:
         try:
             self.log("Loading Assaultron voice model...")
 
+            # First, set the device to GPU/CUDA to ensure model loads on GPU
+            # This prevents the CPU->GPU transfer delay during synthesis
+            try:
+                self.log("Setting device to CUDA for GPU acceleration...")
+                device_payload = {"device": "cuda"}
+                device_url = f"{self.server_url}/setDevice"
+                requests.post(device_url, json=device_payload, timeout=10)
+                self.log("Device set to CUDA successfully")
+            except Exception as e:
+                self.log(f"Warning: Could not set device to CUDA: {e}", "WARN")
+                self.log("Model will load on CPU (synthesis may be slower)", "WARN")
+
             # Correct model path based on xVAsynth analysis
             # Server expects path WITHOUT .pt extension and adds it automatically
             model_path = "models/fallout4/f4_robot_assaultron"
