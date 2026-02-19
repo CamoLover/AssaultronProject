@@ -58,10 +58,10 @@ class CognitiveEngine:
         self.model = model
         self.base_system_prompt = system_prompt
 
-        # Language setting (default: English)
+        # Language setting (default: English, will be set by main interface from settings.json)
         self.language = "en"
 
-        # Verbosity setting (1-5: 1=very brief, 3=balanced, 5=detailed)
+        # Verbosity setting (1-5: 1=very brief, 3=balanced, 5=detailed, will be set by main interface from settings.json)
         self.verbosity = 2
 
         # Conversation state
@@ -451,11 +451,11 @@ class CognitiveEngine:
 
         # Verbosity instruction mapping
         verbosity_instructions = {
-            1: "CRITICAL: Keep responses VERY BRIEF - 1 short sentence max (5-10 words). Be direct and concise.",
-            2: "Keep responses SHORT and to the point - 1-2 brief sentences (10-20 words total).",
-            3: "Respond naturally with balanced length - 2-3 sentences when appropriate (20-40 words).",
-            4: "You may give more detailed responses - 3-4 sentences when needed (40-60 words).",
-            5: "You can provide detailed, elaborate responses when the context calls for it (60+ words)."
+            1: "CRITICAL: Keep responses VERY BRIEF - 1 short sentence max. Be direct and concise.",
+            2: "Keep responses SHORT and to the point - 1-2 brief sentences.",
+            3: "Respond naturally with balanced length - 2-3 sentences when appropriate.",
+            4: "You may give more detailed responses - 3-4 sentences when needed.",
+            5: "You can provide detailed, elaborate responses."
         }
 
         verbosity_instruction = verbosity_instructions.get(self.verbosity, verbosity_instructions[2])

@@ -20,7 +20,7 @@ class VoiceManager:
         """Initialize VoiceManager with xVAsynth configuration"""
         self.logger = logger or self._create_default_logger()
 
-        # Language setting (default: English)
+        # Language setting (default: English, will be set by main interface from settings.json)
         self.language = "en"
 
         # Server configuration
@@ -415,8 +415,23 @@ class VoiceManager:
                 self.log("Setting device to CUDA for GPU acceleration...")
                 device_payload = {"device": "cuda"}
                 device_url = f"{self.server_url}/setDevice"
-                requests.post(device_url, json=device_payload, timeout=10)
-                self.log("Device set to CUDA successfully")
+
+                # Try to set device with retries
+                for attempt in range(3):
+                    try:
+                        resp = requests.post(device_url, json=device_payload, timeout=10)
+                        self.log(f"Device set to CUDA successfully (status: {resp.status_code})")
+
+                        # Verify CUDA is active by checking server response
+                        if resp.status_code == 200:
+                            break
+                    except Exception as retry_error:
+                        if attempt < 2:
+                            self.log(f"Device set attempt {attempt + 1} failed, retrying...", "WARN")
+                            time.sleep(1)
+                        else:
+                            raise retry_error
+
             except Exception as e:
                 self.log(f"Warning: Could not set device to CUDA: {e}", "WARN")
                 self.log("Model will load on CPU (synthesis may be slower)", "WARN")
@@ -610,7 +625,7 @@ class VoiceManager:
                 pass
             
             # Wait for synthesis to complete (file may still be written despite error)
-            time.sleep(3)
+            time.sleep(1)
             
             # Check if file was created with .wav extension
             test_file = Path(test_output)
@@ -737,10 +752,11 @@ class VoiceManager:
                 filename = f"assaultron_voice_{timestamp}"
             
             output_path = self.audio_output_dir / f"{filename}.wav"
-            
+
             self.log(f"Synthesizing: '{clean_text[:50]}{'...' if len(clean_text) > 50 else ''}'")
             
             # Prepare synthesis payload with absolute path and .wav extension
+            synthesis_prep_start = time.time()
             output_filename = str(self.audio_output_dir.resolve() / (filename + ".wav"))
             payload = {
                 "sequence": clean_text,
@@ -752,33 +768,59 @@ class VoiceManager:
                 "vocoder": "n/a",
                 "modelType": "xVAPitch",
                 "instance_index": 0,
-                "pace": 1.0
+                "pace": 1.0,
+                "device": "cuda", 
+                "useSR": False, 
+                "useCleanup": False 
             }
             
             # Send synthesis request
+            request_start = time.time()
             try:
+                # Longer timeout to wait for actual synthesis completion
+                # This is more efficient than timeout + polling
                 response = requests.post(
-                    f"{self.server_url}/synthesize", 
-                    json=payload, 
-                    timeout=60
+                    f"{self.server_url}/synthesize",
+                    json=payload,
+                    timeout=15  # Wait up to 15s for synthesis to complete
                 )
+                request_duration = (time.time() - request_start) * 1000
+            except requests.exceptions.Timeout:
+                # Timeout is expected - server continues synthesis
+                request_duration = (time.time() - request_start) * 1000
             except Exception as e:
                 # Server may crash due to xVAsynth bug but still write file before crashing
-                pass
-            
-            # Wait for file generation (file may be written despite server error)
-            time.sleep(0.05)
-            
-            # Check if file was created with .wav extension
+                # This is normal - continue to file polling
+                request_duration = (time.time() - request_start) * 1000
+                
+            # Poll for file generation (xVAsynth may take time to write)
+            # Increased polling time for CUDA synthesis to complete
+            max_wait = 10  # Maximum 10 seconds
+            poll_interval = 0.05  # Check every 50ms
+            elapsed = 0
+            poll_count = 0
+
             expected_file = Path(output_filename)
-            
-            if expected_file.exists():
+            file_wait_start = time.time()
+            self.log(f"→ Polling for audio file: {expected_file.name}")
+
+            while elapsed < max_wait:
+                poll_count += 1
+                if expected_file.exists() and expected_file.stat().st_size > 0:
+                    file_wait_duration = (time.time() - file_wait_start) * 1000
+                    file_size_kb = expected_file.stat().st_size / 1024
+                    self.log(f"✓ Audio file ready! Wait time: {file_wait_duration:.1f}ms, Size: {file_size_kb:.1f}KB, Polls: {poll_count}")
+                    break
+                time.sleep(poll_interval)
+                elapsed += poll_interval
+
+            # Check if file was created with .wav extension and has content
+            if expected_file.exists() and expected_file.stat().st_size > 0:
                 self.last_synthesis_file = str(expected_file)
                 self.last_synthesis_filename = expected_file.name
 
-                # Calculate total voice synthesis time
+                
                 voice_duration_ms = (time.time() - voice_start_time) * 1000
-
                 # Record monitoring metrics
                 try:
                     from monitoring_service import get_monitoring_service, MONITORING_ENABLED

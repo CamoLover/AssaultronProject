@@ -1859,6 +1859,7 @@
         let audioQueue = [];
         let voiceEventSource = null;  // SSE connection for real-time audio notifications
         let webUiIsActiveSource = false;  // Track if web UI sent the last message
+        let waitingForAgentCompletionAudio = false;  // Track if we're waiting for agent completion audio
 
         // Web Audio API for real-time audio analysis
         let audioContext = null;
@@ -2441,12 +2442,31 @@
             }
         }
 
-        // Load language preference on page load
-        function loadLanguagePreference() {
+        // Load language preference and sync with server on page load
+        async function loadLanguagePreference() {
             const language = localStorage.getItem('language') || 'en';
             const languageSelector = document.getElementById('languageSelector');
             if (languageSelector) {
                 languageSelector.value = language;
+            }
+
+            // Sync with server on page load
+            try {
+                const response = await fetch('/api/settings/language', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ language: language })
+                });
+
+                if (response.ok) {
+                    console.log(`Language synced with server: ${language.toUpperCase()}`);
+                } else {
+                    console.warn('Failed to sync language with server');
+                }
+            } catch (error) {
+                console.error(`Error syncing language: ${error.message}`);
             }
         }
 
@@ -2608,13 +2628,10 @@
                     const data = JSON.parse(event.data);
 
                     if (data.type === 'audio_ready') {
-                        // Only play audio if the web UI sent the last message
-                        if (webUiIsActiveSource && data.url && data.url !== lastPlayedAudioUrl) {
+                        if ((webUiIsActiveSource || waitingForAgentCompletionAudio) && data.url && data.url !== lastPlayedAudioUrl) {
                             playVoiceAudio(data.url);
                             lastPlayedAudioUrl = data.url;
-                            addLog('VOICE', `Playing: ${data.filename}`);
-                        } else if (!webUiIsActiveSource) {
-                            addLog('VOICE', `Audio ready (not playing - message from another source): ${data.filename}`);
+                            waitingForAgentCompletionAudio = false; 
                         }
                         // Reset the flag after handling audio
                         webUiIsActiveSource = false;
@@ -2624,10 +2641,17 @@
                         addLog('AGENT', 'Task completed');
 
                         // Add the completion message to the chat UI
-                        addMessageToChat('ASR-7', data.message, 'ai');
+                        const now = new Date().toLocaleTimeString();
+                        addChatMessage('ASSAULTRON', data.message, now);
 
-                        // Update conversation history display
-                        loadConversationHistory();
+                        // Also add to immersive mode chat if active
+                        addImmersionMessage('ASSAULTRON', data.message);
+
+                        // Set flag to play the next audio (agent completion voice)
+                        waitingForAgentCompletionAudio = true;
+
+                        // Update conversation history display (reload from server)
+                        loadHistory();
                     } else if (data.type === 'voice_notification') {
                         // Show notification when voice system starts
                         showVoiceNotification();

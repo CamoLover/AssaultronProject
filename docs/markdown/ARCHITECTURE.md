@@ -218,7 +218,12 @@ BodyCommand → Hardware Translation → Hardware State Dictionary
 - **GPU Initialization**: Sets device to CUDA before model loading for GPU acceleration
   - Prevents CPU-to-GPU transfer delay during first synthesis
   - Ensures model loads directly on GPU for faster initial response
-  - Gracefully falls back to CPU if CUDA unavailable
+  - Retry logic with 3 attempts and 1s delay for robust CUDA activation
+  - Gracefully falls back to CPU if CUDA unavailable with warning logs
+- **Optimized Audio Polling**: Efficient file detection for generated audio
+  - Polls for audio file every 50ms up to 10 seconds maximum
+  - Detailed timing metrics (request duration, file wait time, file size, poll count)
+  - Reduces unnecessary delays (optimized sleep timings throughout synthesis pipeline)
 - **Async Synthesis**: Queue-based audio generation to prevent blocking
 - **Callback Notification**: Fires `on_audio_ready_callback` when synthesis completes; Flask (`main.py`) translates this into Server-Sent Events (SSE) via `/api/voice/events`
 
@@ -817,6 +822,16 @@ START_MONITORING = True     # Monitoring dashboard on port 8081
   - Cognitive engine (`cognitive_engine.language`)
   - Voice system (`voice_system.language`)
 - **System-wide Impact**: Affects AI responses, task detection, and voice synthesis
+- **Persistence**: Settings loaded from `ai-data/settings.json` on startup and saved when changed
+
+**Settings Persistence System**:
+- **Settings File**: `ai-data/settings.json` stores user preferences
+- **Persisted Settings**: Language (en/fr/es), Verbosity level (1-5)
+- **Lifecycle**:
+  1. **Startup**: `_load_settings()` reads from disk, applies to all components
+  2. **Runtime**: Settings changes via API automatically save to disk via `_save_settings()`
+  3. **Frontend Sync**: Web UI syncs language preference with server on page load
+- **Default Values**: Language="en", Verbosity=2 (if settings file missing or corrupted)
 
 **Initialization Sequence**:
 1. Setup logging with rotation
@@ -1060,11 +1075,13 @@ def process_message(user_message, image_path=None) -> dict:
   - **Body**: `{"language": "en"|"fr"|"es"}`
   - **Purpose**: Changes system-wide language for AI responses and task detection
   - **Updates**: Language setting in main interface, cognitive engine, and voice system
+  - **Persistence**: Saves to `ai-data/settings.json` for persistence across restarts
 - `GET /api/settings/verbosity` - Get current verbosity level
 - `POST /api/settings/verbosity` - Set response verbosity level (1-5)
   - **Body**: `{"level": 1-5}`
   - **Purpose**: Controls how verbose AI responses are (1=very brief, 5=elaborate)
   - **Updates**: Verbosity setting in cognitive engine
+  - **Persistence**: Saves to `ai-data/settings.json` for persistence across restarts
 
 ### Monitoring Endpoints (auth required)
 
@@ -1211,6 +1228,7 @@ Contains `ASSAULTRON_PROMPT` - the core system prompt defining ASR-7's personali
 - `ai-data/conversation_history.json` - Conversation exchanges (max 100, last 8 sent to LLM)
 - `ai-data/memories.json` - Long-term core memories (max 10 via AI-managed path, max 50 via manual add; last 15 sent to LLM, LLM-managed)
 - `ai-data/mood_state.json` - Current mood state (persists across sessions)
+- `ai-data/settings.json` - User preferences (language, verbosity level) that persist across restarts
 
 **Agent Workspace**:
 - `src/sandbox/.agent_history.json` - Agent task history (last 50 tasks)
@@ -1536,9 +1554,37 @@ The architecture successfully bridges the gap between abstract AI reasoning and 
 
 ---
 
-**Document Version**: 1.8
+**Document Version**: 1.9
 **Last Updated**: 2026-02-18
-**Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure + Bidirectional Voice I/O + Multi-Language Support)
+**Architecture Status**: Production (Embodied Agent v2.0 + Multi-Service Infrastructure + Bidirectional Voice I/O + Multi-Language Support + Persistent Settings)
+
+**Changelog v1.9** (2026-02-18):
+- **Added Settings Persistence System**: Language and verbosity preferences now persist across sessions
+  - New `ai-data/settings.json` file stores user preferences (language, verbosity level)
+  - Settings automatically loaded on startup and applied to all components
+  - Language and verbosity changes via API now save to disk and persist after restart
+  - Frontend syncs language preference with server on page load
+- **Enhanced Voice System Performance**: Optimized audio file polling and CUDA initialization
+  - Improved CUDA device initialization with retry logic (3 attempts with 1s delay)
+  - Optimized audio file polling with detailed wait time tracking (max 10s, 50ms intervals)
+  - Reduced unnecessary sleep delays (3s → 1s for test synthesis, removed redundant delays)
+  - Added comprehensive logging for synthesis timing (request duration, file wait time, file size)
+  - Voice synthesis now more responsive with better performance metrics visibility
+- **Enhanced Agent Completion Feedback**: Improved user experience for autonomous agent tasks
+  - Agent completion messages now appear in both main chat and immersive mode
+  - Frontend correctly plays agent completion voice messages (not just web UI initiated messages)
+  - Agent completion triggers conversation history reload for accurate state sync
+  - Fixed audio playback race condition with `waitingForAgentCompletionAudio` flag
+- **Improved Multi-Language Support**: Agent helper functions fully internationalized
+  - Task acknowledgment messages now language-aware (English, French, Spanish examples)
+  - Completion messages use language-specific instructions for better localization
+  - All agent-AI interaction helpers respect current language setting
+- **Updated `.gitignore`**: Simplified AI data exclusions
+  - Changed from individual file patterns to single `ai-data/` directory exclusion
+  - Cleaner configuration with better maintainability
+- **Service Configuration Update**: Restored default multi-service startup in `run.py`
+  - Re-enabled docs, Discord bot, and monitoring dashboard by default
+  - Ensures complete system startup for full-featured deployments
 
 **Changelog v1.8** (2026-02-18):
 - **Enhanced Voice System GPU Initialization**: Added CUDA device pre-initialization before model loading

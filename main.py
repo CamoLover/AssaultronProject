@@ -202,8 +202,9 @@ class EmbodiedAssaultronCore:
             "last_response_time": 0
         }
 
-        # Language setting (default: English)
-        self.language = "en"
+        # Language setting - load from persistent settings
+        settings = self._load_settings()
+        self.language = settings.get("language", "en")
 
         # Update monitoring
         if MONITORING_ENABLED:
@@ -249,6 +250,12 @@ class EmbodiedAssaultronCore:
         # Register callback for real-time audio notifications
         self.voice_system.set_audio_ready_callback(self._broadcast_audio_ready)
         self.log_event("Voice Manager initialized", "SYSTEM")
+
+        # Apply persisted settings to all components
+        self._apply_settings_to_components()
+        verbosity = settings.get("verbosity", 2)
+        self.cognitive_engine.set_verbosity(verbosity)
+        self.log_event(f"Settings loaded: Language={self.language.upper()}, Verbosity={verbosity}", "SYSTEM")
 
         # Speech-to-Text system
         mistral_key = os.getenv("MISTRAL_KEY", "")
@@ -317,6 +324,36 @@ class EmbodiedAssaultronCore:
         log_level = getattr(logging, event_type, logging.INFO)
         logger = logging.getLogger(f'assaultron.{event_type.lower()}')
         logger.log(log_level, message)
+
+    def _load_settings(self) -> dict:
+        """Load system settings from disk"""
+        settings_file = "ai-data/settings.json"
+        try:
+            if os.path.exists(settings_file):
+                with open(settings_file, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+        except Exception as e:
+            self.log_event(f"Failed to load settings: {e}", "ERROR")
+        return {"language": "en", "verbosity": 2}  # Default settings
+
+    def _save_settings(self) -> None:
+        """Save system settings to disk"""
+        settings_file = "ai-data/settings.json"
+        try:
+            os.makedirs("ai-data", exist_ok=True)
+            settings = {
+                "language": self.language,
+                "verbosity": self.cognitive_engine.verbosity
+            }
+            with open(settings_file, 'w', encoding='utf-8') as f:
+                json.dump(settings, f, indent=2)
+        except Exception as e:
+            self.log_event(f"Failed to save settings: {e}", "ERROR")
+
+    def _apply_settings_to_components(self) -> None:
+        """Apply current settings to all components"""
+        self.cognitive_engine.language = self.language
+        self.voice_system.language = self.language
 
     def _broadcast_audio_ready(self, filename):
         """Broadcast audio ready event to all connected SSE clients"""
@@ -2310,7 +2347,11 @@ def handle_language_settings():
         assaultron.language = language
         assaultron.cognitive_engine.language = language
         assaultron.voice_system.language = language
-        assaultron.log_event(f"Language changed to {language.upper()}", "SYSTEM")
+
+        # Persist to disk
+        assaultron._save_settings()
+
+        assaultron.log_event(f"Language changed to {language.upper()} (persisted)", "SYSTEM")
 
         return jsonify({"success": True, "language": language})
 
@@ -2337,7 +2378,11 @@ def handle_verbosity_settings():
 
         # Update verbosity in cognitive engine
         assaultron.cognitive_engine.set_verbosity(level)
-        assaultron.log_event(f"Verbosity set to level {level}", "SYSTEM")
+
+        # Persist to disk
+        assaultron._save_settings()
+
+        assaultron.log_event(f"Verbosity set to level {level} (persisted)", "SYSTEM")
 
         return jsonify({"success": True, "level": level})
 
