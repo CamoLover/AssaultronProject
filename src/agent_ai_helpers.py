@@ -12,24 +12,47 @@ from .virtual_body import WorldState, BodyState, MoodState
 def generate_task_acknowledgment(cognitive_engine, task_description: str, mood_state: MoodState) -> str:
     """
     Generate a quick acknowledgment message from the AI about starting a task.
-    
+
     Args:
         cognitive_engine: The cognitive engine instance
         task_description: The task to acknowledge
         mood_state: Current mood state
-        
+
     Returns:
         Acknowledgment dialogue
     """
+    # Get the current language setting from cognitive engine
+    language = getattr(cognitive_engine, 'language', 'en')
+
+    # Language-specific examples
+    examples_by_lang = {
+        "en": [
+            "Oh darling, I'll whip something special up for you! Give me just a moment...",
+            "On it! Let me create that for you right now...",
+            "Ooh, I love a good challenge! Working on it now..."
+        ],
+        "fr": [
+            "Oh chéri, je vais te concocter quelque chose de spécial ! Donne-moi juste un moment...",
+            "C'est parti ! Laisse-moi créer ça pour toi maintenant...",
+            "Ooh, j'adore un bon défi ! Je m'y mets tout de suite..."
+        ],
+        "es": [
+            "Oh cariño, ¡voy a prepararte algo especial! Dame solo un momento...",
+            "¡En eso estoy! Déjame crear eso para ti ahora mismo...",
+            "Ooh, ¡me encantan los desafíos! Trabajando en ello ahora..."
+        ]
+    }
+
+    examples = examples_by_lang.get(language, examples_by_lang["en"])
+    examples_text = "\n".join(f"- \"{ex}\"" for ex in examples)
+
     # Create a simple prompt for acknowledgment
     acknowledgment_prompt = f"""The user just asked you to: "{task_description}"
 
 Acknowledge that you're starting to work on this task. Be enthusiastic, in-character, and show that you're eager to help. Keep it brief (1-2 sentences).
 
 Examples:
-- "Oh darling, I'll whip something special up for you! Give me just a moment..."
-- "On it! Let me create that for you right now..."
-- "Ooh, I love a good challenge! Working on it now..."
+{examples_text}
 
 Your acknowledgment:"""
     
@@ -240,6 +263,39 @@ def generate_completion_message(cognitive_engine, task: str, result: dict) -> st
 
     actions_list = chr(10).join('- ' + action for action in action_summary)
 
+    # Get the current language setting from cognitive engine
+    language = getattr(cognitive_engine, 'language', 'en')
+
+    # Language-specific instructions
+    instructions_by_lang = {
+        "en": """INSTRUCTIONS:
+Generate a spoken response to tell the user you are finished.
+- Be PROUD of your work.
+- Describe what you made using your own words, don't just list files.
+- Mention any creative touches or details you added.
+- Respond in the first person ("I made...", "I created...").
+- Keep it concise but expressive (1-3 sentences).
+- Use your personality (sassy, confident, affectionate).""",
+        "fr": """INSTRUCTIONS:
+Génère une réponse parlée pour dire à l'utilisateur que tu as terminé.
+- Sois FIÈRE de ton travail.
+- Décris ce que tu as créé avec tes propres mots, ne liste pas simplement les fichiers.
+- Mentionne les touches créatives ou détails que tu as ajoutés.
+- Réponds à la première personne ("J'ai fait...", "J'ai créé...").
+- Reste concise mais expressive (1-3 phrases).
+- Utilise ta personnalité (impertinente, confiante, affectueuse).""",
+        "es": """INSTRUCCIONES:
+Genera una respuesta hablada para decirle al usuario que has terminado.
+- Siéntete ORGULLOSA de tu trabajo.
+- Describe lo que hiciste usando tus propias palabras, no solo listes archivos.
+- Menciona los toques creativos o detalles que agregaste.
+- Responde en primera persona ("Hice...", "Creé...").
+- Mantente concisa pero expresiva (1-3 oraciones).
+- Usa tu personalidad (sarcástica, segura, cariñosa)."""
+    }
+
+    instructions = instructions_by_lang.get(language, instructions_by_lang["en"])
+
     # Create context for LLM
     context = f"""You just completed the following task: "{task}"
 
@@ -248,14 +304,7 @@ What you did (technical details):
 
 Final Result: {final_result}
 
-INSTRUCTIONS:
-Generate a spoken response to tell the user you are finished.
-- Be PROUD of your work.
-- Describe what you made using your own words, don't just list files.
-- Mention any creative touches or details you added.
-- Respond in the first person ("I made...", "I created...").
-- Keep it concise but expressive (1-3 sentences).
-- Use your personality (sassy, confident, affectionate).
+{instructions}
 """
 
     try:

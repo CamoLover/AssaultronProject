@@ -20,9 +20,9 @@ from datetime import datetime
 # CONFIGURATION - What to start
 # ============================================
 START_ASR = True            # Start ASR-7 AI interface (main.py)
-START_DOCS = False           # Start documentation website
-START_DISCORD_BOT = False    # Start the discord bot
-START_MONITORING = False     # Start monitoring dashboard
+START_DOCS = True           # Start documentation website
+START_DISCORD_BOT = True    # Start the discord bot
+START_MONITORING = True     # Start monitoring dashboard
 
 def check_requirements():
     """Check if required packages are installed"""
