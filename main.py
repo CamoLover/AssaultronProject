@@ -2390,6 +2390,80 @@ def handle_verbosity_settings():
     return jsonify({"level": assaultron.cognitive_engine.verbosity})
 
 
+@app.route('/api/settings/models/available', methods=['GET'])
+def get_available_models():
+    """Get list of available models for each provider"""
+    provider = request.args.get('provider', 'all')
+
+    if provider == 'ollama' or provider == 'all':
+        # Get installed Ollama models
+        try:
+            response = requests.get(f"{Config.OLLAMA_URL}/api/tags", timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                ollama_models = [model['name'] for model in data.get('models', [])]
+            else:
+                ollama_models = []
+        except Exception as e:
+            print(f"[API] Failed to fetch Ollama models: {e}")
+            ollama_models = []
+
+    if provider == 'all':
+        return jsonify({
+            "ollama": ollama_models,
+            "gemini": Config.GEMINI_MODELS,
+            "openrouter": Config.OPENROUTER_MODELS
+        })
+    elif provider == 'ollama':
+        return jsonify({"models": ollama_models})
+    elif provider == 'gemini':
+        return jsonify({"models": Config.GEMINI_MODELS})
+    elif provider == 'openrouter':
+        return jsonify({"models": Config.OPENROUTER_MODELS})
+    else:
+        return jsonify({"error": "Invalid provider"}), 400
+
+
+@app.route('/api/settings/models/current', methods=['GET'])
+def get_current_models():
+    """Get currently selected models for all providers"""
+    return jsonify({
+        "ollama": Config.AI_MODEL,
+        "gemini": Config.GEMINI_MODEL,
+        "openrouter": Config.OPENROUTER_MODEL
+    })
+
+
+@app.route('/api/settings/models', methods=['POST'])
+def update_model():
+    """Update the model for a specific provider"""
+    data = request.get_json()
+    provider = data.get('provider')
+    model = data.get('model')
+
+    if not provider or not model:
+        return jsonify({"error": "Provider and model are required"}), 400
+
+    if provider not in ["ollama", "gemini", "openrouter"]:
+        return jsonify({"error": "Invalid provider. Must be ollama, gemini, or openrouter"}), 400
+
+    try:
+        success = assaultron.cognitive_engine.set_model(provider, model)
+
+        if success:
+            assaultron.log_event(f"Model updated for {provider}: {model}", "SYSTEM")
+            return jsonify({
+                "success": True,
+                "provider": provider,
+                "model": model
+            })
+        else:
+            return jsonify({"error": "Failed to save model setting"}), 500
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
 # ============================================================================
 # AUTONOMOUS AGENT ENDPOINTS
 # ============================================================================

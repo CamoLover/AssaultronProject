@@ -20,6 +20,7 @@ from datetime import datetime
 from .virtual_body import CognitiveState, WorldState, BodyState, MoodState
 from .config import Config
 from .time_awareness import get_time_context, format_time_context_for_prompt
+from .settings_manager import SettingsManager
 
 # Optional import for Gemini
 try:
@@ -58,11 +59,17 @@ class CognitiveEngine:
         self.model = model
         self.base_system_prompt = system_prompt
 
+        # Settings manager for persistent configuration
+        self.settings_manager = SettingsManager()
+
+        # Load models from settings (overrides hardcoded defaults)
+        self._load_models_from_settings()
+
         # Language setting (default: English, will be set by main interface from settings.json)
-        self.language = "en"
+        self.language = self.settings_manager.get("language", "en")
 
         # Verbosity setting (1-5: 1=very brief, 3=balanced, 5=detailed, will be set by main interface from settings.json)
-        self.verbosity = 2
+        self.verbosity = self.settings_manager.get("verbosity", 2)
 
         # Conversation state
         self.history_file = "ai-data/conversation_history.json"
@@ -86,9 +93,25 @@ class CognitiveEngine:
                 print(f"[COGNITIVE] Gemini configured with model {Config.GEMINI_MODEL}")
             else:
                 print("[COGNITIVE WARNING] Gemini API Key not set! Update config.py")
-        
+
         # Warmup: preload model to avoid timeout on first request
         self._warmup_model()
+
+    def _load_models_from_settings(self):
+        """Load model selections from settings and apply to Config"""
+        ollama_model = self.settings_manager.get_llm_model("ollama")
+        if ollama_model:
+            Config.AI_MODEL = ollama_model
+
+        gemini_model = self.settings_manager.get_llm_model("gemini")
+        if gemini_model:
+            Config.GEMINI_MODEL = gemini_model
+
+        openrouter_model = self.settings_manager.get_llm_model("openrouter")
+        if openrouter_model:
+            Config.OPENROUTER_MODEL = openrouter_model
+
+        print(f"[COGNITIVE] Loaded models from settings: Ollama={Config.AI_MODEL}, Gemini={Config.GEMINI_MODEL}, OpenRouter={Config.OPENROUTER_MODEL}")
 
     def switch_provider(self, provider: str):
         """Switch between 'ollama', 'gemini', or 'openrouter' at runtime"""
@@ -119,6 +142,39 @@ class CognitiveEngine:
             print(f"[COGNITIVE] Switched to Local Ollama ({Config.AI_MODEL})")
 
         return True
+
+    def set_model(self, provider: str, model: str) -> bool:
+        """
+        Change the model for a specific provider and save to settings.
+
+        Args:
+            provider: Provider name ("ollama", "gemini", or "openrouter")
+            model: Model name
+
+        Returns:
+            True if successful, False otherwise
+        """
+        if provider not in ["ollama", "gemini", "openrouter"]:
+            raise ValueError("Invalid provider. Use 'ollama', 'gemini', or 'openrouter'")
+
+        # Update Config
+        if provider == "ollama":
+            Config.update_ai_model(model)
+            self.model = model
+        elif provider == "gemini":
+            Config.update_gemini_model(model)
+        elif provider == "openrouter":
+            Config.update_openrouter_model(model)
+
+        # Save to settings
+        success = self.settings_manager.set_llm_model(provider, model)
+
+        if success:
+            print(f"[COGNITIVE] Model updated for {provider}: {model}")
+        else:
+            print(f"[COGNITIVE ERROR] Failed to save model setting for {provider}")
+
+        return success
 
     def set_verbosity(self, level: int):
         """

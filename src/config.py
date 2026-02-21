@@ -5,20 +5,43 @@ from dotenv import load_dotenv
 load_dotenv()
 
 class Config:
-    # LLM Configuration - All from .env
+    # LLM Configuration
     LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # "ollama", "gemini", or "openrouter"
 
     # Gemini Configuration
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    # Hardcoded default, can be changed via settings
+    GEMINI_MODEL = "gemini-2.0-flash-exp"
+
+    # Available Gemini models
+    GEMINI_MODELS = [
+        "gemini-2.0-flash-exp",
+        "gemini-2.5-flash",
+        "gemini-1.5-pro",
+        "gemini-1.5-flash",
+        "gemini-1.0-pro"
+    ]
 
     # OpenRouter Configuration
     OPENROUTER_API_KEY = os.getenv("OPENROUTER_KEY", "")
-    OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "deepseek/deepseek-v3.2")
+    # Hardcoded default, can be changed via settings
+    OPENROUTER_MODEL = "deepseek/deepseek-v3.2"
+
+    # Popular OpenRouter models
+    OPENROUTER_MODELS = [
+        "deepseek/deepseek-v3.2",
+        "mistralai/mistral-large-2512",
+        "anthropic/claude-3.5-sonnet",
+        "openai/gpt-4-turbo",
+        "openai/gpt-3.5-turbo",
+        "google/gemini-pro",
+        "meta-llama/llama-3.1-70b-instruct"
+    ]
 
     # Ollama Configuration (local)
     OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-    AI_MODEL = os.getenv("AI_MODEL", "gemma3:4b")  # Local model fallback
+    # Hardcoded default, can be changed via settings
+    AI_MODEL = "gemma3:4b"
 
     # Voice Configuration - From .env
     XVASYNTH_PATH = os.getenv("XVASYNTH_PATH", "./Content/xVAsynth")
@@ -207,9 +230,19 @@ Just be yourself.
     
     @classmethod
     def update_ai_model(cls, model_name):
-        """Update the AI model being used"""
+        """Update the AI model being used (Ollama)"""
         cls.AI_MODEL = model_name
-        
+
+    @classmethod
+    def update_gemini_model(cls, model_name):
+        """Update the Gemini model being used"""
+        cls.GEMINI_MODEL = model_name
+
+    @classmethod
+    def update_openrouter_model(cls, model_name):
+        """Update the OpenRouter model being used"""
+        cls.OPENROUTER_MODEL = model_name
+
     @classmethod
     def update_ollama_url(cls, url):
         """Update Ollama server URL"""
