@@ -1322,7 +1322,19 @@ def get_status():
         cpu_percent = 0
         memory_percent = 0
 
-    current_model = Config.OPENROUTER_MODEL if Config.LLM_PROVIDER == "openrouter" else (Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL)
+    # Get current model based on provider
+    if Config.LLM_PROVIDER == "openrouter":
+        current_model = Config.OPENROUTER_MODEL
+    elif Config.LLM_PROVIDER == "gemini":
+        current_model = Config.GEMINI_MODEL
+    elif Config.LLM_PROVIDER == "openai":
+        current_model = Config.OPENAI_MODEL
+    elif Config.LLM_PROVIDER == "anthropic":
+        current_model = Config.ANTHROPIC_MODEL
+    elif Config.LLM_PROVIDER == "mistral":
+        current_model = Config.MISTRAL_MODEL
+    else:
+        current_model = Config.AI_MODEL
 
     return jsonify({
         "status": assaultron.status,
@@ -2322,7 +2334,19 @@ def handle_provider_settings():
             return jsonify({"error": str(e)}), 400
 
     # GET request
-    current_model = Config.OPENROUTER_MODEL if Config.LLM_PROVIDER == "openrouter" else (Config.GEMINI_MODEL if Config.LLM_PROVIDER == "gemini" else Config.AI_MODEL)
+    if Config.LLM_PROVIDER == "openrouter":
+        current_model = Config.OPENROUTER_MODEL
+    elif Config.LLM_PROVIDER == "gemini":
+        current_model = Config.GEMINI_MODEL
+    elif Config.LLM_PROVIDER == "openai":
+        current_model = Config.OPENAI_MODEL
+    elif Config.LLM_PROVIDER == "anthropic":
+        current_model = Config.ANTHROPIC_MODEL
+    elif Config.LLM_PROVIDER == "mistral":
+        current_model = Config.MISTRAL_MODEL
+    else:
+        current_model = Config.AI_MODEL
+
     return jsonify({
         "provider": Config.LLM_PROVIDER,
         "model": current_model
@@ -2412,7 +2436,10 @@ def get_available_models():
         return jsonify({
             "ollama": ollama_models,
             "gemini": Config.GEMINI_MODELS,
-            "openrouter": Config.OPENROUTER_MODELS
+            "openrouter": Config.OPENROUTER_MODELS,
+            "openai": Config.OPENAI_MODELS,
+            "anthropic": Config.ANTHROPIC_MODELS,
+            "mistral": Config.MISTRAL_MODELS
         })
     elif provider == 'ollama':
         return jsonify({"models": ollama_models})
@@ -2420,6 +2447,12 @@ def get_available_models():
         return jsonify({"models": Config.GEMINI_MODELS})
     elif provider == 'openrouter':
         return jsonify({"models": Config.OPENROUTER_MODELS})
+    elif provider == 'openai':
+        return jsonify({"models": Config.OPENAI_MODELS})
+    elif provider == 'anthropic':
+        return jsonify({"models": Config.ANTHROPIC_MODELS})
+    elif provider == 'mistral':
+        return jsonify({"models": Config.MISTRAL_MODELS})
     else:
         return jsonify({"error": "Invalid provider"}), 400
 
@@ -2430,7 +2463,10 @@ def get_current_models():
     return jsonify({
         "ollama": Config.AI_MODEL,
         "gemini": Config.GEMINI_MODEL,
-        "openrouter": Config.OPENROUTER_MODEL
+        "openrouter": Config.OPENROUTER_MODEL,
+        "openai": Config.OPENAI_MODEL,
+        "anthropic": Config.ANTHROPIC_MODEL,
+        "mistral": Config.MISTRAL_MODEL
     })
 
 
@@ -2444,8 +2480,8 @@ def update_model():
     if not provider or not model:
         return jsonify({"error": "Provider and model are required"}), 400
 
-    if provider not in ["ollama", "gemini", "openrouter"]:
-        return jsonify({"error": "Invalid provider. Must be ollama, gemini, or openrouter"}), 400
+    if provider not in ["ollama", "gemini", "openrouter", "openai", "anthropic", "mistral"]:
+        return jsonify({"error": "Invalid provider. Must be ollama, gemini, openrouter, openai, anthropic, or mistral"}), 400
 
     try:
         success = assaultron.cognitive_engine.set_model(provider, model)

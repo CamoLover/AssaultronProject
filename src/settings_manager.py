@@ -42,9 +42,13 @@ class SettingsManager:
         """Get default settings structure"""
         return {
             "llm": {
+                "provider": "gemini",
                 "ollama_model": "gemma3:4b",
                 "gemini_model": "gemini-2.0-flash-exp",
-                "openrouter_model": "deepseek/deepseek-v3.2"
+                "openrouter_model": "deepseek/deepseek-v3.2",
+                "openai_model": "gpt-4o",
+                "anthropic_model": "claude-3-5-sonnet-20241022",
+                "mistral_model": "mistral-large-latest"
             },
             "language": "en",
             "verbosity": 2,
@@ -116,7 +120,7 @@ class SettingsManager:
         Get the configured model for a specific LLM provider.
 
         Args:
-            provider: Provider name ("ollama", "gemini", or "openrouter")
+            provider: Provider name ("ollama", "gemini", "openrouter", "openai", "anthropic", or "mistral")
 
         Returns:
             Model name or None
@@ -128,7 +132,7 @@ class SettingsManager:
         Set the model for a specific LLM provider.
 
         Args:
-            provider: Provider name ("ollama", "gemini", or "openrouter")
+            provider: Provider name ("ollama", "gemini", "openrouter", "openai", "anthropic", or "mistral")
             model: Model name
 
         Returns:
@@ -141,5 +145,24 @@ class SettingsManager:
         return {
             "ollama": self.get_llm_model("ollama"),
             "gemini": self.get_llm_model("gemini"),
-            "openrouter": self.get_llm_model("openrouter")
+            "openrouter": self.get_llm_model("openrouter"),
+            "openai": self.get_llm_model("openai"),
+            "anthropic": self.get_llm_model("anthropic"),
+            "mistral": self.get_llm_model("mistral")
         }
+
+    def get_provider(self) -> str:
+        """Get the currently selected LLM provider"""
+        return self.get("llm.provider", "gemini")
+
+    def set_provider(self, provider: str) -> bool:
+        """
+        Set the active LLM provider.
+
+        Args:
+            provider: Provider name ("ollama", "gemini", "openrouter", "openai", "anthropic", or "mistral")
+
+        Returns:
+            True if successful, False otherwise
+        """
+        return self.set("llm.provider", provider)

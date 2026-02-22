@@ -915,7 +915,7 @@
                                 class="text-[10px] font-bold bg-blue-500 text-white px-2 py-0.5 rounded uppercase">Init</span>
                         </div>
                         <div class="p-4 transition-colors duration-200" style="background: linear-gradient(to bottom, var(--bg-secondary), var(--card-bg));">
-                            <div class="flex p-1 rounded-lg shadow-inner transition-colors duration-200" style="background-color: var(--button-secondary-bg);">
+                            <div class="grid grid-cols-3 gap-1 p-1 rounded-lg shadow-inner transition-colors duration-200" style="background-color: var(--button-secondary-bg);">
                                 <button onclick="setProvider('ollama')" id="btnOllama"
                                     class="flex-1 py-1.5 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900 transition-all">
                                     Local
@@ -927,6 +927,18 @@
                                 <button onclick="setProvider('openrouter')" id="btnOpenRouter"
                                     class="flex-1 py-1.5 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900 transition-all">
                                     Router
+                                </button>
+                                <button onclick="setProvider('openai')" id="btnOpenAI"
+                                    class="flex-1 py-1.5 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900 transition-all">
+                                    OpenAI
+                                </button>
+                                <button onclick="setProvider('anthropic')" id="btnAnthropic"
+                                    class="flex-1 py-1.5 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900 transition-all">
+                                    Claude
+                                </button>
+                                <button onclick="setProvider('mistral')" id="btnMistral"
+                                    class="flex-1 py-1.5 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900 transition-all">
+                                    Mistral
                                 </button>
                             </div>
                             <div class="mt-3 flex items-center justify-center gap-2">
@@ -1881,15 +1893,24 @@
                 </div>
 
                 <!-- Model Selection Tabs -->
-                <div class="flex gap-2 mb-4 border-b border-gray-200">
-                    <button onclick="switchModelTab('ollama')" id="tabOllama" class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors">
+                <div class="flex gap-2 mb-4 border-b border-gray-200 overflow-x-auto">
+                    <button onclick="switchModelTab('ollama')" id="tabOllama" class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors whitespace-nowrap">
                         Ollama (Local)
                     </button>
-                    <button onclick="switchModelTab('gemini')" id="tabGemini" class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors">
+                    <button onclick="switchModelTab('gemini')" id="tabGemini" class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors whitespace-nowrap">
                         Google Gemini
                     </button>
-                    <button onclick="switchModelTab('openrouter')" id="tabOpenRouter" class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors">
+                    <button onclick="switchModelTab('openrouter')" id="tabOpenRouter" class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors whitespace-nowrap">
                         OpenRouter
+                    </button>
+                    <button onclick="switchModelTab('openai')" id="tabOpenAI" class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors whitespace-nowrap">
+                        OpenAI
+                    </button>
+                    <button onclick="switchModelTab('anthropic')" id="tabAnthropic" class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors whitespace-nowrap">
+                        Anthropic
+                    </button>
+                    <button onclick="switchModelTab('mistral')" id="tabMistral" class="px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors whitespace-nowrap">
+                        Mistral
                     </button>
                 </div>
 
@@ -1942,6 +1963,69 @@
                             <input type="text" id="openrouterCustomModel" placeholder="e.g., anthropic/claude-3-opus"
                                 class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
                             <button onclick="selectCustomModel('openrouter')"
+                                class="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                                Use
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- OpenAI Models -->
+                <div id="openaiModels" class="model-tab-content hidden">
+                    <div class="mb-3 text-sm text-gray-600">
+                        Popular OpenAI models:
+                    </div>
+                    <div id="openaiModelList" class="space-y-2">
+                        <div class="text-center py-8 text-gray-400">Loading models...</div>
+                    </div>
+                    <div class="mt-4">
+                        <label class="block text-xs font-bold text-gray-700 mb-2">Custom Model Name:</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="openaiCustomModel" placeholder="e.g., gpt-4o"
+                                class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <button onclick="selectCustomModel('openai')"
+                                class="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                                Use
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Anthropic Models -->
+                <div id="anthropicModels" class="model-tab-content hidden">
+                    <div class="mb-3 text-sm text-gray-600">
+                        Popular Anthropic Claude models:
+                    </div>
+                    <div id="anthropicModelList" class="space-y-2">
+                        <div class="text-center py-8 text-gray-400">Loading models...</div>
+                    </div>
+                    <div class="mt-4">
+                        <label class="block text-xs font-bold text-gray-700 mb-2">Custom Model Name:</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="anthropicCustomModel" placeholder="e.g., claude-3-5-sonnet-20241022"
+                                class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <button onclick="selectCustomModel('anthropic')"
+                                class="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
+                                Use
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mistral Models -->
+                <div id="mistralModels" class="model-tab-content hidden">
+                    <div class="mb-3 text-sm text-gray-600">
+                        Popular Mistral AI models:
+                    </div>
+                    <div id="mistralModelList" class="space-y-2">
+                        <div class="text-center py-8 text-gray-400">Loading models...</div>
+                    </div>
+                    <div class="mt-4">
+                        <label class="block text-xs font-bold text-gray-700 mb-2">Custom Model Name:</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="mistralCustomModel" placeholder="e.g., mistral-large-latest"
+                                class="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent">
+                            <button onclick="selectCustomModel('mistral')"
                                 class="px-4 py-2 bg-blue-600 text-white text-sm font-semibold rounded-lg hover:bg-blue-700 transition-colors">
                                 Use
                             </button>
@@ -2404,7 +2488,14 @@
                             modelNameEl.className = 'font-bold text-blue-500';
                         } else if (data.provider === 'openrouter') {
                             modelNameEl.className = 'font-bold text-purple-500';
+                        } else if (data.provider === 'openai') {
+                            modelNameEl.className = 'font-bold text-teal-500';
+                        } else if (data.provider === 'anthropic') {
+                            modelNameEl.className = 'font-bold text-orange-500';
+                        } else if (data.provider === 'mistral') {
+                            modelNameEl.className = 'font-bold text-red-500';
                         } else {
+                            // ollama/local
                             modelNameEl.className = 'font-bold text-green-500';
                         }
 
@@ -3966,6 +4057,7 @@
                 });
 
                 const data = await response.json();
+
                 if (data.success) {
                     await getProviderStatus(); // Refresh full status
                 } else {
@@ -3983,11 +4075,14 @@
             const btnOllama = document.getElementById('btnOllama');
             const btnGemini = document.getElementById('btnGemini');
             const btnRouter = document.getElementById('btnOpenRouter');
+            const btnOpenAI = document.getElementById('btnOpenAI');
+            const btnAnthropic = document.getElementById('btnAnthropic');
+            const btnMistral = document.getElementById('btnMistral');
             const badge = document.getElementById('providerBadge');
             const modelDisplay = document.getElementById('currentModelDisplay');
 
             // Reset all buttons
-            [btnOllama, btnGemini, btnRouter].forEach(btn => {
+            [btnOllama, btnGemini, btnRouter, btnOpenAI, btnAnthropic, btnMistral].forEach(btn => {
                 if (btn) btn.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase text-gray-500 hover:text-gray-900';
             });
 
@@ -3999,6 +4094,18 @@
                 btnRouter.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase bg-white text-purple-600 shadow-sm border border-gray-200';
                 badge.textContent = 'ROUTER';
                 badge.className = 'text-[10px] font-bold bg-purple-500 text-white px-2 py-0.5 rounded uppercase';
+            } else if (provider === 'openai') {
+                btnOpenAI.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase bg-white text-teal-600 shadow-sm border border-gray-200';
+                badge.textContent = 'OPENAI';
+                badge.className = 'text-[10px] font-bold bg-teal-500 text-white px-2 py-0.5 rounded uppercase';
+            } else if (provider === 'anthropic') {
+                btnAnthropic.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase bg-white text-orange-600 shadow-sm border border-gray-200';
+                badge.textContent = 'CLAUDE';
+                badge.className = 'text-[10px] font-bold bg-orange-500 text-white px-2 py-0.5 rounded uppercase';
+            } else if (provider === 'mistral') {
+                btnMistral.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase bg-white text-red-600 shadow-sm border border-gray-200';
+                badge.textContent = 'MISTRAL';
+                badge.className = 'text-[10px] font-bold bg-red-500 text-white px-2 py-0.5 rounded uppercase';
             } else {
                 btnOllama.className = 'flex-1 py-1 text-xs font-bold rounded text-center uppercase bg-white text-green-600 shadow-sm border border-gray-200';
                 badge.textContent = 'LOCAL';
@@ -4013,8 +4120,8 @@
         // ============================================================================
 
         let currentModelTab = 'ollama';
-        let availableModels = { ollama: [], gemini: [], openrouter: [] };
-        let currentModels = { ollama: '', gemini: '', openrouter: '' };
+        let availableModels = { ollama: [], gemini: [], openrouter: [], openai: [], anthropic: [], mistral: [] };
+        let currentModels = { ollama: '', gemini: '', openrouter: '', openai: '', anthropic: '', mistral: '' };
 
         async function openModelSelector() {
             // Show modal
@@ -4032,8 +4139,10 @@
             switchModelTab(providerData.provider);
         }
 
-        function closeModelSelector() {
+        async function closeModelSelector() {
             document.getElementById('modelSelectorModal').classList.add('hidden');
+            // Refresh provider status to ensure UI is in sync
+            await getProviderStatus();
         }
 
         async function loadCurrentModels() {
@@ -4063,6 +4172,9 @@
                 renderModelList('ollama', data.ollama);
                 renderModelList('gemini', data.gemini);
                 renderModelList('openrouter', data.openrouter);
+                renderModelList('openai', data.openai);
+                renderModelList('anthropic', data.anthropic);
+                renderModelList('mistral', data.mistral);
             } catch (error) {
                 console.error('Failed to load available models:', error);
             }
@@ -4099,17 +4211,23 @@
             const tabIdMap = {
                 'ollama': 'tabOllama',
                 'gemini': 'tabGemini',
-                'openrouter': 'tabOpenRouter'
+                'openrouter': 'tabOpenRouter',
+                'openai': 'tabOpenAI',
+                'anthropic': 'tabAnthropic',
+                'mistral': 'tabMistral'
             };
 
             const contentIdMap = {
                 'ollama': 'ollamaModels',
                 'gemini': 'geminiModels',
-                'openrouter': 'openrouterModels'
+                'openrouter': 'openrouterModels',
+                'openai': 'openaiModels',
+                'anthropic': 'anthropicModels',
+                'mistral': 'mistralModels'
             };
 
             // Update tab buttons
-            ['ollama', 'gemini', 'openrouter'].forEach(p => {
+            ['ollama', 'gemini', 'openrouter', 'openai', 'anthropic', 'mistral'].forEach(p => {
                 const tabBtn = document.getElementById(tabIdMap[p]);
                 const contentDiv = document.getElementById(contentIdMap[p]);
 
@@ -4119,10 +4237,10 @@
                 }
 
                 if (p === provider) {
-                    tabBtn.className = 'px-4 py-2 text-sm font-semibold border-b-2 border-blue-600 text-blue-600';
+                    tabBtn.className = 'px-4 py-2 text-sm font-semibold border-b-2 border-blue-600 text-blue-600 whitespace-nowrap';
                     contentDiv.classList.remove('hidden');
                 } else {
-                    tabBtn.className = 'px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors';
+                    tabBtn.className = 'px-4 py-2 text-sm font-semibold border-b-2 border-transparent hover:text-blue-600 transition-colors whitespace-nowrap';
                     contentDiv.classList.add('hidden');
                 }
             });
