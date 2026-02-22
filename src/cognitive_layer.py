@@ -98,7 +98,14 @@ class CognitiveEngine:
         self._warmup_model()
 
     def _load_models_from_settings(self):
-        """Load model selections from settings and apply to Config"""
+        """Load model selections and provider from settings and apply to Config"""
+        # Load saved provider
+        saved_provider = self.settings_manager.get_provider()
+        if saved_provider:
+            Config.LLM_PROVIDER = saved_provider
+            print(f"[COGNITIVE] Loaded provider from settings: {saved_provider}")
+
+        # Load models
         ollama_model = self.settings_manager.get_llm_model("ollama")
         if ollama_model:
             Config.AI_MODEL = ollama_model
@@ -111,12 +118,24 @@ class CognitiveEngine:
         if openrouter_model:
             Config.OPENROUTER_MODEL = openrouter_model
 
-        print(f"[COGNITIVE] Loaded models from settings: Ollama={Config.AI_MODEL}, Gemini={Config.GEMINI_MODEL}, OpenRouter={Config.OPENROUTER_MODEL}")
+        openai_model = self.settings_manager.get_llm_model("openai")
+        if openai_model:
+            Config.OPENAI_MODEL = openai_model
+
+        anthropic_model = self.settings_manager.get_llm_model("anthropic")
+        if anthropic_model:
+            Config.ANTHROPIC_MODEL = anthropic_model
+
+        mistral_model = self.settings_manager.get_llm_model("mistral")
+        if mistral_model:
+            Config.MISTRAL_MODEL = mistral_model
+
+        print(f"[COGNITIVE] Loaded models from settings: Ollama={Config.AI_MODEL}, Gemini={Config.GEMINI_MODEL}, OpenRouter={Config.OPENROUTER_MODEL}, OpenAI={Config.OPENAI_MODEL}, Anthropic={Config.ANTHROPIC_MODEL}, Mistral={Config.MISTRAL_MODEL}")
 
     def switch_provider(self, provider: str):
-        """Switch between 'ollama', 'gemini', or 'openrouter' at runtime"""
-        if provider not in ["ollama", "gemini", "openrouter"]:
-            raise ValueError("Invalid provider. Use 'ollama', 'gemini', or 'openrouter'")
+        """Switch between 'ollama', 'gemini', 'openrouter', 'openai', 'anthropic', or 'mistral' at runtime"""
+        if provider not in ["ollama", "gemini", "openrouter", "openai", "anthropic", "mistral"]:
+            raise ValueError("Invalid provider. Use 'ollama', 'gemini', 'openrouter', 'openai', 'anthropic', or 'mistral'")
 
         Config.LLM_PROVIDER = provider
 
@@ -130,16 +149,32 @@ class CognitiveEngine:
                 genai.configure(api_key=Config.GEMINI_API_KEY)
                 print(f"[COGNITIVE] Switched to Gemini ({Config.GEMINI_MODEL})")
             else:
-                print("[COGNITIVE WARNING] Gemini API Key missing/invalid!")
-                return False
+                print("[COGNITIVE WARNING] Gemini API Key missing/invalid! Switching anyway...")
         elif provider == "openrouter":
             if Config.OPENROUTER_API_KEY and "YOUR_API_KEY" not in Config.OPENROUTER_API_KEY:
                 print(f"[COGNITIVE] Switched to OpenRouter ({Config.OPENROUTER_MODEL})")
             else:
-                print("[COGNITIVE WARNING] OpenRouter API Key missing/invalid!")
-                return False
+                print("[COGNITIVE WARNING] OpenRouter API Key missing/invalid! Switching anyway...")
+        elif provider == "openai":
+            if Config.OPENAI_API_KEY and "YOUR_API_KEY" not in Config.OPENAI_API_KEY:
+                print(f"[COGNITIVE] Switched to OpenAI ({Config.OPENAI_MODEL})")
+            else:
+                print("[COGNITIVE WARNING] OpenAI API Key missing/invalid! Switching anyway...")
+        elif provider == "anthropic":
+            if Config.ANTHROPIC_API_KEY and "YOUR_API_KEY" not in Config.ANTHROPIC_API_KEY:
+                print(f"[COGNITIVE] Switched to Anthropic ({Config.ANTHROPIC_MODEL})")
+            else:
+                print("[COGNITIVE WARNING] Anthropic API Key missing/invalid! Switching anyway...")
+        elif provider == "mistral":
+            if Config.MISTRAL_API_KEY and "YOUR_API_KEY" not in Config.MISTRAL_API_KEY:
+                print(f"[COGNITIVE] Switched to Mistral ({Config.MISTRAL_MODEL})")
+            else:
+                print("[COGNITIVE WARNING] Mistral API Key missing/invalid! Switching anyway...")
         else:
             print(f"[COGNITIVE] Switched to Local Ollama ({Config.AI_MODEL})")
+
+        # Save provider selection to settings
+        self.settings_manager.set_provider(provider)
 
         return True
 
@@ -148,14 +183,14 @@ class CognitiveEngine:
         Change the model for a specific provider and save to settings.
 
         Args:
-            provider: Provider name ("ollama", "gemini", or "openrouter")
+            provider: Provider name ("ollama", "gemini", "openrouter", "openai", "anthropic", or "mistral")
             model: Model name
 
         Returns:
             True if successful, False otherwise
         """
-        if provider not in ["ollama", "gemini", "openrouter"]:
-            raise ValueError("Invalid provider. Use 'ollama', 'gemini', or 'openrouter'")
+        if provider not in ["ollama", "gemini", "openrouter", "openai", "anthropic", "mistral"]:
+            raise ValueError("Invalid provider. Use 'ollama', 'gemini', 'openrouter', 'openai', 'anthropic', or 'mistral'")
 
         # Update Config
         if provider == "ollama":
@@ -165,6 +200,12 @@ class CognitiveEngine:
             Config.update_gemini_model(model)
         elif provider == "openrouter":
             Config.update_openrouter_model(model)
+        elif provider == "openai":
+            Config.update_openai_model(model)
+        elif provider == "anthropic":
+            Config.update_anthropic_model(model)
+        elif provider == "mistral":
+            Config.update_mistral_model(model)
 
         # Save to settings
         success = self.settings_manager.set_llm_model(provider, model)
@@ -768,6 +809,12 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
             return self._call_gemini(messages)
         elif Config.LLM_PROVIDER == "openrouter":
             return self._call_openrouter(messages)
+        elif Config.LLM_PROVIDER == "openai":
+            return self._call_openai(messages)
+        elif Config.LLM_PROVIDER == "anthropic":
+            return self._call_anthropic(messages)
+        elif Config.LLM_PROVIDER == "mistral":
+            return self._call_mistral(messages)
         else:
             return self._call_ollama(messages)
 
@@ -917,6 +964,190 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
 
         except Exception as e:
             print(f"[COGNITIVE ERROR] OpenRouter Request Failed: {e}")
+            raise
+
+    def _call_openai(self, messages: List[Dict[str, Any]]) -> str:
+        """Call OpenAI API with optional multimodal vision support"""
+        try:
+            headers = {
+                "Authorization": f"Bearer {Config.OPENAI_API_KEY}",
+                "Content-Type": "application/json",
+            }
+
+            # Convert messages to OpenAI format (supports vision natively)
+            openai_messages = []
+            for msg in messages:
+                if isinstance(msg.get("content"), list):
+                    # Multimodal content - convert to OpenAI vision format
+                    content_parts = []
+                    for item in msg["content"]:
+                        if item["type"] == "text":
+                            content_parts.append({"type": "text", "text": item["text"]})
+                        elif item["type"] == "image":
+                            content_parts.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{item['image']}"
+                                }
+                            })
+                    openai_messages.append({"role": msg["role"], "content": content_parts})
+                else:
+                    # Text-only content
+                    openai_messages.append(msg)
+
+            payload = {
+                "model": Config.OPENAI_MODEL,
+                "messages": openai_messages,
+                "temperature": 0.85,
+                "response_format": { "type": "json_object" },
+                "max_tokens": 4096
+            }
+
+            response = requests.post(
+                url="https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=120
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if "choices" in data and len(data["choices"]) > 0:
+                    return data["choices"][0]["message"]["content"]
+                else:
+                    raise Exception(f"OpenAI returned unexpected response format: {data}")
+            else:
+                raise Exception(f"OpenAI API returned {response.status_code}: {response.text}")
+
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] OpenAI Request Failed: {e}")
+            if "API" in str(e) or "401" in str(e):
+                return '{"goal": "idle", "emotion": "neutral", "dialogue": "System Error: Please check my OpenAI API Key."}'
+            raise
+
+    def _call_anthropic(self, messages: List[Dict[str, Any]]) -> str:
+        """Call Anthropic Claude API with optional multimodal vision support"""
+        try:
+            headers = {
+                "x-api-key": Config.ANTHROPIC_API_KEY,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            }
+
+            # Anthropic uses a different format - system message is separate
+            system_message = ""
+            anthropic_messages = []
+
+            for msg in messages:
+                if msg["role"] == "system":
+                    system_message = msg["content"] if isinstance(msg["content"], str) else msg["content"][0]["text"]
+                else:
+                    if isinstance(msg.get("content"), list):
+                        # Multimodal content
+                        content_parts = []
+                        for item in msg["content"]:
+                            if item["type"] == "text":
+                                content_parts.append({"type": "text", "text": item["text"]})
+                            elif item["type"] == "image":
+                                content_parts.append({
+                                    "type": "image",
+                                    "source": {
+                                        "type": "base64",
+                                        "media_type": "image/jpeg",
+                                        "data": item['image']
+                                    }
+                                })
+                        anthropic_messages.append({"role": msg["role"], "content": content_parts})
+                    else:
+                        # Text-only content
+                        anthropic_messages.append(msg)
+
+            payload = {
+                "model": Config.ANTHROPIC_MODEL,
+                "messages": anthropic_messages,
+                "system": system_message,
+                "temperature": 0.85,
+                "max_tokens": 4096
+            }
+
+            response = requests.post(
+                url="https://api.anthropic.com/v1/messages",
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=120
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if "content" in data and len(data["content"]) > 0:
+                    # Anthropic returns content as array, get the text from first item
+                    return data["content"][0]["text"]
+                else:
+                    raise Exception(f"Anthropic returned unexpected response format: {data}")
+            else:
+                raise Exception(f"Anthropic API returned {response.status_code}: {response.text}")
+
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] Anthropic Request Failed: {e}")
+            if "API" in str(e) or "401" in str(e):
+                return '{"goal": "idle", "emotion": "neutral", "dialogue": "System Error: Please check my Anthropic API Key."}'
+            raise
+
+    def _call_mistral(self, messages: List[Dict[str, Any]]) -> str:
+        """Call Mistral API with optional multimodal vision support"""
+        try:
+            headers = {
+                "Authorization": f"Bearer {Config.MISTRAL_API_KEY}",
+                "Content-Type": "application/json",
+            }
+
+            # Convert messages to Mistral format (similar to OpenAI)
+            mistral_messages = []
+            for msg in messages:
+                if isinstance(msg.get("content"), list):
+                    # Multimodal content - convert to Mistral vision format
+                    content_parts = []
+                    for item in msg["content"]:
+                        if item["type"] == "text":
+                            content_parts.append({"type": "text", "text": item["text"]})
+                        elif item["type"] == "image":
+                            content_parts.append({
+                                "type": "image_url",
+                                "image_url": f"data:image/jpeg;base64,{item['image']}"
+                            })
+                    mistral_messages.append({"role": msg["role"], "content": content_parts})
+                else:
+                    # Text-only content
+                    mistral_messages.append(msg)
+
+            payload = {
+                "model": Config.MISTRAL_MODEL,
+                "messages": mistral_messages,
+                "temperature": 0.85,
+                "response_format": { "type": "json_object" },
+                "max_tokens": 4096
+            }
+
+            response = requests.post(
+                url="https://api.mistral.ai/v1/chat/completions",
+                headers=headers,
+                data=json.dumps(payload),
+                timeout=120
+            )
+
+            if response.status_code == 200:
+                data = response.json()
+                if "choices" in data and len(data["choices"]) > 0:
+                    return data["choices"][0]["message"]["content"]
+                else:
+                    raise Exception(f"Mistral returned unexpected response format: {data}")
+            else:
+                raise Exception(f"Mistral API returned {response.status_code}: {response.text}")
+
+        except Exception as e:
+            print(f"[COGNITIVE ERROR] Mistral Request Failed: {e}")
+            if "API" in str(e) or "401" in str(e):
+                return '{"goal": "idle", "emotion": "neutral", "dialogue": "System Error: Please check my Mistral API Key."}'
             raise
 
     def _sanitize_dialogue(self, text: str) -> str:

@@ -6,7 +6,7 @@ load_dotenv()
 
 class Config:
     # LLM Configuration
-    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # "ollama", "gemini", or "openrouter"
+    LLM_PROVIDER = os.getenv("LLM_PROVIDER", "gemini")  # "ollama", "gemini", "openrouter", "openai", "anthropic", or "mistral"
 
     # Gemini Configuration
     GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
@@ -36,6 +36,48 @@ class Config:
         "openai/gpt-3.5-turbo",
         "google/gemini-pro",
         "meta-llama/llama-3.1-70b-instruct"
+    ]
+
+    # OpenAI Configuration
+    OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+    # Hardcoded default, can be changed via settings
+    OPENAI_MODEL = "gpt-4o"
+
+    # Available OpenAI models
+    OPENAI_MODELS = [
+        "gpt-4o",
+        "gpt-4o-mini",
+        "gpt-4-turbo",
+        "gpt-4",
+        "gpt-3.5-turbo"
+    ]
+
+    # Anthropic Configuration
+    ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
+    # Hardcoded default, can be changed via settings
+    ANTHROPIC_MODEL = "claude-3-5-sonnet-20241022"
+
+    # Available Anthropic models
+    ANTHROPIC_MODELS = [
+        "claude-3-5-sonnet-20241022",
+        "claude-3-5-haiku-20241022",
+        "claude-3-opus-20240229",
+        "claude-3-sonnet-20240229",
+        "claude-3-haiku-20240307"
+    ]
+
+    # Mistral Configuration
+    MISTRAL_API_KEY = os.getenv("MISTRAL_KEY", "")
+    # Hardcoded default, can be changed via settings
+    MISTRAL_MODEL = "mistral-large-latest"
+
+    # Available Mistral models
+    MISTRAL_MODELS = [
+        "mistral-large-latest",
+        "mistral-small-latest",
+        "codestral-latest",
+        "ministral-8b-latest",
+        "ministral-3b-latest"
     ]
 
     # Ollama Configuration (local)
@@ -242,6 +284,21 @@ Just be yourself.
     def update_openrouter_model(cls, model_name):
         """Update the OpenRouter model being used"""
         cls.OPENROUTER_MODEL = model_name
+
+    @classmethod
+    def update_openai_model(cls, model_name):
+        """Update the OpenAI model being used"""
+        cls.OPENAI_MODEL = model_name
+
+    @classmethod
+    def update_anthropic_model(cls, model_name):
+        """Update the Anthropic model being used"""
+        cls.ANTHROPIC_MODEL = model_name
+
+    @classmethod
+    def update_mistral_model(cls, model_name):
+        """Update the Mistral model being used"""
+        cls.MISTRAL_MODEL = model_name
 
     @classmethod
     def update_ollama_url(cls, url):
