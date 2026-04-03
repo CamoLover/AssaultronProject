@@ -40,7 +40,7 @@
         @keyframes fadeInUp {
             from {
                 opacity: 0;
-                transform: translateY(30px);
+                transform: translateY(20px);
             }
             to {
                 opacity: 1;
@@ -49,18 +49,7 @@
         }
 
         .animate-fade-in-up {
-            animation: fadeInUp 0.8s ease-out;
-        }
-
-        .gradient-text {
-            background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
-        }
-
-        .nav-blur {
-            backdrop-filter: blur(10px);
+            animation: fadeInUp 0.6s ease-out;
         }
 
         .sidebar {
@@ -257,13 +246,13 @@
         }
 
         .doc-link.active {
-            background-color: #fee2e2;
-            color: #ef4444;
+            background-color: #ef4444;
+            color: #ffffff;
         }
 
         .dark .doc-link.active {
-            background-color: #7f1d1d;
-            color: #fca5a5;
+            background-color: #ef4444;
+            color: #ffffff;
         }
 
         /* Mermaid diagram styling */
@@ -279,27 +268,28 @@
 </head>
 <body class="bg-gray-50 dark:bg-slate-900 text-gray-900 dark:text-gray-100 transition-colors duration-300">
     <!-- Navigation -->
-    <nav class="fixed top-0 w-full z-50 bg-white/80 dark:bg-slate-900/80 nav-blur border-b border-gray-200 dark:border-slate-700">
+    <nav class="fixed top-0 w-full z-50 bg-white dark:bg-slate-900 border-b-2 border-red-500">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between items-center h-16">
-                <div class="flex items-center space-x-2">
-                    <i class="fas fa-robot text-2xl text-red-500"></i>
-                    <a href="index.html" class="text-xl font-bold gradient-text">ASR-7</a>
+                <div class="flex items-center space-x-3">
+                    <div class="w-8 h-8 bg-red-500 flex items-center justify-center">
+                        <i class="fas fa-robot text-white text-lg"></i>
+                    </div>
+                    <a href="index.html" class="text-xl font-bold text-red-500 tracking-wider">ASR-7</a>
                 </div>
 
                 <div class="hidden md:flex items-center space-x-8">
-                    <a href="index.html#home" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Home</a>
-                    <a href="index.html#about" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">About</a>
-                    <a href="index.html#capabilities" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">Capabilities</a>
-                    <a href="docs.html" class="text-red-500">Documentation</a>
+                    <a href="index.html#home" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors font-medium text-sm uppercase tracking-wide">Home</a>
+                    <a href="index.html#about" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors font-medium text-sm uppercase tracking-wide">About</a>
+                    <a href="docs.html" class="text-red-500 font-medium text-sm uppercase tracking-wide">Documentation</a>
                     <a href="#" onclick="event.preventDefault(); showRepoModal();" class="text-gray-700 dark:text-gray-300 hover:text-red-500 transition-colors">
                         <i class="fab fa-github text-xl"></i>
                     </a>
                 </div>
 
                 <div class="flex items-center space-x-4">
-                    <button id="theme-toggle" class="p-2 rounded-lg bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
-                        <i class="fas fa-moon dark:fa-sun text-xl text-gray-700 dark:text-gray-300"></i>
+                    <button id="theme-toggle" class="p-2 bg-gray-100 dark:bg-slate-800 hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors">
+                        <i class="fas fa-moon dark:fa-sun text-lg text-gray-700 dark:text-gray-300"></i>
                     </button>
                 </div>
             </div>
@@ -312,17 +302,17 @@
             <div class="grid lg:grid-cols-4 gap-8">
                 <!-- Sidebar -->
                 <aside class="lg:col-span-1">
-                    <div class="sidebar bg-white dark:bg-slate-800 rounded-lg p-6 border border-gray-200 dark:border-slate-700">
-                        <h3 class="text-lg font-bold mb-4 gradient-text">Documentation</h3>
-                        <ul class="space-y-2" id="doc-list">
+                    <div class="sidebar bg-white dark:bg-slate-800 p-6 border-l-4 border-red-500">
+                        <h3 class="text-lg font-bold mb-4 text-red-500 uppercase tracking-wide">Documentation</h3>
+                        <ul class="space-y-1" id="doc-list">
                             <li>
-                                <button onclick="loadDoc('ARCHITECTURE.md')" class="doc-link w-full text-left px-3 py-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                                <button onclick="loadDoc('ARCHITECTURE.md')" class="doc-link w-full text-left px-3 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors text-sm">
                                     <i class="fas fa-file-alt mr-2 text-red-500"></i>
                                     Architecture
                                 </button>
                             </li>
                             <li>
-                                <button onclick="loadDoc('architecture-viewer.md')" class="doc-link w-full text-left px-3 py-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                                <button onclick="loadDoc('architecture-viewer.md')" class="doc-link w-full text-left px-3 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors text-sm">
                                     <i class="fas fa-project-diagram mr-2 text-red-500"></i>
                                     Architecture Viewer
                                 </button>
@@ -331,12 +321,12 @@
 
                         <hr class="my-6 border-gray-200 dark:border-slate-700">
 
-                        <div class="space-y-2">
-                            <a href="index.html" class="block px-3 py-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                        <div class="space-y-1">
+                            <a href="index.html" class="block px-3 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors text-sm">
                                 <i class="fas fa-home mr-2 text-red-500"></i>
                                 Back to Home
                             </a>
-                            <a href="#" onclick="event.preventDefault(); showRepoModal();" class="block px-3 py-2 rounded text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors">
+                            <a href="#" onclick="event.preventDefault(); showRepoModal();" class="block px-3 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors text-sm">
                                 <i class="fab fa-github mr-2 text-red-500"></i>
                                 View on GitHub
                             </a>
@@ -346,7 +336,7 @@
 
                 <!-- Main Content -->
                 <main class="lg:col-span-3">
-                    <div class="bg-white dark:bg-slate-800 rounded-lg p-8 border border-gray-200 dark:border-slate-700">
+                    <div class="bg-white dark:bg-slate-800 p-8 border-2 border-gray-200 dark:border-slate-700">
                         <div id="loading" class="text-center py-12">
                             <i class="fas fa-spinner fa-spin text-4xl text-red-500 mb-4"></i>
                             <p class="text-gray-600 dark:text-gray-400">Loading documentation...</p>
@@ -397,20 +387,20 @@
 
     <!-- Custom Modal for GitHub Repository Info -->
     <div id="repo-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center px-4">
-        <div class="absolute inset-0 bg-black/50 backdrop-blur-sm" onclick="closeRepoModal()"></div>
-        <div class="relative bg-white dark:bg-slate-800 rounded-2xl shadow-2xl max-w-md w-full p-8 animate-fade-in-up border border-gray-200 dark:border-slate-700">
+        <div class="absolute inset-0 bg-black/70" onclick="closeRepoModal()"></div>
+        <div class="relative bg-white dark:bg-slate-800 shadow-2xl max-w-md w-full p-8 animate-fade-in-up border-2 border-red-500">
             <div class="text-center">
-                <div class="inline-block p-4 mb-4 rounded-full bg-red-100 dark:bg-red-900/30">
-                    <i class="fab fa-github text-4xl text-red-500"></i>
+                <div class="inline-block p-4 mb-4 bg-red-500">
+                    <i class="fab fa-github text-4xl text-white"></i>
                 </div>
-                <h3 class="text-2xl font-bold mb-4 text-gray-900 dark:text-white">Repository Status</h3>
+                <h3 class="text-2xl font-bold mb-4 text-gray-900 dark:text-white uppercase tracking-wide">Repository Status</h3>
                 <p class="text-gray-600 dark:text-gray-400 mb-6 leading-relaxed">
                     The repository is currently <span class="font-semibold text-red-500">private</span> and will soon be made public.
                 </p>
                 <p class="text-sm text-gray-500 dark:text-gray-500 mb-6">
                     <i class="fas fa-clock mr-2"></i>Stay tuned for the public release!
                 </p>
-                <button onclick="closeRepoModal()" class="w-full px-6 py-3 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition-colors shadow-lg">
+                <button onclick="closeRepoModal()" class="w-full px-6 py-3 bg-red-500 text-white font-semibold hover:bg-red-600 transition-colors uppercase text-sm tracking-wide">
                     Got it!
                 </button>
             </div>
