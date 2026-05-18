@@ -389,7 +389,7 @@ in the Software without restriction...
 - **Ollama** for local LLM inference
 - **Google Gemini** for advanced reasoning capabilities
 - **Mistral AI** for speech-to-text (Voxtral) & Mistral Large 3 for LLM via Openrouter
-- **xVASynth** for character voice synthesis
+- **[xVASynth](https://github.com/DanRuta/xVA-Synth)** for character voice synthesis
 - **MediaPipe** for face detection
 - **TensorFlow** for object detection
 - The **open-source community** for invaluable tools and libraries
@@ -404,6 +404,10 @@ in the Software without restriction...
 ---
 
 <div align="center">
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/chart?repos=CamoLover/AssaultronProject&type=date&legend=top-left)](https://www.star-history.com/?repos=CamoLover%2FAssaultronProject&type=date&legend=top-left)
 
 ### ⚡ Built with passion for embodied AI ⚡
 
