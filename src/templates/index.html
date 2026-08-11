@@ -2849,6 +2849,23 @@
 
                         // Update conversation history display (reload from server)
                         loadHistory();
+                    } else if (data.type === 'web_search') {
+                        // Show live web search activity in the chat + logs
+                        const now = new Date().toLocaleTimeString();
+                        if (data.status === 'searching') {
+                            addLog('TOOL', `Searching the web: ${data.query}`);
+                            addChatMessage('🔍 SEARCH', `<span class="text-teal-600">Recherche web :</span> <em>${data.query}</em>`, now);
+                        } else if (data.status === 'results') {
+                            const count = (data.results || []).length;
+                            const links = (data.results || []).slice(0, 3).map(r =>
+                                `<a href="${r.url}" target="_blank" class="text-teal-600 underline">${r.title || r.url}</a>`
+                            ).join(' · ');
+                            addLog('TOOL', `Found ${count} results for: ${data.query}`);
+                            addChatMessage('🔍 SEARCH', `<span class="text-teal-600">${count} résultat(s)</span> pour <em>${data.query}</em>${links ? '<br>' + links : ''}`, now);
+                        } else if (data.status === 'error') {
+                            addLog('WARNING', `Web search failed for "${data.query}": ${data.error || ''}`);
+                            addChatMessage('🔍 SEARCH', `<span class="text-orange-600">Recherche échouée</span> pour <em>${data.query}</em>`, now);
+                        }
                     } else if (data.type === 'voice_notification') {
                         // Show notification when voice system starts
                         showVoiceNotification();

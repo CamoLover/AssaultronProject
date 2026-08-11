@@ -245,6 +245,7 @@ class CognitiveEngine:
         memory_summary: str = "",
         vision_context: str = "",
         agent_context: str = "",
+        web_context: str = "",
         record_history: bool = True,
         vision_image_b64: str = None,
         attachment_image_path: str = None
@@ -292,7 +293,8 @@ class CognitiveEngine:
                 vision_context,
                 agent_context,
                 vision_image_b64,
-                attachment_image_b64
+                attachment_image_b64,
+                web_context=web_context
             )
 
             # Add anti-duplicate instruction on retry attempts
@@ -379,7 +381,8 @@ class CognitiveEngine:
         vision_context: str = "",
         agent_context: str = "",
         vision_image_b64: str = None,
-        attachment_image_b64: str = None
+        attachment_image_b64: str = None,
+        web_context: str = ""
     ) -> List[Dict[str, Any]]:
         """
         Build the message list for LLM.
@@ -448,6 +451,18 @@ class CognitiveEngine:
             messages.append({
                 "role": "system",
                 "content": agent_context
+            })
+
+        # 4.6. Live web search results (fresh info fetched to answer THIS message)
+        if web_context:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "LIVE WEB SEARCH RESULTS (fresh data retrieved just now to answer the user). "
+                    "Base your reply on these facts, cite what's relevant, and do NOT claim you "
+                    "can't access the internet or that your knowledge is outdated:\n"
+                    f"{web_context}"
+                )
             })
 
         # 5. Long-term Memories (Persistent across sessions, max 10)

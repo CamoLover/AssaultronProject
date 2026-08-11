@@ -44,6 +44,7 @@ from src.notification_manager import NotificationManager
 from src.sandbox_manager import SandboxManager
 from src.agent_logic import AgentLogic
 import src.agent_ai_helpers as agent_ai_helpers
+from src.web_search import web_search as web_search_util
 
 # Import monitoring service
 try:
@@ -482,6 +483,7 @@ class EmbodiedAssaultronCore:
             # Step 1c: Autonomous agent gating (detection + confirmation flow)
             # Ground replies in what the agent actually did on previous runs.
             agent_context = self._build_agent_context()
+            web_context = ""  # Populated when a conversational web search runs
 
             if self.pending_agent_task is not None:
                 # A task is awaiting confirmation -> interpret this message as the answer.
@@ -501,9 +503,12 @@ class EmbodiedAssaultronCore:
                     # Neither yes nor no -> drop the pending task and continue normally.
                     self.log_event("Pending task dropped (user changed subject)", "AGENT")
             else:
-                # No pending task -> detect whether this is a new actionable task.
-                task_detected, task_description = self._detect_agent_task(user_message)
-                if task_detected:
+                # Single classifier decides: agent_task vs web_search vs conversation.
+                intent_result = self._classify_message_intent(user_message)
+                intent = intent_result.get("intent", "conversation")
+
+                if intent == "agent_task" and intent_result.get("confidence", 1.0) >= 0.7:
+                    task_description = intent_result.get("task_description") or user_message
                     self.log_event(f"Task detected (awaiting confirmation): {task_description}", "AGENT")
 
                     # Ask the user to confirm BEFORE launching the agent.
@@ -539,6 +544,13 @@ class EmbodiedAssaultronCore:
                             "pending_task": task_description
                         }
                     }
+
+                elif intent == "web_search":
+                    # Quick "search-and-answer" WITHOUT launching the agent.
+                    queries = intent_result.get("search_queries") or [user_message]
+                    self.log_event(f"Conversational web search: {queries}", "TOOL")
+                    web_context = self._perform_conversational_search(queries)
+                    # Fall through to normal cognitive processing with web_context populated.
 
             # Step 1b: Integrate vision data into world state
             vision_context = ""
@@ -588,6 +600,7 @@ class EmbodiedAssaultronCore:
                 memory_summary=memory_summary,
                 vision_context=vision_context,
                 agent_context=agent_context,
+                web_context=web_context,
                 vision_image_b64=vision_image_b64,
                 attachment_image_path=image_path
             )
@@ -945,6 +958,236 @@ Responde solo con JSON:
             return True, task
         
         return False, ""
+
+    def _no_agent_phrases(self) -> list:
+        """Multilingual phrases meaning 'do not use the autonomous agent'."""
+        phrases_by_lang = {
+            "en": ["no agent", "without agent", "skip agent", "don't use agent",
+                   "dont use agent", "don't use the agent", "dont use the agent",
+                   "don't call the agent", "don't run the agent"],
+            "fr": ["pas d'agent", "sans agent", "sans l'agent", "n'utilise pas l'agent",
+                   "nutilise pas lagent", "ne lance pas l'agent", "n'appelle pas l'agent"],
+            "es": ["sin agente", "sin el agente", "no uses el agente", "no uses agente",
+                   "no llames al agente", "no inicies el agente"],
+        }
+        return phrases_by_lang.get(self.language, phrases_by_lang["en"])
+
+    def _intent_prompt(self, message: str) -> str:
+        """Build the multilingual single-call intent-classification prompt."""
+        prompts_by_lang = {
+            "en": f"""Classify the user's message into exactly ONE intent.
+
+User Message: "{message}"
+
+Intents:
+- "agent_task": The user wants you to DO a concrete multi-step job that requires tools: creating/editing files, writing code into files, running commands, building a project, or sending an email.
+- "web_search": Answering well needs FRESH or CURRENT information from the internet (news, current events, "right now", latest, today, prices, weather, recent facts), OR the user explicitly asks you to search / look on the web. This is answered by doing a few searches and replying DIRECTLY - it must NOT create files or launch the agent.
+- "conversation": Answerable directly from your own knowledge, or normal chat, opinions, greetings.
+
+Examples:
+- "Create a website about cats" -> agent_task
+- "Fix the footer in index.html" -> agent_task
+- "What's your opinion on the wildfires in France right now?" -> web_search
+- "Search the web and tell me the latest on X" -> web_search
+- "Who won the match yesterday?" -> web_search
+- "How are you?" / "Explain recursion" -> conversation
+
+Respond with JSON only:
+{{
+    "intent": "agent_task" | "web_search" | "conversation",
+    "confidence": 0.0 to 1.0,
+    "task_description": "if agent_task, the task; else empty string",
+    "search_queries": ["1 to 3 concise search queries if web_search; else empty list"]
+}}""",
+            "fr": f"""Classe le message de l'utilisateur dans EXACTEMENT UNE intention.
+
+Message de l'utilisateur : "{message}"
+
+Intentions :
+- "agent_task" : L'utilisateur veut que tu FASSES un travail concret en plusieurs étapes nécessitant des outils : créer/éditer des fichiers, écrire du code dans des fichiers, lancer des commandes, construire un projet, ou envoyer un email.
+- "web_search" : Bien répondre nécessite des informations FRAÎCHES ou ACTUELLES d'internet (actualités, événements en cours, "en ce moment", dernières nouvelles, aujourd'hui, prix, météo, faits récents), OU l'utilisateur demande explicitement de chercher / regarder sur le web. On y répond en faisant quelques recherches puis en répondant DIRECTEMENT - sans créer de fichiers ni lancer l'agent.
+- "conversation" : Répondable directement avec tes connaissances, ou discussion normale, avis, salutations.
+
+Exemples :
+- "Crée un site web sur les chats" -> agent_task
+- "Corrige le footer dans index.html" -> agent_task
+- "Ton avis sur les incendies en France en ce moment ?" -> web_search
+- "Regarde sur le web et dis-moi les dernières infos sur X" -> web_search
+- "Qui a gagné le match hier ?" -> web_search
+- "Comment ça va ?" / "Explique la récursion" -> conversation
+
+Réponds uniquement avec du JSON :
+{{
+    "intent": "agent_task" | "web_search" | "conversation",
+    "confidence": 0.0 à 1.0,
+    "task_description": "si agent_task, la tâche ; sinon chaîne vide",
+    "search_queries": ["1 à 3 requêtes de recherche concises si web_search ; sinon liste vide"]
+}}""",
+            "es": f"""Clasifica el mensaje del usuario en EXACTAMENTE UNA intención.
+
+Mensaje del usuario: "{message}"
+
+Intenciones:
+- "agent_task": El usuario quiere que HAGAS un trabajo concreto de varios pasos que requiere herramientas: crear/editar archivos, escribir código en archivos, ejecutar comandos, construir un proyecto o enviar un correo.
+- "web_search": Responder bien necesita información FRESCA o ACTUAL de internet (noticias, eventos actuales, "ahora mismo", lo último, hoy, precios, clima, hechos recientes), O el usuario pide explícitamente buscar / mirar en la web. Se responde haciendo unas búsquedas y respondiendo DIRECTAMENTE, sin crear archivos ni lanzar el agente.
+- "conversation": Se puede responder directamente con tu conocimiento, o charla normal, opiniones, saludos.
+
+Ejemplos:
+- "Crea un sitio web sobre gatos" -> agent_task
+- "Arregla el footer en index.html" -> agent_task
+- "¿Tu opinión sobre los incendios en Francia ahora mismo?" -> web_search
+- "Busca en la web y dime lo último sobre X" -> web_search
+- "¿Quién ganó el partido ayer?" -> web_search
+- "¿Cómo estás?" / "Explica la recursión" -> conversation
+
+Responde solo con JSON:
+{{
+    "intent": "agent_task" | "web_search" | "conversation",
+    "confidence": 0.0 a 1.0,
+    "task_description": "si agent_task, la tarea; sino cadena vacía",
+    "search_queries": ["1 a 3 consultas de búsqueda concisas si web_search; sino lista vacía"]
+}}""",
+        }
+        return prompts_by_lang.get(self.language, prompts_by_lang["en"])
+
+    def _classify_message_intent(self, message: str) -> dict:
+        """
+        Classify a user message into one of three intents in a single LLM call:
+        - "agent_task": needs the autonomous agent (create/edit files, run commands, build, email)
+        - "web_search": needs fresh/live info or an explicit web lookup; answered by a few
+          searches + a direct reply (NO agent, NO file creation)
+        - "conversation": answerable directly from knowledge / normal chat
+
+        Returns dict: {intent, confidence, task_description, search_queries}
+        """
+        default = {"intent": "conversation", "confidence": 1.0, "task_description": "", "search_queries": []}
+
+        # Very short messages are almost always chit-chat.
+        if len(message.split()) < 2:
+            return default
+
+        # Explicit "no agent" phrases bar the agent (but still allow a web search).
+        no_agent = any(p in message.lower() for p in self._no_agent_phrases())
+
+        try:
+            response = self.cognitive_engine._call_llm([
+                {"role": "system", "content": "You are an intent classifier. Respond with valid JSON only."},
+                {"role": "user", "content": self._intent_prompt(message)}
+            ])
+
+            import json
+            import re
+            m = re.search(r'\{.*\}', response, re.DOTALL)
+            if m:
+                result = json.loads(m.group(0))
+
+                intent = result.get("intent", "conversation")
+                if intent not in ("agent_task", "web_search", "conversation"):
+                    intent = "conversation"
+
+                # Respect an explicit "no agent" request.
+                if intent == "agent_task" and no_agent:
+                    intent = "web_search" if result.get("search_queries") else "conversation"
+
+                confidence = result.get("confidence", 1.0)
+                try:
+                    confidence = float(confidence)
+                except (TypeError, ValueError):
+                    confidence = 1.0
+
+                queries = result.get("search_queries") or []
+                if isinstance(queries, str):
+                    queries = [queries]
+                queries = [q for q in queries if isinstance(q, str) and q.strip()][:3]
+
+                self.log_event(
+                    f"Intent: {intent} (conf={confidence:.2f}) queries={queries}", "AGENT"
+                )
+                return {
+                    "intent": intent,
+                    "confidence": confidence,
+                    "task_description": result.get("task_description", ""),
+                    "search_queries": queries
+                }
+        except Exception as e:
+            self.log_event(f"Intent classification failed: {e}. Defaulting to conversation.", "ERROR")
+
+        return default
+
+    def _broadcast_web_search(self, payload: dict) -> None:
+        """Broadcast a web-search activity event to all connected SSE clients."""
+        message = {"type": "web_search", "timestamp": datetime.now().isoformat()}
+        message.update(payload)
+
+        dead_queues = []
+        for queue in self.voice_event_queues:
+            try:
+                queue.put_nowait(message)
+            except:
+                dead_queues.append(queue)
+        for queue in dead_queues:
+            if queue in self.voice_event_queues:
+                self.voice_event_queues.remove(queue)
+
+    def _perform_conversational_search(self, queries: list) -> str:
+        """
+        Run up to 3 web searches for a conversational (non-agent) reply. Streams the
+        activity to the chat UI (SSE) and the monitoring system, and returns a text
+        context block of results to feed the cognitive layer.
+        """
+        queries = [q for q in (queries or []) if q and q.strip()][:3]
+        if not queries:
+            return ""
+
+        context_blocks = []
+        any_success = False
+
+        for query in queries:
+            # Tell the UI a search is starting
+            self._broadcast_web_search({"status": "searching", "query": query})
+            self.log_event(f"Web search: {query}", "TOOL")
+
+            start = time.time()
+            result = web_search_util(query, count=4)
+            duration_ms = (time.time() - start) * 1000
+            results = result.get("results", []) if result.get("success") else []
+
+            # Record in monitoring
+            if MONITORING_ENABLED:
+                try:
+                    monitoring.get_collector().record_web_search(
+                        query=query,
+                        result_count=len(results),
+                        duration_ms=duration_ms,
+                        success=result.get("success", False)
+                    )
+                except Exception as e:
+                    self.log_event(f"Failed to record web search metric: {e}", "ERROR")
+
+            if result.get("success") and results:
+                any_success = True
+                block = f'Search: "{query}"\n'
+                for r in results:
+                    block += f"- {r['title']} ({r['url']})\n  {r['description']}\n"
+                context_blocks.append(block)
+                self._broadcast_web_search({
+                    "status": "results",
+                    "query": query,
+                    "results": [{"title": r["title"], "url": r["url"]} for r in results]
+                })
+            else:
+                err = result.get("error", "no results")
+                context_blocks.append(f'Search: "{query}" -> no usable results ({err})')
+                self._broadcast_web_search({"status": "error", "query": query, "error": err})
+
+        if not any_success:
+            return (
+                "[WEB SEARCH] Live web search returned no usable results (the search service "
+                "may be unavailable or misconfigured). Answer from your own knowledge and be "
+                "honest that you couldn't fetch fresh data.\n" + "\n".join(context_blocks)
+            )
+
+        return "\n".join(context_blocks)
 
     def _launch_agent_task(self, task_description: str, user_message: str, mood_state) -> dict:
         """

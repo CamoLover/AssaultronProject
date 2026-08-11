@@ -102,68 +102,16 @@ class AgentLogic:
     
     def _web_search(self, query: str) -> Dict[str, Any]:
         """
-        Perform web search using Brave Search API.
-        
+        Perform web search using the shared Brave Search utility.
+
         Args:
             query: Search query
-            
+
         Returns:
             Search results
         """
-        try:
-            api_key = os.getenv("BRAVE_BROWSER_API_KEY", "")
-            if not api_key or "YOUR_API_KEY" in api_key:
-                return {
-                    "success": False,
-                    "error": "Brave Search API key not configured"
-                }
-            
-            headers = {
-                "Accept": "application/json",
-                "X-Subscription-Token": api_key
-            }
-            
-            params = {
-                "q": query,
-                "count": 5
-            }
-            
-            response = requests.get(
-                "https://api.search.brave.com/res/v1/web/search",
-                headers=headers,
-                params=params,
-                timeout=10
-            )
-            
-            if response.status_code == 200:
-                data = response.json()
-                results = []
-                
-                for item in data.get("web", {}).get("results", [])[:5]:
-                    results.append({
-                        "title": item.get("title", ""),
-                        "url": item.get("url", ""),
-                        "description": item.get("description", "")
-                    })
-                
-                logger.info(f"Web search completed: {len(results)} results for '{query}'")
-                return {
-                    "success": True,
-                    "query": query,
-                    "results": results,
-                    "count": len(results)
-                }
-            else:
-                return {
-                    "success": False,
-                    "error": f"Search API returned {response.status_code}"
-                }
-        except Exception as e:
-            logger.error(f"Web search failed: {e}")
-            return {
-                "success": False,
-                "error": str(e)
-            }
+        from .web_search import web_search as _shared_web_search
+        return _shared_web_search(query, count=5)
     
     def _build_agent_prompt(self, task: str, history: List[Dict[str, str]], conversation_history: str = "", user_message: str = "") -> str:
         """

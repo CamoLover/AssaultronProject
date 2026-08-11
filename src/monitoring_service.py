@@ -32,12 +32,14 @@ class MetricsCollector:
             'system_delays': deque(maxlen=max_history),
             'message_pipeline': deque(maxlen=max_history),
             'errors': deque(maxlen=max_history),
+            'web_searches': deque(maxlen=max_history),
         }
 
         # Counters
         self.counters = {
             'total_messages': 0,
             'total_api_calls': 0,
+            'total_web_searches': 0,
             'total_voice_generated': 0,
             'total_errors': 0,
             'total_llm_tokens': 0,
@@ -108,6 +110,18 @@ class MetricsCollector:
                 'duration_ms': duration_ms
             })
             self.counters['total_messages'] += 1
+
+    def record_web_search(self, query: str, result_count: int, duration_ms: float, success: bool):
+        """Record a conversational web search (Brave Search API)"""
+        with self._lock:
+            self.metrics['web_searches'].append({
+                'timestamp': datetime.now().isoformat(),
+                'query': query,
+                'result_count': result_count,
+                'duration_ms': duration_ms,
+                'success': success
+            })
+            self.counters['total_web_searches'] += 1
 
     def record_error(self, error_type: str, component: str, message: str):
         """Record errors"""
