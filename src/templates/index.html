@@ -2215,6 +2215,86 @@
         }
 
         // Chat functions
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str == null ? '' : String(str);
+            return div.innerHTML;
+        }
+
+        // ------------------------------------------------------------------
+        // Collapsible web-search group (groups all searches for one AI turn
+        // into a single <details> block instead of flooding the chat)
+        // ------------------------------------------------------------------
+        let activeSearchGroup = null; // { details, summary, list, rows: {}, total, done }
+
+        function getOrCreateSearchGroup() {
+            if (activeSearchGroup) return activeSearchGroup;
+
+            const details = document.createElement('details');
+            details.className = 'my-1 text-sm border border-teal-200 rounded bg-teal-50 px-2 py-1';
+
+            const summary = document.createElement('summary');
+            summary.className = 'cursor-pointer text-teal-700 font-medium select-none';
+            summary.textContent = '🔍 Recherche web…';
+            details.appendChild(summary);
+
+            const list = document.createElement('div');
+            list.className = 'mt-1 space-y-1 text-gray-700 pl-1';
+            details.appendChild(list);
+
+            chatHistory.appendChild(details);
+            requestAnimationFrame(() => {
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+            });
+
+            activeSearchGroup = { details, summary, list, rows: {}, total: 0, done: 0 };
+            return activeSearchGroup;
+        }
+
+        function closeSearchGroup() {
+            activeSearchGroup = null;
+        }
+
+        function handleWebSearchEvent(data) {
+            const group = getOrCreateSearchGroup();
+
+            if (data.status === 'searching') {
+                group.total++;
+                const row = document.createElement('div');
+                row.innerHTML = `<span class="text-gray-400">⏳</span> <em>${escapeHtml(data.query)}</em>`;
+                group.list.appendChild(row);
+                group.rows[data.query] = row;
+                addLog('TOOL', `Searching the web: ${data.query}`);
+            } else if (data.status === 'results') {
+                group.done++;
+                const row = group.rows[data.query];
+                const count = (data.results || []).length;
+                const links = (data.results || []).slice(0, 3).map(r =>
+                    `<a href="${r.url}" target="_blank" class="text-teal-600 underline">${escapeHtml(r.title || r.url)}</a>`
+                ).join(' · ');
+                const html = `<span class="text-green-600">✓</span> <em>${escapeHtml(data.query)}</em> — ${count} résultat(s)` +
+                    (links ? `<br><span class="pl-5 text-xs">${links}</span>` : '');
+                if (row) { row.innerHTML = html; } else {
+                    const newRow = document.createElement('div');
+                    newRow.innerHTML = html;
+                    group.list.appendChild(newRow);
+                }
+                addLog('TOOL', `Found ${count} results for: ${data.query}`);
+            } else if (data.status === 'error') {
+                group.done++;
+                const row = group.rows[data.query];
+                const html = `<span class="text-orange-600">✗</span> <em>${escapeHtml(data.query)}</em> — échec`;
+                if (row) { row.innerHTML = html; } else {
+                    const newRow = document.createElement('div');
+                    newRow.innerHTML = html;
+                    group.list.appendChild(newRow);
+                }
+                addLog('WARNING', `Web search failed for "${data.query}": ${data.error || ''}`);
+            }
+
+            group.summary.textContent = `🔍 Recherche web (${group.done}/${group.total} terminée${group.done > 1 ? 's' : ''})`;
+        }
+
         function addChatMessage(sender, message, timestamp, imagePath = null) {
             const timeStr = timestamp || new Date().toLocaleTimeString();
             const div = document.createElement('div');
@@ -2399,6 +2479,7 @@
 
                 if (response.ok) {
                     const data = await response.json();
+                    closeSearchGroup();
                     addChatMessage('ASSAULTRON', data.response);
                     messageCount++;
                     messageCountEl.textContent = messageCount;
@@ -2850,22 +2931,8 @@
                         // Update conversation history display (reload from server)
                         loadHistory();
                     } else if (data.type === 'web_search') {
-                        // Show live web search activity in the chat + logs
-                        const now = new Date().toLocaleTimeString();
-                        if (data.status === 'searching') {
-                            addLog('TOOL', `Searching the web: ${data.query}`);
-                            addChatMessage('🔍 SEARCH', `<span class="text-teal-600">Recherche web :</span> <em>${data.query}</em>`, now);
-                        } else if (data.status === 'results') {
-                            const count = (data.results || []).length;
-                            const links = (data.results || []).slice(0, 3).map(r =>
-                                `<a href="${r.url}" target="_blank" class="text-teal-600 underline">${r.title || r.url}</a>`
-                            ).join(' · ');
-                            addLog('TOOL', `Found ${count} results for: ${data.query}`);
-                            addChatMessage('🔍 SEARCH', `<span class="text-teal-600">${count} résultat(s)</span> pour <em>${data.query}</em>${links ? '<br>' + links : ''}`, now);
-                        } else if (data.status === 'error') {
-                            addLog('WARNING', `Web search failed for "${data.query}": ${data.error || ''}`);
-                            addChatMessage('🔍 SEARCH', `<span class="text-orange-600">Recherche échouée</span> pour <em>${data.query}</em>`, now);
-                        }
+                        // Group live web search activity into a single collapsible block
+                        handleWebSearchEvent(data);
                     } else if (data.type === 'voice_notification') {
                         // Show notification when voice system starts
                         showVoiceNotification();
@@ -4760,6 +4827,7 @@
 
                 if (response.ok) {
                     const data = await response.json();
+                    closeSearchGroup();
 
                     // Add response to both chats
                     addImmersionMessage('ASSAULTRON', data.response);
