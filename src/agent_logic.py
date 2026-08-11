@@ -17,6 +17,7 @@ from .config import Config
 import os
 from pathlib import Path
 from .agent_tools import get_tool_functions
+from .cognitive_layer import FACTUAL_TEMPERATURE
 
 logger = logging.getLogger('assaultron.agent')
 
@@ -454,7 +455,8 @@ INTERNAL AGENT HISTORY (Your thoughts/actions so far in this task):
         
         for attempt in range(max_retries):
             try:
-                return self.cognitive_engine._call_llm(messages)
+                # ReAct tool-calling needs reliable JSON, not creative variance.
+                return self.cognitive_engine._call_llm(messages, temperature=FACTUAL_TEMPERATURE)
             except Exception as e:
                 error_str = str(e).lower()
                 if "429" in error_str or "quota" in error_str:

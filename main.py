@@ -34,7 +34,7 @@ from src.virtual_body import (
     VirtualWorld, BodyState, WorldState, CognitiveState, BodyCommand,
     analyze_user_message_for_world_cues
 )
-from src.cognitive_layer import CognitiveEngine, extract_memory_from_message
+from src.cognitive_layer import CognitiveEngine, extract_memory_from_message, FACTUAL_TEMPERATURE
 from src.behavioral_layer import BehaviorArbiter, describe_behavior_library
 from src.motion_controller import MotionController, HardwareStateValidator
 from src.vision_system import VisionSystem
@@ -972,12 +972,45 @@ Responde solo con JSON:
         }
         return phrases_by_lang.get(self.language, phrases_by_lang["en"])
 
-    def _intent_prompt(self, message: str) -> str:
-        """Build the multilingual single-call intent-classification prompt."""
+    def _recent_history_for_classifier(self, max_exchanges: int = 4) -> str:
+        """Return a compact 'User: ... / ASR-7: ...' transcript of the last few
+        exchanges, for grounding the intent classifier on the current subject."""
+        try:
+            history = self.cognitive_engine.conversation_history[-max_exchanges:]
+        except Exception:
+            return ""
+
+        lines = []
+        for ex in history:
+            user = (ex.get("user") or "").strip().replace("\n", " ")
+            assistant = (ex.get("assistant") or "").strip().replace("\n", " ")
+            if len(user) > 200:
+                user = user[:200] + "…"
+            if len(assistant) > 200:
+                assistant = assistant[:200] + "…"
+            if user:
+                lines.append(f"User: {user}")
+            if assistant:
+                lines.append(f"ASR-7: {assistant}")
+        return "\n".join(lines)
+
+    def _intent_prompt(self, message: str, history_str: str = "") -> str:
+        """Build the multilingual single-call intent-classification prompt.
+
+        `history_str` is a compact transcript of the last few exchanges so that vague
+        messages ("search that", "cherche", "dig into it") can be resolved against what
+        was just being discussed instead of producing a generic query.
+        """
+        history_blocks = {
+            "en": f"Recent conversation (context - resolve vague messages against it):\n{history_str}\n\n" if history_str else "",
+            "fr": f"Conversation récente (contexte - résous les messages vagues à partir de ça) :\n{history_str}\n\n" if history_str else "",
+            "es": f"Conversación reciente (contexto - resuelve los mensajes vagos con esto):\n{history_str}\n\n" if history_str else "",
+        }
+        history_block = history_blocks.get(self.language, history_blocks["en"])
         prompts_by_lang = {
             "en": f"""Classify the user's message into exactly ONE intent.
 
-User Message: "{message}"
+{history_block}User Message: "{message}"
 
 Intents:
 - "agent_task": The user wants you to DO a concrete multi-step job that requires tools: creating/editing files, writing code into files, running commands, building a project, or sending an email.
@@ -997,11 +1030,11 @@ Respond with JSON only:
     "intent": "agent_task" | "web_search" | "conversation",
     "confidence": 0.0 to 1.0,
     "task_description": "if agent_task, the task; else empty string",
-    "search_queries": ["1 to 3 concise search queries if web_search; else empty list"]
+    "search_queries": ["1 or 2 DISTINCT, specific search queries if web_search - use the conversation context to make them specific (e.g. include the person/topic being discussed); NEVER generic like 'general search'; do not pad with near-duplicates; else empty list"]
 }}""",
             "fr": f"""Classe le message de l'utilisateur dans EXACTEMENT UNE intention.
 
-Message de l'utilisateur : "{message}"
+{history_block}Message de l'utilisateur : "{message}"
 
 Intentions :
 - "agent_task" : L'utilisateur veut que tu FASSES un travail concret en plusieurs étapes nécessitant des outils : créer/éditer des fichiers, écrire du code dans des fichiers, lancer des commandes, construire un projet, ou envoyer un email.
@@ -1021,11 +1054,11 @@ Réponds uniquement avec du JSON :
     "intent": "agent_task" | "web_search" | "conversation",
     "confidence": 0.0 à 1.0,
     "task_description": "si agent_task, la tâche ; sinon chaîne vide",
-    "search_queries": ["1 à 3 requêtes de recherche concises si web_search ; sinon liste vide"]
+    "search_queries": ["1 ou 2 requêtes DISTINCTES et précises si web_search - sers-toi du contexte de la conversation pour les rendre précises (ex : inclure la personne/le sujet discuté) ; JAMAIS de générique comme 'recherche générale' ; pas de quasi-doublons ; sinon liste vide"]
 }}""",
             "es": f"""Clasifica el mensaje del usuario en EXACTAMENTE UNA intención.
 
-Mensaje del usuario: "{message}"
+{history_block}Mensaje del usuario: "{message}"
 
 Intenciones:
 - "agent_task": El usuario quiere que HAGAS un trabajo concreto de varios pasos que requiere herramientas: crear/editar archivos, escribir código en archivos, ejecutar comandos, construir un proyecto o enviar un correo.
@@ -1045,7 +1078,7 @@ Responde solo con JSON:
     "intent": "agent_task" | "web_search" | "conversation",
     "confidence": 0.0 a 1.0,
     "task_description": "si agent_task, la tarea; sino cadena vacía",
-    "search_queries": ["1 a 3 consultas de búsqueda concisas si web_search; sino lista vacía"]
+    "search_queries": ["1 o 2 consultas DISTINTAS y específicas si web_search - usa el contexto de la conversación para hacerlas específicas (p. ej. incluir la persona/tema en cuestión); NUNCA genérico como 'búsqueda general'; sin casi-duplicados; sino lista vacía"]
 }}""",
         }
         return prompts_by_lang.get(self.language, prompts_by_lang["en"])
@@ -1069,11 +1102,18 @@ Responde solo con JSON:
         # Explicit "no agent" phrases bar the agent (but still allow a web search).
         no_agent = any(p in message.lower() for p in self._no_agent_phrases())
 
+        # Compact transcript of the last few exchanges so vague messages ("cherche")
+        # resolve against what was just discussed instead of yielding a generic query.
+        history_str = self._recent_history_for_classifier()
+
         try:
-            response = self.cognitive_engine._call_llm([
-                {"role": "system", "content": "You are an intent classifier. Respond with valid JSON only."},
-                {"role": "user", "content": self._intent_prompt(message)}
-            ])
+            response = self.cognitive_engine._call_llm(
+                [
+                    {"role": "system", "content": "You are an intent classifier. Respond with valid JSON only."},
+                    {"role": "user", "content": self._intent_prompt(message, history_str)}
+                ],
+                temperature=FACTUAL_TEMPERATURE
+            )
 
             import json
             import re
@@ -1131,11 +1171,21 @@ Responde solo con JSON:
 
     def _perform_conversational_search(self, queries: list) -> str:
         """
-        Run up to 3 web searches for a conversational (non-agent) reply. Streams the
+        Run up to 2 web searches for a conversational (non-agent) reply. Streams the
         activity to the chat UI (SSE) and the monitoring system, and returns a text
         context block of results to feed the cognitive layer.
         """
-        queries = [q for q in (queries or []) if q and q.strip()][:3]
+        # Clean, de-duplicate (case-insensitively) and cap the queries so we don't fire
+        # three near-identical searches for one question.
+        seen = set()
+        deduped = []
+        for q in (queries or []):
+            q = (q or "").strip()
+            key = q.lower()
+            if q and key not in seen:
+                seen.add(key)
+                deduped.append(q)
+        queries = deduped[:2]
         if not queries:
             return ""
 
