@@ -14,7 +14,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 import threading
 import time
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from src.config import Config
 import psutil
@@ -304,6 +304,12 @@ class EmbodiedAssaultronCore:
         self.sandbox_manager = SandboxManager(sandbox_path)
         self.agent_logic = AgentLogic(self.cognitive_engine, self.sandbox_manager)
         self.agent_tasks = {}  # Track running agent tasks
+        # Task awaiting user confirmation before the agent is launched
+        # Shape: {"task_description": str, "user_message": str, "timestamp": datetime}
+        self.pending_agent_task = None
+        # Factual log of what recent agent runs actually did (for grounding replies)
+        # Each item: {"task": str, "summary": str, "timestamp": datetime}
+        self.agent_activity_log = []
         self.log_event(f"Autonomous Agent initialized with sandbox: {sandbox_path}", "SYSTEM")
 
     def log_event(self, message, event_type="INFO"):
@@ -473,71 +479,66 @@ class EmbodiedAssaultronCore:
                 "MOOD"
             )
 
-            # Step 1c: Detect if this is an actionable task for the agent
-            task_detected, task_description = self._detect_agent_task(user_message)
-            agent_context = ""
-            
-            if task_detected:
-                self.log_event(f"Task detected: {task_description}", "AGENT")
-                
-                # Generate immediate acknowledgment from AI
-                acknowledgment = agent_ai_helpers.generate_task_acknowledgment(
-                    self.cognitive_engine,
-                    task_description,
-                    mood_state
-                )
-                
-                # Enhance task with personality
-                enhanced_task = agent_ai_helpers.enhance_task_with_personality(task_description)
-                
-                # Start agent in background
-                task_id = f"task_{int(time.time())}_{len(self.agent_tasks)}"
-                
-                # Get conversation context for the agent
-                recent_history = self.cognitive_engine.conversation_history[-10:]
-                formatted_history = []
-                for exchange in recent_history:
-                    formatted_history.append(f"User: {exchange['user']}")
-                    formatted_history.append(f"AI: {exchange['assistant']}")
-                history_context = "\n".join(formatted_history)
+            # Step 1c: Autonomous agent gating (detection + confirmation flow)
+            # Ground replies in what the agent actually did on previous runs.
+            agent_context = self._build_agent_context()
 
-                agent_ai_helpers.run_agent_in_background(
-                    agent_logic=self.agent_logic,
-                    agent_tasks=self.agent_tasks,
-                    task_id=task_id,
-                    enhanced_task=enhanced_task,
-                    original_task=task_description,
-                    cognitive_engine=self.cognitive_engine,
-                    voice_system=self.voice_system,
-                    voice_enabled=self.voice_enabled,
-                    log_callback=self.log_event,
-                    broadcast_callback=self._broadcast_agent_completion,
-                    user_message=user_message,
-                    conversation_history=history_context
-                )
-                
-                # Queue voice message for acknowledgment if enabled
-                if self.voice_enabled:
-                    self.voice_system.synthesize_async(acknowledgment)
-                # Manually save to history (since helper doesn't)
-                try:
-                    self.cognitive_engine._update_history(user_message, acknowledgment)
-                except Exception as e:
-                    self.log_event(f"Error updating history: {e}", "ERROR")
+            if self.pending_agent_task is not None:
+                # A task is awaiting confirmation -> interpret this message as the answer.
+                decision = self._classify_confirmation(user_message)
+                pending = self.pending_agent_task
+                self.pending_agent_task = None  # cleared in every branch
 
-                return {
-                    "success": True,
-                    "dialogue": acknowledgment,
-                    "timestamp": datetime.now().isoformat(),
-                    "cognitive_state": {"emotion": mood_state.dominant_emotion, "thought": "Starting autonomous task"},
-                    "hardware_state": self.get_hardware_state(),
-                    "body_state": {"posture": "alert", "gesture": "nod"},
-                    "mood": mood_state.__dict__,
-                    "metadata": {
-                        "task_started": True,
-                        "task_id": task_id
+                if decision == "confirm":
+                    self.log_event(f"User confirmed pending task: {pending['task_description']}", "AGENT")
+                    return self._launch_agent_task(
+                        pending['task_description'], pending['user_message'], mood_state
+                    )
+                elif decision == "cancel":
+                    self.log_event("User cancelled pending task", "AGENT")
+                    # Fall through to normal conversation so the AI replies naturally.
+                else:
+                    # Neither yes nor no -> drop the pending task and continue normally.
+                    self.log_event("Pending task dropped (user changed subject)", "AGENT")
+            else:
+                # No pending task -> detect whether this is a new actionable task.
+                task_detected, task_description = self._detect_agent_task(user_message)
+                if task_detected:
+                    self.log_event(f"Task detected (awaiting confirmation): {task_description}", "AGENT")
+
+                    # Ask the user to confirm BEFORE launching the agent.
+                    confirmation_msg = agent_ai_helpers.generate_task_confirmation_request(
+                        self.cognitive_engine,
+                        task_description,
+                        mood_state
+                    )
+
+                    self.pending_agent_task = {
+                        "task_description": task_description,
+                        "user_message": user_message,
+                        "timestamp": datetime.now()
                     }
-                }
+
+                    if self.voice_enabled:
+                        self.voice_system.synthesize_async(confirmation_msg)
+                    try:
+                        self.cognitive_engine._update_history(user_message, confirmation_msg)
+                    except Exception as e:
+                        self.log_event(f"Error updating history: {e}", "ERROR")
+
+                    return {
+                        "success": True,
+                        "dialogue": confirmation_msg,
+                        "timestamp": datetime.now().isoformat(),
+                        "cognitive_state": {"emotion": mood_state.dominant_emotion, "thought": "Awaiting task confirmation"},
+                        "hardware_state": self.get_hardware_state(),
+                        "body_state": {"posture": "alert", "gesture": "nod"},
+                        "mood": mood_state.__dict__,
+                        "metadata": {
+                            "awaiting_confirmation": True,
+                            "pending_task": task_description
+                        }
+                    }
 
             # Step 1b: Integrate vision data into world state
             vision_context = ""
@@ -776,10 +777,13 @@ Rules:
 2. "I need to fix this", "I want to learn python", "How are you?" -> CONVERSATIONAL
 3. "Fix the footer", "Update the file" -> ACTIVE_TASK (if it implies YOU should do it)
 4. "I will fix it", "I am coding" -> CONVERSATIONAL
+5. Only ACTIVE_TASK if it clearly requires DOING something concrete (creating/editing files, running commands, researching, sending an email). Vague wishes, opinions, feelings, and questions are CONVERSATIONAL.
+6. When unsure, choose CONVERSATIONAL with low confidence. Do not trigger on a single keyword.
 
 Respond with JSON only:
 {{
     "is_task": true/false,
+    "confidence": 0.0 to 1.0 (how sure you are this needs the autonomous agent),
     "task_description": "extracted task if true, else empty string",
     "reasoning": "brief explanation"
 }}""",
@@ -792,10 +796,13 @@ Règles :
 2. "J'ai besoin de corriger ça", "Je veux apprendre python", "Comment ça va ?" -> CONVERSATIONAL
 3. "Corrige le footer", "Mets à jour le fichier" -> ACTIVE_TASK (si cela implique que TU dois le faire)
 4. "Je vais le corriger", "Je code" -> CONVERSATIONAL
+5. ACTIVE_TASK uniquement si cela nécessite clairement de FAIRE quelque chose de concret (créer/éditer des fichiers, lancer des commandes, faire une recherche, envoyer un email). Les envies vagues, opinions, émotions et questions sont CONVERSATIONAL.
+6. En cas de doute, choisis CONVERSATIONAL avec une faible confiance. Ne te déclenche pas sur un seul mot-clé.
 
 Répondez uniquement avec du JSON :
 {{
     "is_task": true/false,
+    "confidence": 0.0 à 1.0 (à quel point tu es sûr que ça nécessite l'agent autonome),
     "task_description": "tâche extraite si true, sinon chaîne vide",
     "reasoning": "brève explication"
 }}""",
@@ -808,10 +815,13 @@ Reglas:
 2. "Necesito arreglar esto", "Quiero aprender python", "¿Cómo estás?" -> CONVERSATIONAL
 3. "Arregla el footer", "Actualiza el archivo" -> ACTIVE_TASK (si implica que TÚ debes hacerlo)
 4. "Voy a arreglarlo", "Estoy programando" -> CONVERSATIONAL
+5. ACTIVE_TASK solo si requiere claramente HACER algo concreto (crear/editar archivos, ejecutar comandos, investigar, enviar un correo). Deseos vagos, opiniones, emociones y preguntas son CONVERSATIONAL.
+6. En caso de duda, elige CONVERSATIONAL con baja confianza. No te actives por una sola palabra clave.
 
 Responde solo con JSON:
 {{
     "is_task": true/false,
+    "confidence": 0.0 a 1.0 (qué tan seguro estás de que necesita el agente autónomo),
     "task_description": "tarea extraída si es true, sino cadena vacía",
     "reasoning": "breve explicación"
 }}"""
@@ -834,7 +844,26 @@ Responde solo con JSON:
             json_match = re.search(r'\{.*\}', response, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(0))
-                return result.get("is_task", False), result.get("task_description", "")
+                is_task = result.get("is_task", False)
+
+                # Require high confidence to reduce false triggers.
+                # Detection no longer relies on keywords alone; the confirmation
+                # gate is a second safety net, but we still avoid asking about
+                # plain conversation.
+                confidence = result.get("confidence", 1.0)
+                try:
+                    confidence = float(confidence)
+                except (TypeError, ValueError):
+                    confidence = 1.0
+
+                if is_task and confidence >= 0.7:
+                    return True, result.get("task_description", "")
+                self.log_event(
+                    f"Task detection skipped (is_task={is_task}, confidence={confidence:.2f}): "
+                    f"{result.get('reasoning', '')[:80]}",
+                    "AGENT"
+                )
+                return False, ""
             
         except Exception as e:
             self.log_event(f"Intent detection failed: {e}. Falling back to keyword search.", "ERROR")
@@ -916,6 +945,181 @@ Responde solo con JSON:
             return True, task
         
         return False, ""
+
+    def _launch_agent_task(self, task_description: str, user_message: str, mood_state) -> dict:
+        """
+        Launch the autonomous agent in the background for a CONFIRMED task and
+        return the acknowledgment response. Extracted so both the (legacy) direct
+        path and the confirmation path share one implementation.
+        """
+        # Generate immediate acknowledgment from AI
+        acknowledgment = agent_ai_helpers.generate_task_acknowledgment(
+            self.cognitive_engine,
+            task_description,
+            mood_state
+        )
+
+        # Enhance task with personality
+        enhanced_task = agent_ai_helpers.enhance_task_with_personality(task_description)
+
+        # Start agent in background
+        task_id = f"task_{int(time.time())}_{len(self.agent_tasks)}"
+
+        # Get conversation context for the agent
+        recent_history = self.cognitive_engine.conversation_history[-10:]
+        formatted_history = []
+        for exchange in recent_history:
+            formatted_history.append(f"User: {exchange['user']}")
+            formatted_history.append(f"AI: {exchange['assistant']}")
+        history_context = "\n".join(formatted_history)
+
+        agent_ai_helpers.run_agent_in_background(
+            agent_logic=self.agent_logic,
+            agent_tasks=self.agent_tasks,
+            task_id=task_id,
+            enhanced_task=enhanced_task,
+            original_task=task_description,
+            cognitive_engine=self.cognitive_engine,
+            voice_system=self.voice_system,
+            voice_enabled=self.voice_enabled,
+            log_callback=self.log_event,
+            broadcast_callback=self._broadcast_agent_completion,
+            activity_callback=self._record_agent_activity,
+            user_message=user_message,
+            conversation_history=history_context
+        )
+
+        # Queue voice message for acknowledgment if enabled
+        if self.voice_enabled:
+            self.voice_system.synthesize_async(acknowledgment)
+        # Manually save to history (since helper doesn't)
+        try:
+            self.cognitive_engine._update_history(user_message, acknowledgment)
+        except Exception as e:
+            self.log_event(f"Error updating history: {e}", "ERROR")
+
+        return {
+            "success": True,
+            "dialogue": acknowledgment,
+            "timestamp": datetime.now().isoformat(),
+            "cognitive_state": {"emotion": mood_state.dominant_emotion, "thought": "Starting autonomous task"},
+            "hardware_state": self.get_hardware_state(),
+            "body_state": {"posture": "alert", "gesture": "nod"},
+            "mood": mood_state.__dict__,
+            "metadata": {
+                "task_started": True,
+                "task_id": task_id
+            }
+        }
+
+    def _classify_confirmation(self, message: str) -> str:
+        """
+        Decide whether the user's message confirms, cancels, or is unrelated to the
+        task currently awaiting confirmation.
+
+        Uses a fast multilingual keyword shortcut for obvious yes/no replies, then
+        falls back to an LLM classifier for nuanced answers.
+
+        Returns:
+            "confirm", "cancel", or "unclear"
+        """
+        msg = message.lower().strip().rstrip("!.")
+
+        confirm_words = [
+            # en
+            "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "go", "go ahead",
+            "do it", "please do", "sounds good", "confirm", "alright", "let's go", "lets go",
+            # fr
+            "oui", "ouais", "ouaip", "vas-y", "vas y", "fonce", "fais-le", "fais le",
+            "d'accord", "daccord", "c'est bon", "cest bon", "carrément", "carrement",
+            "je confirme", "allez", "vas y stp",
+            # es
+            "sí", "si", "claro", "dale", "hazlo", "adelante", "vale", "de acuerdo",
+        ]
+        cancel_words = [
+            # en
+            "no", "nope", "nah", "don't", "dont", "cancel", "stop", "forget it",
+            "never mind", "nevermind", "not now", "wait",
+            # fr
+            "non", "nan", "annule", "laisse tomber", "laisse beton", "pas maintenant",
+            "arrête", "arrete", "attends", "ne fais pas",
+            # es
+            "cancela", "olvídalo", "olvidalo", "para", "espera", "ahora no",
+        ]
+
+        # Exact-match shortcut
+        if msg in confirm_words:
+            return "confirm"
+        if msg in cancel_words:
+            return "cancel"
+
+        # Short-reply starts-with shortcut (cancel checked first: "no" beats "now")
+        if len(msg.split()) <= 4:
+            for w in cancel_words:
+                if msg.startswith(w):
+                    return "cancel"
+            for w in confirm_words:
+                if msg.startswith(w):
+                    return "confirm"
+
+        # LLM fallback for nuanced answers
+        try:
+            prompt = f"""The assistant just asked the user to confirm before starting a task.
+User's reply: "{message}"
+
+Does the reply mean YES (start the task), NO (do not start / cancel), or is it UNRELATED to the confirmation?
+Respond with JSON only: {{"decision": "confirm" | "cancel" | "unclear"}}"""
+            response = self.cognitive_engine._call_llm([
+                {"role": "system", "content": "You classify confirmation replies. Respond with valid JSON only."},
+                {"role": "user", "content": prompt}
+            ])
+            import json
+            import re
+            m = re.search(r'\{.*\}', response, re.DOTALL)
+            if m:
+                decision = json.loads(m.group(0)).get("decision", "unclear")
+                if decision in ("confirm", "cancel", "unclear"):
+                    return decision
+        except Exception as e:
+            self.log_event(f"Confirmation classification failed: {e}", "ERROR")
+
+        return "unclear"
+
+    def _record_agent_activity(self, task: str, summary: str, result: dict) -> None:
+        """
+        Store a FACTUAL summary of a completed agent run so future replies are
+        grounded in what actually happened (no hallucinating the ReAct loop).
+        """
+        if not summary:
+            return
+        self.agent_activity_log.append({
+            "task": task,
+            "summary": summary,
+            "timestamp": datetime.now()
+        })
+        # Keep only the most recent runs
+        if len(self.agent_activity_log) > 10:
+            self.agent_activity_log = self.agent_activity_log[-10:]
+        self.log_event(f"Recorded agent activity for grounding: {task[:50]}", "AGENT")
+
+    def _build_agent_context(self, max_entries: int = 2, recency_minutes: int = 60) -> str:
+        """
+        Build grounding context from recent real agent activity, injected into the
+        cognitive layer so the AI references what the agent actually did instead of
+        imagining it. Only recent runs are included to avoid stale context.
+        """
+        if not self.agent_activity_log:
+            return ""
+
+        cutoff = datetime.now() - timedelta(minutes=recency_minutes)
+        recent = [
+            entry for entry in self.agent_activity_log
+            if entry.get("timestamp", datetime.now()) >= cutoff
+        ][-max_entries:]
+
+        if not recent:
+            return ""
+        return "\n\n".join(entry["summary"] for entry in recent)
 
     def set_hardware_manual(self, led_intensity=None, hand_left=None, hand_right=None):
         """
