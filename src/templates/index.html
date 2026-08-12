@@ -1090,6 +1090,53 @@
                         </div>
                     </div>
 
+                    <!-- Wake Word Control -->
+                    <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg" style="background-color: var(--card-bg); border-color: var(--border-color-light);">
+                        <div class="bg-gradient-to-r from-purple-600 to-fuchsia-600 px-4 py-2.5 flex justify-between items-center">
+                            <h3 class="font-bold text-white text-xs tracking-widest uppercase">Wake Word</h3>
+                            <div id="wakeStatusIndicator" class="h-2 w-2 rounded-full bg-gray-300 shadow-lg"></div>
+                        </div>
+                        <div class="p-4 space-y-4">
+                            <div class="text-xs" style="color: var(--text-tertiary);">
+                                <p class="mb-3">Say "<span id="wakeWord" class="font-mono font-bold" style="color: var(--text-secondary);">Hey Jarvis</span>" to wake ASR-7 hands-free. It replies "Yes?" then listens for your command.</p>
+                                <div class="flex items-center gap-2 mb-3">
+                                    <span class="text-[10px] uppercase font-bold" style="color: var(--text-tertiary);">Status</span>
+                                    <span id="wakeStatus" class="font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200 bg-gray-100 text-gray-600">INACTIVE</span>
+                                </div>
+                            </div>
+
+                            <div class="grid grid-cols-2 gap-3">
+                                <button id="startWakeBtn" onclick="startWakeWord()"
+                                    class="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-purple-600 text-white rounded shadow-md text-xs font-bold hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg">
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M15.536 8.464a5 5 0 010 7.072M18.364 5.636a9 9 0 010 12.728M6.343 9.172a4 4 0 000 5.656M4 12h.01">
+                                        </path>
+                                    </svg>
+                                    ENABLE
+                                </button>
+                                <button id="stopWakeBtn" onclick="stopWakeWord()"
+                                    class="flex items-center justify-center gap-1.5 px-3 py-2.5 bg-red-600 text-white rounded shadow-md text-xs font-bold hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg"
+                                    disabled>
+                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M6 18L18 6M6 6l12 12"></path>
+                                    </svg>
+                                    DISABLE
+                                </button>
+                            </div>
+
+                            <button id="testWakeBtn" onclick="testWakeWord()"
+                                class="w-full flex items-center justify-center gap-1.5 px-3 py-2 border border-purple-400 text-purple-600 rounded text-xs font-bold hover:bg-purple-50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                                disabled>
+                                Test (simulate wake) — plays "Yes?" then listens
+                            </button>
+                            <p class="text-[10px] italic" style="color: var(--text-tertiary);">
+                                Say the full phrase "<span class="font-mono">Hey Jarvis</span>". Detection scores print to the server console.
+                            </p>
+                        </div>
+                    </div>
+
                     <!-- Notification System Control -->
                     <div class="rounded-lg shadow-md border overflow-hidden transition-all hover:shadow-lg" style="background-color: var(--card-bg); border-color: var(--border-color-light);">
                         <div class="bg-gradient-to-r from-orange-500 to-red-500 px-4 py-2.5 flex justify-between items-center">
@@ -3132,6 +3179,110 @@
         // SPEECH-TO-TEXT FUNCTIONS
         // ============================================================================
 
+        // ==================== WAKE WORD ====================
+        let wakeEnabled = false;
+
+        function setWakeUI(state, wakeWord) {
+            const statusEl = document.getElementById('wakeStatus');
+            const indicatorEl = document.getElementById('wakeStatusIndicator');
+            const startBtn = document.getElementById('startWakeBtn');
+            const stopBtn = document.getElementById('stopWakeBtn');
+            const testBtn = document.getElementById('testWakeBtn');
+            if (!statusEl) return;
+            const running = (state === 'listening' || state === 'triggered');
+            if (testBtn) testBtn.disabled = !running;
+            if (wakeWord) {
+                document.getElementById('wakeWord').textContent =
+                    wakeWord.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+            }
+            const pill = 'font-mono px-2 py-0.5 rounded text-[10px] transition-colors duration-200 ';
+            if (state === 'listening') {
+                statusEl.textContent = 'LISTENING';
+                statusEl.className = pill + 'bg-purple-100 text-purple-700';
+                indicatorEl.className = 'h-2 w-2 rounded-full bg-purple-500 shadow-lg animate-pulse';
+                startBtn.disabled = true; stopBtn.disabled = false;
+            } else if (state === 'triggered') {
+                statusEl.textContent = 'WAKE!';
+                statusEl.className = pill + 'bg-green-100 text-green-700';
+                indicatorEl.className = 'h-2 w-2 rounded-full bg-green-500 shadow-lg animate-pulse';
+            } else if (state === 'unavailable') {
+                statusEl.textContent = 'UNAVAILABLE';
+                statusEl.className = pill + 'bg-red-100 text-red-600';
+                indicatorEl.className = 'h-2 w-2 rounded-full bg-red-400 shadow-lg';
+                startBtn.disabled = true; stopBtn.disabled = true;
+            } else {
+                statusEl.textContent = 'INACTIVE';
+                statusEl.className = pill + 'bg-gray-100 text-gray-600';
+                indicatorEl.className = 'h-2 w-2 rounded-full bg-gray-300 shadow-lg';
+                startBtn.disabled = false; stopBtn.disabled = true;
+            }
+        }
+
+        async function refreshWakeStatus() {
+            try {
+                const res = await fetch('/api/wake/status');
+                const data = await res.json();
+                wakeEnabled = !!data.listening;
+                if (!data.available) {
+                    setWakeUI('unavailable', data.model);
+                } else if (data.listening) {
+                    setWakeUI('listening', data.model);
+                    // Ensure we receive wake/transcription events even if manual STT is off.
+                    initSTTEventStream();
+                } else {
+                    setWakeUI('inactive', data.model);
+                }
+            } catch (err) {
+                console.error('Wake status error:', err);
+            }
+        }
+
+        async function startWakeWord() {
+            try {
+                document.getElementById('startWakeBtn').disabled = true;
+                const res = await fetch('/api/wake/start', { method: 'POST' });
+                const data = await res.json();
+                if (data.success && data.listening) {
+                    wakeEnabled = true;
+                    setWakeUI('listening');
+                    initSTTEventStream(); // wake events ride the STT SSE stream
+                    addLog('WAKE', 'Wake word detection enabled - say "Hey Jarvis"');
+                } else {
+                    setWakeUI('inactive');
+                    addLog('ERROR', `Wake word failed to start: ${data.error || 'unknown'}`);
+                }
+            } catch (error) {
+                setWakeUI('inactive');
+                addLog('ERROR', `Wake word start failed: ${error.message}`);
+            }
+        }
+
+        async function stopWakeWord() {
+            try {
+                const res = await fetch('/api/wake/stop', { method: 'POST' });
+                const data = await res.json();
+                wakeEnabled = false;
+                setWakeUI('inactive');
+                addLog('WAKE', 'Wake word detection disabled');
+            } catch (error) {
+                addLog('ERROR', `Wake word stop failed: ${error.message}`);
+            }
+        }
+
+        async function testWakeWord() {
+            try {
+                const res = await fetch('/api/wake/test', { method: 'POST' });
+                const data = await res.json();
+                if (data.success) {
+                    addLog('WAKE', 'Test triggered - ASR-7 should say "Yes?" and listen');
+                } else {
+                    addLog('ERROR', `Wake test failed: ${data.error || 'enable wake word first'}`);
+                }
+            } catch (error) {
+                addLog('ERROR', `Wake test failed: ${error.message}`);
+            }
+        }
+
         async function startSTT() {
             try {
                 const startBtn = document.getElementById('startSttBtn');
@@ -3552,6 +3703,27 @@
                     else if (data.type === 'transcription_started') {
                         console.log('Transcription stream started');
                     }
+                    else if (data.type === 'wake_detected') {
+                        addLog('WAKE', `Wake word detected ("${(data.model || 'wake').replace(/_/g, ' ')}")`);
+                        setWakeUI('triggered', data.model);
+                    }
+                    else if (data.type === 'wake_listening') {
+                        addLog('WAKE', 'Listening for your command...');
+                    }
+                    else if (data.type === 'wake_timeout') {
+                        addLog('WAKE', 'No command heard - standing by');
+                        if (wakeEnabled) setWakeUI('listening');
+                    }
+                    else if (data.type === 'wake_command') {
+                        if (data.command) addChatMessage('USER', data.command);
+                        // A wake command is a local, user-initiated turn, so allow the
+                        // web UI to play ASR-7's spoken reply (audio_ready over voice SSE).
+                        webUiIsActiveSource = true;
+                    }
+                    else if (data.type === 'wake_response') {
+                        if (data.response) addChatMessage('ASSAULTRON', data.response);
+                        if (wakeEnabled) setWakeUI('listening');
+                    }
                     else if (data.type === 'transcription_paused') {
                         console.log('Transcription paused');
                         // Reset volume bar when paused
@@ -3604,6 +3776,9 @@
 
             // Load available STT devices
             loadSTTDevices();
+
+            // Reflect current wake-word state (auto-started server-side by default)
+            refreshWakeStatus();
         });
 
         // ============================================================================

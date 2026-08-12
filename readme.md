@@ -57,6 +57,7 @@ This is not just a conversational AI, it's a character with a body, emotions, an
 - **Gesture System**: Dynamic body language and expressive movements
 
 ### 🗣️ Communication
+- **Wake Word**: Hands-free "Hey Jarvis" hotword (openWakeWord) — ASR-7 replies "Yes?" then listens for your command
 - **Speech-to-Text**: Real-time voice input via Mistral Voxtral
 - **Text-to-Speech**: Custom voice synthesis using xVASynth
 - **Web Interface**: Flask-based dashboard for monitoring and interaction

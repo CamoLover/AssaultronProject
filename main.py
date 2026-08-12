@@ -278,6 +278,54 @@ class EmbodiedAssaultronCore:
         else:
             self.log_event("STT Manager not initialized (MISTRAL_KEY not set)", "WARN")
 
+        # Wake Word system (always-on hotword, e.g. "Hey Jarvis")
+        self._wake_capturing = False        # True while a wake-triggered command is being captured/handled
+        self._wake_got_speech = False        # True once the user actually starts speaking (partial received)
+        self._wake_processed = False         # True once the command has been dispatched (dedupe guard)
+        self._wake_last_speech = 0.0         # ts of the most recent partial transcript
+        # How long to wait for the user to START talking before giving up.
+        self.wake_capture_timeout = int(os.getenv("WAKE_CAPTURE_TIMEOUT", "8"))
+        # Silence (seconds) after speech that ends the command (endpointing).
+        self.wake_silence_gap = float(os.getenv("WAKE_SILENCE_GAP", "2.0"))
+        # Absolute cap on a single command capture.
+        self.wake_max_capture = float(os.getenv("WAKE_MAX_CAPTURE", "20"))
+        self.wake_manager = None
+        if os.getenv("WAKE_WORD_ENABLED", "true").lower() in ("1", "true", "yes", "on"):
+            try:
+                from src.wakeword_manager import WakeWordManager
+                wake_device_env = os.getenv("WAKE_WORD_DEVICE_INDEX", "")
+                wake_device_index = int(wake_device_env) if wake_device_env.strip() != "" else None
+                self.wake_manager = WakeWordManager(
+                    on_wake=self._wake_on_detected,
+                    model_name=os.getenv("WAKE_WORD_MODEL", "hey_jarvis"),
+                    threshold=float(os.getenv("WAKE_WORD_THRESHOLD", "0.4")),
+                    device_index=wake_device_index,
+                    is_busy=self._wake_is_busy,
+                    ack_player=self._play_wake_ack,
+                )
+                if self.wake_manager.available:
+                    if os.getenv("WAKE_WORD_AUTOSTART", "true").lower() in ("1", "true", "yes", "on"):
+                        if self.wake_manager.start():
+                            self.log_event(
+                                f"Wake Word listening for '{self.wake_manager.model_name}'",
+                                "SYSTEM"
+                            )
+                        else:
+                            self.log_event("Wake Word failed to start", "WARN")
+                    else:
+                        self.log_event("Wake Word manager ready (autostart disabled)", "SYSTEM")
+                else:
+                    self.log_event(
+                        "Wake Word unavailable (install openwakeword: pip install openwakeword)",
+                        "WARN"
+                    )
+                    self.wake_manager = None
+            except Exception as e:
+                self.log_event(f"Failed to initialize Wake Word Manager: {e}", "ERROR")
+                self.wake_manager = None
+        else:
+            self.log_event("Wake Word disabled (WAKE_WORD_ENABLED=false)", "SYSTEM")
+
         # Vision system (Perception Layer)
         self.vision_system = VisionSystem(logger=self)
         self.vision_system.enumerate_cameras()  # Discover available cameras
@@ -1529,6 +1577,273 @@ Respond with JSON only: {{"decision": "confirm" | "cancel" | "unclear"}}"""
         self.background_monitoring_enabled = False
         self.log_event("Background monitoring stopped", "SYSTEM")
 
+    # ========================================================================
+    # WAKE WORD ("Hey Jarvis") HANDLERS
+    # ========================================================================
+    def _wake_is_busy(self) -> bool:
+        """True while a wake-triggered command is being captured or handled.
+
+        Keeps the wake detector paused (mic released) so it doesn't re-trigger
+        on the acknowledgment or the spoken response.
+        """
+        return self._wake_capturing
+
+    def _wake_on_detected(self):
+        """Called by WakeWordManager after the wake word + acknowledgment.
+
+        Starts a one-shot speech-to-text capture; the resulting transcript is
+        fed straight into the normal embodied pipeline (process_message).
+        """
+        # Notify any connected UI clients (reuses the STT SSE stream).
+        self._broadcast_wake_event({"type": "wake_detected", "model":
+                                    self.wake_manager.model_name if self.wake_manager else "wake"})
+
+        if not self.stt_manager:
+            self.log_event("Wake Word: no STT manager available to capture command", "WARN")
+            return
+
+        self._wake_capturing = True
+        self._wake_got_speech = False
+        self._wake_processed = False
+        self._wake_last_speech = time.time()
+
+        # Listen to BOTH partials (to detect speech + do our own endpointing)
+        # and completes (Voxtral's own end-of-utterance signal).
+        self.stt_manager.on_transcription_partial = self._wake_on_partial
+        self.stt_manager.on_transcription_complete = self._wake_on_command
+
+        try:
+            self.stt_manager.clear_transcript_buffer()
+        except Exception:
+            pass
+
+        if not self.stt_manager.start_listening():
+            # Already listening (manual STT session) - reuse it; otherwise bail.
+            if not self.stt_manager.is_listening:
+                self.log_event("Wake Word: failed to start listening", "ERROR")
+                self._end_wake_capture()
+                return
+
+        self.log_event("Wake Word: listening for your command...", "SYSTEM")
+        self._broadcast_wake_event({"type": "wake_listening"})
+
+        threading.Thread(
+            target=self._wake_capture_monitor, args=(time.time(),), daemon=True
+        ).start()
+
+    def _wake_on_partial(self, delta: str):
+        """Partial-transcript callback: proof the user is speaking right now."""
+        if not self._wake_capturing:
+            return
+        self._wake_got_speech = True
+        self._wake_last_speech = time.time()
+
+    def _wake_capture_monitor(self, start: float):
+        """Decides when the command is finished (silence) or absent (timeout)."""
+        while self._wake_capturing and not self._wake_processed:
+            now = time.time()
+            if not self._wake_got_speech:
+                # Nobody has started talking yet.
+                if now - start > self.wake_capture_timeout:
+                    # Last-ditch: maybe text accumulated without partial callbacks.
+                    accumulated = self._current_stt_text()
+                    if accumulated:
+                        self._process_wake_command(accumulated)
+                    else:
+                        self.log_event("Wake Word: no command heard, standing by", "SYSTEM")
+                        self._broadcast_wake_event({"type": "wake_timeout"})
+                        self._end_wake_capture()
+                    return
+            else:
+                # User has spoken; finalize on a trailing silence, even if Voxtral
+                # hasn't emitted its own 'complete' yet.
+                if now - self._wake_last_speech > self.wake_silence_gap:
+                    self._process_wake_command(self._current_stt_text())
+                    return
+                if now - start > self.wake_max_capture:
+                    self._process_wake_command(self._current_stt_text())
+                    return
+            time.sleep(0.15)
+
+    def _current_stt_text(self) -> str:
+        """Best-effort read of the transcript accumulated so far."""
+        try:
+            return (getattr(self.stt_manager, "_current_transcript", "") or "").strip()
+        except Exception:
+            return ""
+
+    def _wake_on_command(self, text: str):
+        """Voxtral emitted a final transcript for the command."""
+        if not self._wake_capturing:
+            return
+        self._wake_got_speech = True
+        self._process_wake_command((text or "").strip())
+
+    def _process_wake_command(self, command: str):
+        """Dispatch the captured command through the normal pipeline (once)."""
+        # Dedupe: whichever path (silence-finalize vs Voxtral-complete) wins first.
+        if self._wake_processed or not self._wake_capturing:
+            return
+        self._wake_processed = True
+
+        # Stop receiving further STT callbacks for this capture.
+        if self.stt_manager:
+            self.stt_manager.on_transcription_partial = None
+            self.stt_manager.on_transcription_complete = None
+
+        command = self._strip_wake_prefix(command)
+
+        def _handle():
+            try:
+                # Release the mic before running the (blocking) pipeline.
+                if self.stt_manager and self.stt_manager.is_listening:
+                    self.stt_manager.stop_listening()
+
+                if command:
+                    self.log_event(f"Wake Word command: '{command}'", "CHAT")
+                    self.last_message_source = "wake"
+                    self._broadcast_wake_event({"type": "wake_command", "command": command})
+                    # Voice response plays automatically if voice output is enabled.
+                    result = self.process_message(command)
+                    dialogue = result.get("dialogue", "") if isinstance(result, dict) else ""
+                    self._broadcast_wake_event({
+                        "type": "wake_response",
+                        "command": command,
+                        "response": dialogue,
+                    })
+                else:
+                    self.log_event("Wake Word: nothing intelligible captured, standing by", "SYSTEM")
+                    self._broadcast_wake_event({"type": "wake_timeout"})
+            except Exception as e:
+                self.log_event(f"Wake Word command handling error: {e}", "ERROR")
+            finally:
+                self._wake_capturing = False  # release the wake detector
+
+        threading.Thread(target=_handle, daemon=True).start()
+
+    def _strip_wake_prefix(self, text: str) -> str:
+        """Drop a leading 'hey jarvis' / 'jarvis' the mic caught from the wake word."""
+        import re
+        cleaned = re.sub(
+            r'^\s*(hey\s+|ok\s+|hi\s+)?jarvis[\s,.:;!?\-]*',
+            '', (text or '').strip(), flags=re.IGNORECASE
+        ).strip()
+        return cleaned or (text or '').strip()
+
+    def _end_wake_capture(self):
+        """Stop a wake-triggered STT capture and clear the one-shot handlers."""
+        self._wake_capturing = False
+        self._wake_got_speech = False
+        self._wake_processed = False
+        if self.stt_manager:
+            self.stt_manager.on_transcription_partial = None
+            self.stt_manager.on_transcription_complete = None
+            try:
+                if self.stt_manager.is_listening:
+                    self.stt_manager.stop_listening()
+            except Exception:
+                pass
+
+    def _broadcast_wake_event(self, event: dict):
+        """Broadcast a wake event to UI clients over the STT SSE stream."""
+        if self.stt_manager:
+            try:
+                self.stt_manager._broadcast_event(event)
+            except Exception:
+                pass
+
+    def _play_wake_ack(self):
+        """Play the wake acknowledgment ("Yes?" / "Oui?").
+
+        Uses a pre-recorded/cached WAV when available; otherwise synthesizes one
+        with the Assaultron voice (xVASynth) and caches it, falling back to a
+        generated chime if the voice server isn't running. Blocks until the
+        sound finishes so it isn't captured by the command microphone.
+        """
+        try:
+            lang = (getattr(self.voice_system, "language", "en") or "en").lower()
+        except Exception:
+            lang = "en"
+
+        text = "Oui ?" if lang.startswith("fr") else "Yes?"
+        filename = f"wake_ack_{lang}"
+        try:
+            audio_dir = self.voice_system.audio_output_dir
+        except Exception:
+            from pathlib import Path
+            audio_dir = Path("ai-data/audio_output")
+            audio_dir.mkdir(parents=True, exist_ok=True)
+
+        path = audio_dir / f"{filename}.wav"
+
+        # Create the acknowledgment once if it doesn't exist yet.
+        if not (path.exists() and path.stat().st_size > 0):
+            synthesized = False
+            try:
+                if getattr(self.voice_system, "is_initialized", False):
+                    result = self.voice_system.synthesize_voice(text, filename=filename)
+                    synthesized = bool(result) and path.exists() and path.stat().st_size > 0
+            except Exception as e:
+                self.log_event(f"Wake ack synthesis failed, using fallback tone: {e}", "WARN")
+
+            if not synthesized:
+                self._write_fallback_ack(path)
+
+        self._play_wav_blocking(path)
+
+    def _write_fallback_ack(self, path):
+        """Write a short two-tone 'chime' WAV using only the stdlib.
+
+        Guarantees an audible acknowledgment even when xVASynth isn't running.
+        """
+        import wave
+        import struct
+        import math
+
+        sample_rate = 16000
+        try:
+            with wave.open(str(path), "w") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+
+                def tone(freq, ms, volume=0.35):
+                    frames = bytearray()
+                    n = int(sample_rate * ms / 1000)
+                    for i in range(n):
+                        # Simple attack/decay envelope to avoid clicks.
+                        env = min(1.0, i / (0.02 * sample_rate), (n - i) / (0.02 * sample_rate))
+                        sample = volume * env * math.sin(2 * math.pi * freq * (i / sample_rate))
+                        frames += struct.pack("<h", int(sample * 32767))
+                    return bytes(frames)
+
+                wf.writeframes(tone(660, 90))
+                wf.writeframes(tone(880, 120))
+            self.log_event("Wake ack: generated fallback chime", "SYSTEM")
+        except Exception as e:
+            self.log_event(f"Failed to write fallback ack: {e}", "ERROR")
+
+    def _play_wav_blocking(self, path):
+        """Play a WAV file to the local speakers, blocking until it finishes."""
+        if not (path and os.path.exists(str(path))):
+            return
+        try:
+            import winsound
+            winsound.PlaySound(str(path), winsound.SND_FILENAME)
+            return
+        except Exception:
+            pass
+        # Cross-platform best-effort fallbacks.
+        try:
+            import subprocess
+            import sys
+            if sys.platform == "darwin":
+                subprocess.run(["afplay", str(path)], check=False)
+            else:
+                subprocess.run(["aplay", "-q", str(path)], check=False)
+        except Exception as e:
+            self.log_event(f"Could not play wake ack audio: {e}", "WARN")
+
 
 # ============================================================================
 # CONVERSATION LOGGING HELPER
@@ -2597,6 +2912,67 @@ def clear_stt_transcript():
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================================================
+# WAKE WORD ENDPOINTS
+# ============================================================================
+
+@app.route('/api/wake/status')
+def wake_status():
+    """Get wake-word detector status."""
+    wm = assaultron.wake_manager
+    if not wm:
+        return jsonify({
+            "available": False,
+            "listening": False,
+            "capturing": assaultron._wake_capturing,
+        })
+    status = wm.get_status()
+    status["capturing"] = assaultron._wake_capturing
+    return jsonify(status)
+
+
+@app.route('/api/wake/start', methods=['POST'])
+def wake_start():
+    """Start always-on wake-word detection."""
+    wm = assaultron.wake_manager
+    if not wm or not wm.available:
+        return jsonify({"success": False, "error": "Wake word not available"}), 503
+
+    started = wm.start()
+    if started:
+        assaultron.log_event(f"Wake Word started (listening for '{wm.model_name}')", "SYSTEM")
+    return jsonify({"success": started or wm.is_running(), "listening": wm.is_running()})
+
+
+@app.route('/api/wake/stop', methods=['POST'])
+def wake_stop():
+    """Stop wake-word detection."""
+    wm = assaultron.wake_manager
+    if not wm:
+        return jsonify({"success": False, "error": "Wake word not available"}), 503
+
+    assaultron._end_wake_capture()
+    wm.stop()
+    assaultron.log_event("Wake Word stopped", "SYSTEM")
+    return jsonify({"success": True, "listening": wm.is_running()})
+
+
+@app.route('/api/wake/test', methods=['POST'])
+def wake_test():
+    """Manually fire the wake flow (ack + listen + respond) without speaking.
+
+    Use this to confirm the acknowledgment/capture/response chain works
+    independently of whether the detector is hearing the wake word.
+    """
+    wm = assaultron.wake_manager
+    if not wm or not wm.available:
+        return jsonify({"success": False, "error": "Wake word not available"}), 503
+    if not wm.is_running():
+        return jsonify({"success": False, "error": "Wake word not running - enable it first"}), 409
+    fired = wm.trigger()
+    return jsonify({"success": fired})
 
 
 # ============================================================================

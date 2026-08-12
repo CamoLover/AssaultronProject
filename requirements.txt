@@ -12,5 +12,12 @@ flask-httpauth>=4.8.0
 flask-limiter>=3.5.0
 
 # Speech-to-Text
-mistralai[realtime]>=1.0.0
+# Pinned to 1.x: the 2.x SDK removed `mistralai.models` / top-level `Mistral`,
+# which breaks src/stt_manager.py (Voxtral realtime transcription).
+mistralai[realtime]>=1.9,<2
 pyaudio>=0.2.14
+# mediapipe requires protobuf <5; the mistralai[realtime] extra otherwise pulls 5.x.
+protobuf>=4.25.3,<5
+
+# Wake Word Detection ("Hey Jarvis")
+openwakeword>=0.6.0
