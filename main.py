@@ -14,7 +14,7 @@ from flask import Flask, render_template, request, jsonify, send_from_directory,
 import threading
 import time
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 import requests
 from src.config import Config
 import psutil
@@ -34,7 +34,7 @@ from src.virtual_body import (
     VirtualWorld, BodyState, WorldState, CognitiveState, BodyCommand,
     analyze_user_message_for_world_cues
 )
-from src.cognitive_layer import CognitiveEngine, extract_memory_from_message
+from src.cognitive_layer import CognitiveEngine, extract_memory_from_message, FACTUAL_TEMPERATURE
 from src.behavioral_layer import BehaviorArbiter, describe_behavior_library
 from src.motion_controller import MotionController, HardwareStateValidator
 from src.vision_system import VisionSystem
@@ -44,6 +44,7 @@ from src.notification_manager import NotificationManager
 from src.sandbox_manager import SandboxManager
 from src.agent_logic import AgentLogic
 import src.agent_ai_helpers as agent_ai_helpers
+from src.web_search import web_search as web_search_util
 
 # Import monitoring service
 try:
@@ -277,6 +278,54 @@ class EmbodiedAssaultronCore:
         else:
             self.log_event("STT Manager not initialized (MISTRAL_KEY not set)", "WARN")
 
+        # Wake Word system (always-on hotword, e.g. "Hey Jarvis")
+        self._wake_capturing = False        # True while a wake-triggered command is being captured/handled
+        self._wake_got_speech = False        # True once the user actually starts speaking (partial received)
+        self._wake_processed = False         # True once the command has been dispatched (dedupe guard)
+        self._wake_last_speech = 0.0         # ts of the most recent partial transcript
+        # How long to wait for the user to START talking before giving up.
+        self.wake_capture_timeout = int(os.getenv("WAKE_CAPTURE_TIMEOUT", "8"))
+        # Silence (seconds) after speech that ends the command (endpointing).
+        self.wake_silence_gap = float(os.getenv("WAKE_SILENCE_GAP", "2.0"))
+        # Absolute cap on a single command capture.
+        self.wake_max_capture = float(os.getenv("WAKE_MAX_CAPTURE", "20"))
+        self.wake_manager = None
+        if os.getenv("WAKE_WORD_ENABLED", "true").lower() in ("1", "true", "yes", "on"):
+            try:
+                from src.wakeword_manager import WakeWordManager
+                wake_device_env = os.getenv("WAKE_WORD_DEVICE_INDEX", "")
+                wake_device_index = int(wake_device_env) if wake_device_env.strip() != "" else None
+                self.wake_manager = WakeWordManager(
+                    on_wake=self._wake_on_detected,
+                    model_name=os.getenv("WAKE_WORD_MODEL", "hey_jarvis"),
+                    threshold=float(os.getenv("WAKE_WORD_THRESHOLD", "0.4")),
+                    device_index=wake_device_index,
+                    is_busy=self._wake_is_busy,
+                    ack_player=self._play_wake_ack,
+                )
+                if self.wake_manager.available:
+                    if os.getenv("WAKE_WORD_AUTOSTART", "true").lower() in ("1", "true", "yes", "on"):
+                        if self.wake_manager.start():
+                            self.log_event(
+                                f"Wake Word listening for '{self.wake_manager.model_name}'",
+                                "SYSTEM"
+                            )
+                        else:
+                            self.log_event("Wake Word failed to start", "WARN")
+                    else:
+                        self.log_event("Wake Word manager ready (autostart disabled)", "SYSTEM")
+                else:
+                    self.log_event(
+                        "Wake Word unavailable (install openwakeword: pip install openwakeword)",
+                        "WARN"
+                    )
+                    self.wake_manager = None
+            except Exception as e:
+                self.log_event(f"Failed to initialize Wake Word Manager: {e}", "ERROR")
+                self.wake_manager = None
+        else:
+            self.log_event("Wake Word disabled (WAKE_WORD_ENABLED=false)", "SYSTEM")
+
         # Vision system (Perception Layer)
         self.vision_system = VisionSystem(logger=self)
         self.vision_system.enumerate_cameras()  # Discover available cameras
@@ -304,6 +353,12 @@ class EmbodiedAssaultronCore:
         self.sandbox_manager = SandboxManager(sandbox_path)
         self.agent_logic = AgentLogic(self.cognitive_engine, self.sandbox_manager)
         self.agent_tasks = {}  # Track running agent tasks
+        # Task awaiting user confirmation before the agent is launched
+        # Shape: {"task_description": str, "user_message": str, "timestamp": datetime}
+        self.pending_agent_task = None
+        # Factual log of what recent agent runs actually did (for grounding replies)
+        # Each item: {"task": str, "summary": str, "timestamp": datetime}
+        self.agent_activity_log = []
         self.log_event(f"Autonomous Agent initialized with sandbox: {sandbox_path}", "SYSTEM")
 
     def log_event(self, message, event_type="INFO"):
@@ -473,71 +528,77 @@ class EmbodiedAssaultronCore:
                 "MOOD"
             )
 
-            # Step 1c: Detect if this is an actionable task for the agent
-            task_detected, task_description = self._detect_agent_task(user_message)
-            agent_context = ""
-            
-            if task_detected:
-                self.log_event(f"Task detected: {task_description}", "AGENT")
-                
-                # Generate immediate acknowledgment from AI
-                acknowledgment = agent_ai_helpers.generate_task_acknowledgment(
-                    self.cognitive_engine,
-                    task_description,
-                    mood_state
-                )
-                
-                # Enhance task with personality
-                enhanced_task = agent_ai_helpers.enhance_task_with_personality(task_description)
-                
-                # Start agent in background
-                task_id = f"task_{int(time.time())}_{len(self.agent_tasks)}"
-                
-                # Get conversation context for the agent
-                recent_history = self.cognitive_engine.conversation_history[-10:]
-                formatted_history = []
-                for exchange in recent_history:
-                    formatted_history.append(f"User: {exchange['user']}")
-                    formatted_history.append(f"AI: {exchange['assistant']}")
-                history_context = "\n".join(formatted_history)
+            # Step 1c: Autonomous agent gating (detection + confirmation flow)
+            # Ground replies in what the agent actually did on previous runs.
+            agent_context = self._build_agent_context()
+            web_context = ""  # Populated when a conversational web search runs
 
-                agent_ai_helpers.run_agent_in_background(
-                    agent_logic=self.agent_logic,
-                    agent_tasks=self.agent_tasks,
-                    task_id=task_id,
-                    enhanced_task=enhanced_task,
-                    original_task=task_description,
-                    cognitive_engine=self.cognitive_engine,
-                    voice_system=self.voice_system,
-                    voice_enabled=self.voice_enabled,
-                    log_callback=self.log_event,
-                    broadcast_callback=self._broadcast_agent_completion,
-                    user_message=user_message,
-                    conversation_history=history_context
-                )
-                
-                # Queue voice message for acknowledgment if enabled
-                if self.voice_enabled:
-                    self.voice_system.synthesize_async(acknowledgment)
-                # Manually save to history (since helper doesn't)
-                try:
-                    self.cognitive_engine._update_history(user_message, acknowledgment)
-                except Exception as e:
-                    self.log_event(f"Error updating history: {e}", "ERROR")
+            if self.pending_agent_task is not None:
+                # A task is awaiting confirmation -> interpret this message as the answer.
+                decision = self._classify_confirmation(user_message)
+                pending = self.pending_agent_task
+                self.pending_agent_task = None  # cleared in every branch
 
-                return {
-                    "success": True,
-                    "dialogue": acknowledgment,
-                    "timestamp": datetime.now().isoformat(),
-                    "cognitive_state": {"emotion": mood_state.dominant_emotion, "thought": "Starting autonomous task"},
-                    "hardware_state": self.get_hardware_state(),
-                    "body_state": {"posture": "alert", "gesture": "nod"},
-                    "mood": mood_state.__dict__,
-                    "metadata": {
-                        "task_started": True,
-                        "task_id": task_id
+                if decision == "confirm":
+                    self.log_event(f"User confirmed pending task: {pending['task_description']}", "AGENT")
+                    return self._launch_agent_task(
+                        pending['task_description'], pending['user_message'], mood_state
+                    )
+                elif decision == "cancel":
+                    self.log_event("User cancelled pending task", "AGENT")
+                    # Fall through to normal conversation so the AI replies naturally.
+                else:
+                    # Neither yes nor no -> drop the pending task and continue normally.
+                    self.log_event("Pending task dropped (user changed subject)", "AGENT")
+            else:
+                # Single classifier decides: agent_task vs web_search vs conversation.
+                intent_result = self._classify_message_intent(user_message)
+                intent = intent_result.get("intent", "conversation")
+
+                if intent == "agent_task" and intent_result.get("confidence", 1.0) >= 0.7:
+                    task_description = intent_result.get("task_description") or user_message
+                    self.log_event(f"Task detected (awaiting confirmation): {task_description}", "AGENT")
+
+                    # Ask the user to confirm BEFORE launching the agent.
+                    confirmation_msg = agent_ai_helpers.generate_task_confirmation_request(
+                        self.cognitive_engine,
+                        task_description,
+                        mood_state
+                    )
+
+                    self.pending_agent_task = {
+                        "task_description": task_description,
+                        "user_message": user_message,
+                        "timestamp": datetime.now()
                     }
-                }
+
+                    if self.voice_enabled:
+                        self.voice_system.synthesize_async(confirmation_msg)
+                    try:
+                        self.cognitive_engine._update_history(user_message, confirmation_msg)
+                    except Exception as e:
+                        self.log_event(f"Error updating history: {e}", "ERROR")
+
+                    return {
+                        "success": True,
+                        "dialogue": confirmation_msg,
+                        "timestamp": datetime.now().isoformat(),
+                        "cognitive_state": {"emotion": mood_state.dominant_emotion, "thought": "Awaiting task confirmation"},
+                        "hardware_state": self.get_hardware_state(),
+                        "body_state": {"posture": "alert", "gesture": "nod"},
+                        "mood": mood_state.__dict__,
+                        "metadata": {
+                            "awaiting_confirmation": True,
+                            "pending_task": task_description
+                        }
+                    }
+
+                elif intent == "web_search":
+                    # Quick "search-and-answer" WITHOUT launching the agent.
+                    queries = intent_result.get("search_queries") or [user_message]
+                    self.log_event(f"Conversational web search: {queries}", "TOOL")
+                    web_context = self._perform_conversational_search(queries)
+                    # Fall through to normal cognitive processing with web_context populated.
 
             # Step 1b: Integrate vision data into world state
             vision_context = ""
@@ -587,6 +648,7 @@ class EmbodiedAssaultronCore:
                 memory_summary=memory_summary,
                 vision_context=vision_context,
                 agent_context=agent_context,
+                web_context=web_context,
                 vision_image_b64=vision_image_b64,
                 attachment_image_path=image_path
             )
@@ -776,10 +838,13 @@ Rules:
 2. "I need to fix this", "I want to learn python", "How are you?" -> CONVERSATIONAL
 3. "Fix the footer", "Update the file" -> ACTIVE_TASK (if it implies YOU should do it)
 4. "I will fix it", "I am coding" -> CONVERSATIONAL
+5. Only ACTIVE_TASK if it clearly requires DOING something concrete (creating/editing files, running commands, researching, sending an email). Vague wishes, opinions, feelings, and questions are CONVERSATIONAL.
+6. When unsure, choose CONVERSATIONAL with low confidence. Do not trigger on a single keyword.
 
 Respond with JSON only:
 {{
     "is_task": true/false,
+    "confidence": 0.0 to 1.0 (how sure you are this needs the autonomous agent),
     "task_description": "extracted task if true, else empty string",
     "reasoning": "brief explanation"
 }}""",
@@ -792,10 +857,13 @@ Règles :
 2. "J'ai besoin de corriger ça", "Je veux apprendre python", "Comment ça va ?" -> CONVERSATIONAL
 3. "Corrige le footer", "Mets à jour le fichier" -> ACTIVE_TASK (si cela implique que TU dois le faire)
 4. "Je vais le corriger", "Je code" -> CONVERSATIONAL
+5. ACTIVE_TASK uniquement si cela nécessite clairement de FAIRE quelque chose de concret (créer/éditer des fichiers, lancer des commandes, faire une recherche, envoyer un email). Les envies vagues, opinions, émotions et questions sont CONVERSATIONAL.
+6. En cas de doute, choisis CONVERSATIONAL avec une faible confiance. Ne te déclenche pas sur un seul mot-clé.
 
 Répondez uniquement avec du JSON :
 {{
     "is_task": true/false,
+    "confidence": 0.0 à 1.0 (à quel point tu es sûr que ça nécessite l'agent autonome),
     "task_description": "tâche extraite si true, sinon chaîne vide",
     "reasoning": "brève explication"
 }}""",
@@ -808,10 +876,13 @@ Reglas:
 2. "Necesito arreglar esto", "Quiero aprender python", "¿Cómo estás?" -> CONVERSATIONAL
 3. "Arregla el footer", "Actualiza el archivo" -> ACTIVE_TASK (si implica que TÚ debes hacerlo)
 4. "Voy a arreglarlo", "Estoy programando" -> CONVERSATIONAL
+5. ACTIVE_TASK solo si requiere claramente HACER algo concreto (crear/editar archivos, ejecutar comandos, investigar, enviar un correo). Deseos vagos, opiniones, emociones y preguntas son CONVERSATIONAL.
+6. En caso de duda, elige CONVERSATIONAL con baja confianza. No te actives por una sola palabra clave.
 
 Responde solo con JSON:
 {{
     "is_task": true/false,
+    "confidence": 0.0 a 1.0 (qué tan seguro estás de que necesita el agente autónomo),
     "task_description": "tarea extraída si es true, sino cadena vacía",
     "reasoning": "breve explicación"
 }}"""
@@ -834,7 +905,26 @@ Responde solo con JSON:
             json_match = re.search(r'\{.*\}', response, re.DOTALL)
             if json_match:
                 result = json.loads(json_match.group(0))
-                return result.get("is_task", False), result.get("task_description", "")
+                is_task = result.get("is_task", False)
+
+                # Require high confidence to reduce false triggers.
+                # Detection no longer relies on keywords alone; the confirmation
+                # gate is a second safety net, but we still avoid asking about
+                # plain conversation.
+                confidence = result.get("confidence", 1.0)
+                try:
+                    confidence = float(confidence)
+                except (TypeError, ValueError):
+                    confidence = 1.0
+
+                if is_task and confidence >= 0.7:
+                    return True, result.get("task_description", "")
+                self.log_event(
+                    f"Task detection skipped (is_task={is_task}, confidence={confidence:.2f}): "
+                    f"{result.get('reasoning', '')[:80]}",
+                    "AGENT"
+                )
+                return False, ""
             
         except Exception as e:
             self.log_event(f"Intent detection failed: {e}. Falling back to keyword search.", "ERROR")
@@ -916,6 +1006,461 @@ Responde solo con JSON:
             return True, task
         
         return False, ""
+
+    def _no_agent_phrases(self) -> list:
+        """Multilingual phrases meaning 'do not use the autonomous agent'."""
+        phrases_by_lang = {
+            "en": ["no agent", "without agent", "skip agent", "don't use agent",
+                   "dont use agent", "don't use the agent", "dont use the agent",
+                   "don't call the agent", "don't run the agent"],
+            "fr": ["pas d'agent", "sans agent", "sans l'agent", "n'utilise pas l'agent",
+                   "nutilise pas lagent", "ne lance pas l'agent", "n'appelle pas l'agent"],
+            "es": ["sin agente", "sin el agente", "no uses el agente", "no uses agente",
+                   "no llames al agente", "no inicies el agente"],
+        }
+        return phrases_by_lang.get(self.language, phrases_by_lang["en"])
+
+    def _recent_history_for_classifier(self, max_exchanges: int = 4) -> str:
+        """Return a compact 'User: ... / ASR-7: ...' transcript of the last few
+        exchanges, for grounding the intent classifier on the current subject."""
+        try:
+            history = self.cognitive_engine.conversation_history[-max_exchanges:]
+        except Exception:
+            return ""
+
+        lines = []
+        for ex in history:
+            user = (ex.get("user") or "").strip().replace("\n", " ")
+            assistant = (ex.get("assistant") or "").strip().replace("\n", " ")
+            if len(user) > 200:
+                user = user[:200] + "…"
+            if len(assistant) > 200:
+                assistant = assistant[:200] + "…"
+            if user:
+                lines.append(f"User: {user}")
+            if assistant:
+                lines.append(f"ASR-7: {assistant}")
+        return "\n".join(lines)
+
+    def _intent_prompt(self, message: str, history_str: str = "") -> str:
+        """Build the multilingual single-call intent-classification prompt.
+
+        `history_str` is a compact transcript of the last few exchanges so that vague
+        messages ("search that", "cherche", "dig into it") can be resolved against what
+        was just being discussed instead of producing a generic query.
+        """
+        history_blocks = {
+            "en": f"Recent conversation (context - resolve vague messages against it):\n{history_str}\n\n" if history_str else "",
+            "fr": f"Conversation récente (contexte - résous les messages vagues à partir de ça) :\n{history_str}\n\n" if history_str else "",
+            "es": f"Conversación reciente (contexto - resuelve los mensajes vagos con esto):\n{history_str}\n\n" if history_str else "",
+        }
+        history_block = history_blocks.get(self.language, history_blocks["en"])
+        prompts_by_lang = {
+            "en": f"""Classify the user's message into exactly ONE intent.
+
+{history_block}User Message: "{message}"
+
+Intents:
+- "agent_task": The user wants you to DO a concrete multi-step job that requires tools: creating/editing files, writing code into files, running commands, building a project, or sending an email.
+- "web_search": Answering well needs FRESH or CURRENT information from the internet (news, current events, "right now", latest, today, prices, weather, recent facts), OR the user explicitly asks you to search / look on the web. This is answered by doing a few searches and replying DIRECTLY - it must NOT create files or launch the agent.
+- "conversation": Answerable directly from your own knowledge, or normal chat, opinions, greetings.
+
+Examples:
+- "Create a website about cats" -> agent_task
+- "Fix the footer in index.html" -> agent_task
+- "What's your opinion on the wildfires in France right now?" -> web_search
+- "Search the web and tell me the latest on X" -> web_search
+- "Who won the match yesterday?" -> web_search
+- "How are you?" / "Explain recursion" -> conversation
+
+Respond with JSON only:
+{{
+    "intent": "agent_task" | "web_search" | "conversation",
+    "confidence": 0.0 to 1.0,
+    "task_description": "if agent_task, the task; else empty string",
+    "search_queries": ["1 or 2 DISTINCT, specific search queries if web_search - use the conversation context to make them specific (e.g. include the person/topic being discussed); NEVER generic like 'general search'; do not pad with near-duplicates; else empty list"]
+}}""",
+            "fr": f"""Classe le message de l'utilisateur dans EXACTEMENT UNE intention.
+
+{history_block}Message de l'utilisateur : "{message}"
+
+Intentions :
+- "agent_task" : L'utilisateur veut que tu FASSES un travail concret en plusieurs étapes nécessitant des outils : créer/éditer des fichiers, écrire du code dans des fichiers, lancer des commandes, construire un projet, ou envoyer un email.
+- "web_search" : Bien répondre nécessite des informations FRAÎCHES ou ACTUELLES d'internet (actualités, événements en cours, "en ce moment", dernières nouvelles, aujourd'hui, prix, météo, faits récents), OU l'utilisateur demande explicitement de chercher / regarder sur le web. On y répond en faisant quelques recherches puis en répondant DIRECTEMENT - sans créer de fichiers ni lancer l'agent.
+- "conversation" : Répondable directement avec tes connaissances, ou discussion normale, avis, salutations.
+
+Exemples :
+- "Crée un site web sur les chats" -> agent_task
+- "Corrige le footer dans index.html" -> agent_task
+- "Ton avis sur les incendies en France en ce moment ?" -> web_search
+- "Regarde sur le web et dis-moi les dernières infos sur X" -> web_search
+- "Qui a gagné le match hier ?" -> web_search
+- "Comment ça va ?" / "Explique la récursion" -> conversation
+
+Réponds uniquement avec du JSON :
+{{
+    "intent": "agent_task" | "web_search" | "conversation",
+    "confidence": 0.0 à 1.0,
+    "task_description": "si agent_task, la tâche ; sinon chaîne vide",
+    "search_queries": ["1 ou 2 requêtes DISTINCTES et précises si web_search - sers-toi du contexte de la conversation pour les rendre précises (ex : inclure la personne/le sujet discuté) ; JAMAIS de générique comme 'recherche générale' ; pas de quasi-doublons ; sinon liste vide"]
+}}""",
+            "es": f"""Clasifica el mensaje del usuario en EXACTAMENTE UNA intención.
+
+{history_block}Mensaje del usuario: "{message}"
+
+Intenciones:
+- "agent_task": El usuario quiere que HAGAS un trabajo concreto de varios pasos que requiere herramientas: crear/editar archivos, escribir código en archivos, ejecutar comandos, construir un proyecto o enviar un correo.
+- "web_search": Responder bien necesita información FRESCA o ACTUAL de internet (noticias, eventos actuales, "ahora mismo", lo último, hoy, precios, clima, hechos recientes), O el usuario pide explícitamente buscar / mirar en la web. Se responde haciendo unas búsquedas y respondiendo DIRECTAMENTE, sin crear archivos ni lanzar el agente.
+- "conversation": Se puede responder directamente con tu conocimiento, o charla normal, opiniones, saludos.
+
+Ejemplos:
+- "Crea un sitio web sobre gatos" -> agent_task
+- "Arregla el footer en index.html" -> agent_task
+- "¿Tu opinión sobre los incendios en Francia ahora mismo?" -> web_search
+- "Busca en la web y dime lo último sobre X" -> web_search
+- "¿Quién ganó el partido ayer?" -> web_search
+- "¿Cómo estás?" / "Explica la recursión" -> conversation
+
+Responde solo con JSON:
+{{
+    "intent": "agent_task" | "web_search" | "conversation",
+    "confidence": 0.0 a 1.0,
+    "task_description": "si agent_task, la tarea; sino cadena vacía",
+    "search_queries": ["1 o 2 consultas DISTINTAS y específicas si web_search - usa el contexto de la conversación para hacerlas específicas (p. ej. incluir la persona/tema en cuestión); NUNCA genérico como 'búsqueda general'; sin casi-duplicados; sino lista vacía"]
+}}""",
+        }
+        return prompts_by_lang.get(self.language, prompts_by_lang["en"])
+
+    def _classify_message_intent(self, message: str) -> dict:
+        """
+        Classify a user message into one of three intents in a single LLM call:
+        - "agent_task": needs the autonomous agent (create/edit files, run commands, build, email)
+        - "web_search": needs fresh/live info or an explicit web lookup; answered by a few
+          searches + a direct reply (NO agent, NO file creation)
+        - "conversation": answerable directly from knowledge / normal chat
+
+        Returns dict: {intent, confidence, task_description, search_queries}
+        """
+        default = {"intent": "conversation", "confidence": 1.0, "task_description": "", "search_queries": []}
+
+        # Very short messages are almost always chit-chat.
+        if len(message.split()) < 2:
+            return default
+
+        # Explicit "no agent" phrases bar the agent (but still allow a web search).
+        no_agent = any(p in message.lower() for p in self._no_agent_phrases())
+
+        # Compact transcript of the last few exchanges so vague messages ("cherche")
+        # resolve against what was just discussed instead of yielding a generic query.
+        history_str = self._recent_history_for_classifier()
+
+        try:
+            response = self.cognitive_engine._call_llm(
+                [
+                    {"role": "system", "content": "You are an intent classifier. Respond with valid JSON only."},
+                    {"role": "user", "content": self._intent_prompt(message, history_str)}
+                ],
+                temperature=FACTUAL_TEMPERATURE
+            )
+
+            import json
+            import re
+            m = re.search(r'\{.*\}', response, re.DOTALL)
+            if m:
+                result = json.loads(m.group(0))
+
+                intent = result.get("intent", "conversation")
+                if intent not in ("agent_task", "web_search", "conversation"):
+                    intent = "conversation"
+
+                # Respect an explicit "no agent" request.
+                if intent == "agent_task" and no_agent:
+                    intent = "web_search" if result.get("search_queries") else "conversation"
+
+                confidence = result.get("confidence", 1.0)
+                try:
+                    confidence = float(confidence)
+                except (TypeError, ValueError):
+                    confidence = 1.0
+
+                queries = result.get("search_queries") or []
+                if isinstance(queries, str):
+                    queries = [queries]
+                queries = [q for q in queries if isinstance(q, str) and q.strip()][:3]
+
+                self.log_event(
+                    f"Intent: {intent} (conf={confidence:.2f}) queries={queries}", "AGENT"
+                )
+                return {
+                    "intent": intent,
+                    "confidence": confidence,
+                    "task_description": result.get("task_description", ""),
+                    "search_queries": queries
+                }
+        except Exception as e:
+            self.log_event(f"Intent classification failed: {e}. Defaulting to conversation.", "ERROR")
+
+        return default
+
+    def _broadcast_web_search(self, payload: dict) -> None:
+        """Broadcast a web-search activity event to all connected SSE clients."""
+        message = {"type": "web_search", "timestamp": datetime.now().isoformat()}
+        message.update(payload)
+
+        dead_queues = []
+        for queue in self.voice_event_queues:
+            try:
+                queue.put_nowait(message)
+            except:
+                dead_queues.append(queue)
+        for queue in dead_queues:
+            if queue in self.voice_event_queues:
+                self.voice_event_queues.remove(queue)
+
+    def _perform_conversational_search(self, queries: list) -> str:
+        """
+        Run up to 2 web searches for a conversational (non-agent) reply. Streams the
+        activity to the chat UI (SSE) and the monitoring system, and returns a text
+        context block of results to feed the cognitive layer.
+        """
+        # Clean, de-duplicate (case-insensitively) and cap the queries so we don't fire
+        # three near-identical searches for one question.
+        seen = set()
+        deduped = []
+        for q in (queries or []):
+            q = (q or "").strip()
+            key = q.lower()
+            if q and key not in seen:
+                seen.add(key)
+                deduped.append(q)
+        queries = deduped[:2]
+        if not queries:
+            return ""
+
+        context_blocks = []
+        any_success = False
+
+        for query in queries:
+            # Tell the UI a search is starting
+            self._broadcast_web_search({"status": "searching", "query": query})
+            self.log_event(f"Web search: {query}", "TOOL")
+
+            start = time.time()
+            result = web_search_util(query, count=4)
+            duration_ms = (time.time() - start) * 1000
+            results = result.get("results", []) if result.get("success") else []
+
+            # Record in monitoring
+            if MONITORING_ENABLED:
+                try:
+                    monitoring.get_collector().record_web_search(
+                        query=query,
+                        result_count=len(results),
+                        duration_ms=duration_ms,
+                        success=result.get("success", False)
+                    )
+                except Exception as e:
+                    self.log_event(f"Failed to record web search metric: {e}", "ERROR")
+
+            if result.get("success") and results:
+                any_success = True
+                block = f'Search: "{query}"\n'
+                for r in results:
+                    block += f"- {r['title']} ({r['url']})\n  {r['description']}\n"
+                context_blocks.append(block)
+                self._broadcast_web_search({
+                    "status": "results",
+                    "query": query,
+                    "results": [{"title": r["title"], "url": r["url"]} for r in results]
+                })
+            else:
+                err = result.get("error", "no results")
+                context_blocks.append(f'Search: "{query}" -> no usable results ({err})')
+                self._broadcast_web_search({"status": "error", "query": query, "error": err})
+
+        if not any_success:
+            return (
+                "[WEB SEARCH] Live web search returned no usable results (the search service "
+                "may be unavailable or misconfigured). Answer from your own knowledge and be "
+                "honest that you couldn't fetch fresh data.\n" + "\n".join(context_blocks)
+            )
+
+        return "\n".join(context_blocks)
+
+    def _launch_agent_task(self, task_description: str, user_message: str, mood_state) -> dict:
+        """
+        Launch the autonomous agent in the background for a CONFIRMED task and
+        return the acknowledgment response. Extracted so both the (legacy) direct
+        path and the confirmation path share one implementation.
+        """
+        # Generate immediate acknowledgment from AI
+        acknowledgment = agent_ai_helpers.generate_task_acknowledgment(
+            self.cognitive_engine,
+            task_description,
+            mood_state
+        )
+
+        # Enhance task with personality
+        enhanced_task = agent_ai_helpers.enhance_task_with_personality(task_description)
+
+        # Start agent in background
+        task_id = f"task_{int(time.time())}_{len(self.agent_tasks)}"
+
+        # Get conversation context for the agent
+        recent_history = self.cognitive_engine.conversation_history[-10:]
+        formatted_history = []
+        for exchange in recent_history:
+            formatted_history.append(f"User: {exchange['user']}")
+            formatted_history.append(f"AI: {exchange['assistant']}")
+        history_context = "\n".join(formatted_history)
+
+        agent_ai_helpers.run_agent_in_background(
+            agent_logic=self.agent_logic,
+            agent_tasks=self.agent_tasks,
+            task_id=task_id,
+            enhanced_task=enhanced_task,
+            original_task=task_description,
+            cognitive_engine=self.cognitive_engine,
+            voice_system=self.voice_system,
+            voice_enabled=self.voice_enabled,
+            log_callback=self.log_event,
+            broadcast_callback=self._broadcast_agent_completion,
+            activity_callback=self._record_agent_activity,
+            user_message=user_message,
+            conversation_history=history_context
+        )
+
+        # Queue voice message for acknowledgment if enabled
+        if self.voice_enabled:
+            self.voice_system.synthesize_async(acknowledgment)
+        # Manually save to history (since helper doesn't)
+        try:
+            self.cognitive_engine._update_history(user_message, acknowledgment)
+        except Exception as e:
+            self.log_event(f"Error updating history: {e}", "ERROR")
+
+        return {
+            "success": True,
+            "dialogue": acknowledgment,
+            "timestamp": datetime.now().isoformat(),
+            "cognitive_state": {"emotion": mood_state.dominant_emotion, "thought": "Starting autonomous task"},
+            "hardware_state": self.get_hardware_state(),
+            "body_state": {"posture": "alert", "gesture": "nod"},
+            "mood": mood_state.__dict__,
+            "metadata": {
+                "task_started": True,
+                "task_id": task_id
+            }
+        }
+
+    def _classify_confirmation(self, message: str) -> str:
+        """
+        Decide whether the user's message confirms, cancels, or is unrelated to the
+        task currently awaiting confirmation.
+
+        Uses a fast multilingual keyword shortcut for obvious yes/no replies, then
+        falls back to an LLM classifier for nuanced answers.
+
+        Returns:
+            "confirm", "cancel", or "unclear"
+        """
+        msg = message.lower().strip().rstrip("!.")
+
+        confirm_words = [
+            # en
+            "yes", "yeah", "yep", "yup", "sure", "ok", "okay", "go", "go ahead",
+            "do it", "please do", "sounds good", "confirm", "alright", "let's go", "lets go",
+            # fr
+            "oui", "ouais", "ouaip", "vas-y", "vas y", "fonce", "fais-le", "fais le",
+            "d'accord", "daccord", "c'est bon", "cest bon", "carrément", "carrement",
+            "je confirme", "allez", "vas y stp",
+            # es
+            "sí", "si", "claro", "dale", "hazlo", "adelante", "vale", "de acuerdo",
+        ]
+        cancel_words = [
+            # en
+            "no", "nope", "nah", "don't", "dont", "cancel", "stop", "forget it",
+            "never mind", "nevermind", "not now", "wait",
+            # fr
+            "non", "nan", "annule", "laisse tomber", "laisse beton", "pas maintenant",
+            "arrête", "arrete", "attends", "ne fais pas",
+            # es
+            "cancela", "olvídalo", "olvidalo", "para", "espera", "ahora no",
+        ]
+
+        # Exact-match shortcut
+        if msg in confirm_words:
+            return "confirm"
+        if msg in cancel_words:
+            return "cancel"
+
+        # Short-reply starts-with shortcut (cancel checked first: "no" beats "now")
+        if len(msg.split()) <= 4:
+            for w in cancel_words:
+                if msg.startswith(w):
+                    return "cancel"
+            for w in confirm_words:
+                if msg.startswith(w):
+                    return "confirm"
+
+        # LLM fallback for nuanced answers
+        try:
+            prompt = f"""The assistant just asked the user to confirm before starting a task.
+User's reply: "{message}"
+
+Does the reply mean YES (start the task), NO (do not start / cancel), or is it UNRELATED to the confirmation?
+Respond with JSON only: {{"decision": "confirm" | "cancel" | "unclear"}}"""
+            response = self.cognitive_engine._call_llm([
+                {"role": "system", "content": "You classify confirmation replies. Respond with valid JSON only."},
+                {"role": "user", "content": prompt}
+            ])
+            import json
+            import re
+            m = re.search(r'\{.*\}', response, re.DOTALL)
+            if m:
+                decision = json.loads(m.group(0)).get("decision", "unclear")
+                if decision in ("confirm", "cancel", "unclear"):
+                    return decision
+        except Exception as e:
+            self.log_event(f"Confirmation classification failed: {e}", "ERROR")
+
+        return "unclear"
+
+    def _record_agent_activity(self, task: str, summary: str, result: dict) -> None:
+        """
+        Store a FACTUAL summary of a completed agent run so future replies are
+        grounded in what actually happened (no hallucinating the ReAct loop).
+        """
+        if not summary:
+            return
+        self.agent_activity_log.append({
+            "task": task,
+            "summary": summary,
+            "timestamp": datetime.now()
+        })
+        # Keep only the most recent runs
+        if len(self.agent_activity_log) > 10:
+            self.agent_activity_log = self.agent_activity_log[-10:]
+        self.log_event(f"Recorded agent activity for grounding: {task[:50]}", "AGENT")
+
+    def _build_agent_context(self, max_entries: int = 2, recency_minutes: int = 60) -> str:
+        """
+        Build grounding context from recent real agent activity, injected into the
+        cognitive layer so the AI references what the agent actually did instead of
+        imagining it. Only recent runs are included to avoid stale context.
+        """
+        if not self.agent_activity_log:
+            return ""
+
+        cutoff = datetime.now() - timedelta(minutes=recency_minutes)
+        recent = [
+            entry for entry in self.agent_activity_log
+            if entry.get("timestamp", datetime.now()) >= cutoff
+        ][-max_entries:]
+
+        if not recent:
+            return ""
+        return "\n\n".join(entry["summary"] for entry in recent)
 
     def set_hardware_manual(self, led_intensity=None, hand_left=None, hand_right=None):
         """
@@ -1031,6 +1576,273 @@ Responde solo con JSON:
         """Stop the background monitoring thread"""
         self.background_monitoring_enabled = False
         self.log_event("Background monitoring stopped", "SYSTEM")
+
+    # ========================================================================
+    # WAKE WORD ("Hey Jarvis") HANDLERS
+    # ========================================================================
+    def _wake_is_busy(self) -> bool:
+        """True while a wake-triggered command is being captured or handled.
+
+        Keeps the wake detector paused (mic released) so it doesn't re-trigger
+        on the acknowledgment or the spoken response.
+        """
+        return self._wake_capturing
+
+    def _wake_on_detected(self):
+        """Called by WakeWordManager after the wake word + acknowledgment.
+
+        Starts a one-shot speech-to-text capture; the resulting transcript is
+        fed straight into the normal embodied pipeline (process_message).
+        """
+        # Notify any connected UI clients (reuses the STT SSE stream).
+        self._broadcast_wake_event({"type": "wake_detected", "model":
+                                    self.wake_manager.model_name if self.wake_manager else "wake"})
+
+        if not self.stt_manager:
+            self.log_event("Wake Word: no STT manager available to capture command", "WARN")
+            return
+
+        self._wake_capturing = True
+        self._wake_got_speech = False
+        self._wake_processed = False
+        self._wake_last_speech = time.time()
+
+        # Listen to BOTH partials (to detect speech + do our own endpointing)
+        # and completes (Voxtral's own end-of-utterance signal).
+        self.stt_manager.on_transcription_partial = self._wake_on_partial
+        self.stt_manager.on_transcription_complete = self._wake_on_command
+
+        try:
+            self.stt_manager.clear_transcript_buffer()
+        except Exception:
+            pass
+
+        if not self.stt_manager.start_listening():
+            # Already listening (manual STT session) - reuse it; otherwise bail.
+            if not self.stt_manager.is_listening:
+                self.log_event("Wake Word: failed to start listening", "ERROR")
+                self._end_wake_capture()
+                return
+
+        self.log_event("Wake Word: listening for your command...", "SYSTEM")
+        self._broadcast_wake_event({"type": "wake_listening"})
+
+        threading.Thread(
+            target=self._wake_capture_monitor, args=(time.time(),), daemon=True
+        ).start()
+
+    def _wake_on_partial(self, delta: str):
+        """Partial-transcript callback: proof the user is speaking right now."""
+        if not self._wake_capturing:
+            return
+        self._wake_got_speech = True
+        self._wake_last_speech = time.time()
+
+    def _wake_capture_monitor(self, start: float):
+        """Decides when the command is finished (silence) or absent (timeout)."""
+        while self._wake_capturing and not self._wake_processed:
+            now = time.time()
+            if not self._wake_got_speech:
+                # Nobody has started talking yet.
+                if now - start > self.wake_capture_timeout:
+                    # Last-ditch: maybe text accumulated without partial callbacks.
+                    accumulated = self._current_stt_text()
+                    if accumulated:
+                        self._process_wake_command(accumulated)
+                    else:
+                        self.log_event("Wake Word: no command heard, standing by", "SYSTEM")
+                        self._broadcast_wake_event({"type": "wake_timeout"})
+                        self._end_wake_capture()
+                    return
+            else:
+                # User has spoken; finalize on a trailing silence, even if Voxtral
+                # hasn't emitted its own 'complete' yet.
+                if now - self._wake_last_speech > self.wake_silence_gap:
+                    self._process_wake_command(self._current_stt_text())
+                    return
+                if now - start > self.wake_max_capture:
+                    self._process_wake_command(self._current_stt_text())
+                    return
+            time.sleep(0.15)
+
+    def _current_stt_text(self) -> str:
+        """Best-effort read of the transcript accumulated so far."""
+        try:
+            return (getattr(self.stt_manager, "_current_transcript", "") or "").strip()
+        except Exception:
+            return ""
+
+    def _wake_on_command(self, text: str):
+        """Voxtral emitted a final transcript for the command."""
+        if not self._wake_capturing:
+            return
+        self._wake_got_speech = True
+        self._process_wake_command((text or "").strip())
+
+    def _process_wake_command(self, command: str):
+        """Dispatch the captured command through the normal pipeline (once)."""
+        # Dedupe: whichever path (silence-finalize vs Voxtral-complete) wins first.
+        if self._wake_processed or not self._wake_capturing:
+            return
+        self._wake_processed = True
+
+        # Stop receiving further STT callbacks for this capture.
+        if self.stt_manager:
+            self.stt_manager.on_transcription_partial = None
+            self.stt_manager.on_transcription_complete = None
+
+        command = self._strip_wake_prefix(command)
+
+        def _handle():
+            try:
+                # Release the mic before running the (blocking) pipeline.
+                if self.stt_manager and self.stt_manager.is_listening:
+                    self.stt_manager.stop_listening()
+
+                if command:
+                    self.log_event(f"Wake Word command: '{command}'", "CHAT")
+                    self.last_message_source = "wake"
+                    self._broadcast_wake_event({"type": "wake_command", "command": command})
+                    # Voice response plays automatically if voice output is enabled.
+                    result = self.process_message(command)
+                    dialogue = result.get("dialogue", "") if isinstance(result, dict) else ""
+                    self._broadcast_wake_event({
+                        "type": "wake_response",
+                        "command": command,
+                        "response": dialogue,
+                    })
+                else:
+                    self.log_event("Wake Word: nothing intelligible captured, standing by", "SYSTEM")
+                    self._broadcast_wake_event({"type": "wake_timeout"})
+            except Exception as e:
+                self.log_event(f"Wake Word command handling error: {e}", "ERROR")
+            finally:
+                self._wake_capturing = False  # release the wake detector
+
+        threading.Thread(target=_handle, daemon=True).start()
+
+    def _strip_wake_prefix(self, text: str) -> str:
+        """Drop a leading 'hey jarvis' / 'jarvis' the mic caught from the wake word."""
+        import re
+        cleaned = re.sub(
+            r'^\s*(hey\s+|ok\s+|hi\s+)?jarvis[\s,.:;!?\-]*',
+            '', (text or '').strip(), flags=re.IGNORECASE
+        ).strip()
+        return cleaned or (text or '').strip()
+
+    def _end_wake_capture(self):
+        """Stop a wake-triggered STT capture and clear the one-shot handlers."""
+        self._wake_capturing = False
+        self._wake_got_speech = False
+        self._wake_processed = False
+        if self.stt_manager:
+            self.stt_manager.on_transcription_partial = None
+            self.stt_manager.on_transcription_complete = None
+            try:
+                if self.stt_manager.is_listening:
+                    self.stt_manager.stop_listening()
+            except Exception:
+                pass
+
+    def _broadcast_wake_event(self, event: dict):
+        """Broadcast a wake event to UI clients over the STT SSE stream."""
+        if self.stt_manager:
+            try:
+                self.stt_manager._broadcast_event(event)
+            except Exception:
+                pass
+
+    def _play_wake_ack(self):
+        """Play the wake acknowledgment ("Yes?" / "Oui?").
+
+        Uses a pre-recorded/cached WAV when available; otherwise synthesizes one
+        with the Assaultron voice (xVASynth) and caches it, falling back to a
+        generated chime if the voice server isn't running. Blocks until the
+        sound finishes so it isn't captured by the command microphone.
+        """
+        try:
+            lang = (getattr(self.voice_system, "language", "en") or "en").lower()
+        except Exception:
+            lang = "en"
+
+        text = "Oui ?" if lang.startswith("fr") else "Yes?"
+        filename = f"wake_ack_{lang}"
+        try:
+            audio_dir = self.voice_system.audio_output_dir
+        except Exception:
+            from pathlib import Path
+            audio_dir = Path("ai-data/audio_output")
+            audio_dir.mkdir(parents=True, exist_ok=True)
+
+        path = audio_dir / f"{filename}.wav"
+
+        # Create the acknowledgment once if it doesn't exist yet.
+        if not (path.exists() and path.stat().st_size > 0):
+            synthesized = False
+            try:
+                if getattr(self.voice_system, "is_initialized", False):
+                    result = self.voice_system.synthesize_voice(text, filename=filename)
+                    synthesized = bool(result) and path.exists() and path.stat().st_size > 0
+            except Exception as e:
+                self.log_event(f"Wake ack synthesis failed, using fallback tone: {e}", "WARN")
+
+            if not synthesized:
+                self._write_fallback_ack(path)
+
+        self._play_wav_blocking(path)
+
+    def _write_fallback_ack(self, path):
+        """Write a short two-tone 'chime' WAV using only the stdlib.
+
+        Guarantees an audible acknowledgment even when xVASynth isn't running.
+        """
+        import wave
+        import struct
+        import math
+
+        sample_rate = 16000
+        try:
+            with wave.open(str(path), "w") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+
+                def tone(freq, ms, volume=0.35):
+                    frames = bytearray()
+                    n = int(sample_rate * ms / 1000)
+                    for i in range(n):
+                        # Simple attack/decay envelope to avoid clicks.
+                        env = min(1.0, i / (0.02 * sample_rate), (n - i) / (0.02 * sample_rate))
+                        sample = volume * env * math.sin(2 * math.pi * freq * (i / sample_rate))
+                        frames += struct.pack("<h", int(sample * 32767))
+                    return bytes(frames)
+
+                wf.writeframes(tone(660, 90))
+                wf.writeframes(tone(880, 120))
+            self.log_event("Wake ack: generated fallback chime", "SYSTEM")
+        except Exception as e:
+            self.log_event(f"Failed to write fallback ack: {e}", "ERROR")
+
+    def _play_wav_blocking(self, path):
+        """Play a WAV file to the local speakers, blocking until it finishes."""
+        if not (path and os.path.exists(str(path))):
+            return
+        try:
+            import winsound
+            winsound.PlaySound(str(path), winsound.SND_FILENAME)
+            return
+        except Exception:
+            pass
+        # Cross-platform best-effort fallbacks.
+        try:
+            import subprocess
+            import sys
+            if sys.platform == "darwin":
+                subprocess.run(["afplay", str(path)], check=False)
+            else:
+                subprocess.run(["aplay", "-q", str(path)], check=False)
+        except Exception as e:
+            self.log_event(f"Could not play wake ack audio: {e}", "WARN")
 
 
 # ============================================================================
@@ -2100,6 +2912,67 @@ def clear_stt_transcript():
 
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
+
+
+# ============================================================================
+# WAKE WORD ENDPOINTS
+# ============================================================================
+
+@app.route('/api/wake/status')
+def wake_status():
+    """Get wake-word detector status."""
+    wm = assaultron.wake_manager
+    if not wm:
+        return jsonify({
+            "available": False,
+            "listening": False,
+            "capturing": assaultron._wake_capturing,
+        })
+    status = wm.get_status()
+    status["capturing"] = assaultron._wake_capturing
+    return jsonify(status)
+
+
+@app.route('/api/wake/start', methods=['POST'])
+def wake_start():
+    """Start always-on wake-word detection."""
+    wm = assaultron.wake_manager
+    if not wm or not wm.available:
+        return jsonify({"success": False, "error": "Wake word not available"}), 503
+
+    started = wm.start()
+    if started:
+        assaultron.log_event(f"Wake Word started (listening for '{wm.model_name}')", "SYSTEM")
+    return jsonify({"success": started or wm.is_running(), "listening": wm.is_running()})
+
+
+@app.route('/api/wake/stop', methods=['POST'])
+def wake_stop():
+    """Stop wake-word detection."""
+    wm = assaultron.wake_manager
+    if not wm:
+        return jsonify({"success": False, "error": "Wake word not available"}), 503
+
+    assaultron._end_wake_capture()
+    wm.stop()
+    assaultron.log_event("Wake Word stopped", "SYSTEM")
+    return jsonify({"success": True, "listening": wm.is_running()})
+
+
+@app.route('/api/wake/test', methods=['POST'])
+def wake_test():
+    """Manually fire the wake flow (ack + listen + respond) without speaking.
+
+    Use this to confirm the acknowledgment/capture/response chain works
+    independently of whether the detector is hearing the wake word.
+    """
+    wm = assaultron.wake_manager
+    if not wm or not wm.available:
+        return jsonify({"success": False, "error": "Wake word not available"}), 503
+    if not wm.is_running():
+        return jsonify({"success": False, "error": "Wake word not running - enable it first"}), 409
+    fired = wm.trigger()
+    return jsonify({"success": fired})
 
 
 # ============================================================================

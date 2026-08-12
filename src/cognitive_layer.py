@@ -30,6 +30,14 @@ except ImportError:
     GEMINI_AVAILABLE = False
 
 
+# Temperature presets.
+# PERSONA: creative banter, where variety matters more than precision.
+# FACTUAL: reasoning, calculations, classification and search-grounded answers,
+#          where a stable, correct output matters more than flair.
+PERSONA_TEMPERATURE = 0.85
+FACTUAL_TEMPERATURE = 0.35
+
+
 
 # ============================================================================
 # COGNITIVE INTERFACE
@@ -245,9 +253,11 @@ class CognitiveEngine:
         memory_summary: str = "",
         vision_context: str = "",
         agent_context: str = "",
+        web_context: str = "",
         record_history: bool = True,
         vision_image_b64: str = None,
-        attachment_image_path: str = None
+        attachment_image_path: str = None,
+        response_mode: str = "banter"
     ) -> CognitiveState:
         """
         Process user input and generate cognitive state.
@@ -263,10 +273,20 @@ class CognitiveEngine:
             record_history: Whether to save this interaction to conversation history (default: True)
             vision_image_b64: Base64 encoded raw webcam image for multimodal vision
             attachment_image_path: Path to user-attached image file (e.g., "chat_images/lego.jpg")
+            response_mode: "banter" (default, full personality) or "factual" (answer
+                correctly first, minimal sass, lower temperature). Web-search and
+                agent-grounded replies use "factual" so facts aren't buried under jokes.
 
         Returns:
             CognitiveState with goal, emotion, confidence, urgency, focus, dialogue
         """
+        # A live web search this turn means the user asked a real/current-info question:
+        # prioritise a correct, grounded answer over banter. (agent_context is excluded on
+        # purpose - it lingers for up to an hour after a task and shouldn't flatten casual
+        # chat into factual mode; callers can still pass response_mode="factual" explicitly.)
+        if web_context:
+            response_mode = "factual"
+        llm_temperature = FACTUAL_TEMPERATURE if response_mode == "factual" else PERSONA_TEMPERATURE
         max_retries = 10  # Increased to ensure we get a unique response
         cognitive_state = None
         last_generated_state = None  # Track the last attempt in case all fail
@@ -292,7 +312,9 @@ class CognitiveEngine:
                 vision_context,
                 agent_context,
                 vision_image_b64,
-                attachment_image_b64
+                attachment_image_b64,
+                web_context=web_context,
+                response_mode=response_mode
             )
 
             # Add anti-duplicate instruction on retry attempts
@@ -306,7 +328,7 @@ class CognitiveEngine:
 
             # Call LLM
             try:
-                response_text = self._call_llm(messages)
+                response_text = self._call_llm(messages, temperature=llm_temperature)
                 # Log raw LLM response for debugging
                 print(f"[COGNITIVE DEBUG] Raw LLM response: {response_text[:500]}")
             except Exception as e:
@@ -379,7 +401,9 @@ class CognitiveEngine:
         vision_context: str = "",
         agent_context: str = "",
         vision_image_b64: str = None,
-        attachment_image_b64: str = None
+        attachment_image_b64: str = None,
+        web_context: str = "",
+        response_mode: str = "banter"
     ) -> List[Dict[str, Any]]:
         """
         Build the message list for LLM.
@@ -398,7 +422,7 @@ class CognitiveEngine:
         messages = []
 
         # 1. Base system prompt (personality + reasoning instructions)
-        enhanced_prompt = self._enhance_system_prompt()
+        enhanced_prompt = self._enhance_system_prompt(response_mode=response_mode)
         messages.append({
             "role": "system",
             "content": enhanced_prompt
@@ -450,7 +474,18 @@ class CognitiveEngine:
                 "content": agent_context
             })
 
-        # 5. Long-term Memories (Persistent across sessions, max 10)
+        # 4.6. Live web search results (fresh info fetched to answer THIS message)
+        if web_context:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "LIVE WEB SEARCH RESULTS (fresh data retrieved just now to answer the user). "
+                    "Base your reply on these facts, cite what's relevant, and do NOT claim you "
+                    "can't access the internet or that your knowledge is outdated:\n"
+                    f"{web_context}"
+                )
+            })
+
         # 5. Long-term Memories (Persistent across sessions, max 10)
         if self.memory_context:
             memory_list = "\n".join([f"- {m['content']}" for m in self.memory_context[-15:]])
@@ -530,12 +565,16 @@ class CognitiveEngine:
 
         return messages
 
-    def _enhance_system_prompt(self) -> str:
+    def _enhance_system_prompt(self, response_mode: str = "banter") -> str:
         """
         Enhance base prompt with cognitive reasoning instructions.
 
         This adds structured output requirements and ensures the LLM
         reasons about goals/emotions rather than hardware.
+
+        Args:
+            response_mode: "banter" for full personality, or "factual" to prepend a
+                priority instruction that the correct answer comes before any wit.
         """
         # Language instruction mapping
         language_instructions = {
@@ -728,7 +767,24 @@ Response:
 NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
 """
 
-        return self.base_system_prompt + cognitive_instructions
+        # In factual mode, correctness must lead. This overrides the persona balance so
+        # she answers real questions (math, lookups, search results) instead of dodging
+        # them with a joke.
+        factual_mode_instruction = """
+
+## RESPONSE PRIORITY: ANSWER FIRST (FACTUAL MODE)
+The operator asked a real question or gave you fresh data. For THIS reply:
+- Give the correct, useful answer FIRST and plainly. Do the math, read the data, state the fact.
+- If web search results are provided, base your answer on them and cite what's relevant.
+- Keep personality to a SINGLE short quip at the end, AFTER the answer - never instead of it.
+- Do NOT mock, tease, dodge, or stall in place of answering. Being wrong-but-sassy is a failure.
+- If you genuinely don't know or the data is missing, say so directly.
+"""
+
+        base = self.base_system_prompt + cognitive_instructions
+        if response_mode == "factual":
+            base += factual_mode_instruction
+        return base
 
     def _format_world_context(self, world_state: WorldState) -> str:
         """Format world state for LLM context"""
@@ -803,22 +859,30 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
 
         return "\n".join(mood_desc)
 
-    def _call_llm(self, messages: List[Dict[str, Any]]) -> str:
-        """Call the selected LLM provider with optional multimodal vision support"""
-        if Config.LLM_PROVIDER == "gemini":
-            return self._call_gemini(messages)
-        elif Config.LLM_PROVIDER == "openrouter":
-            return self._call_openrouter(messages)
-        elif Config.LLM_PROVIDER == "openai":
-            return self._call_openai(messages)
-        elif Config.LLM_PROVIDER == "anthropic":
-            return self._call_anthropic(messages)
-        elif Config.LLM_PROVIDER == "mistral":
-            return self._call_mistral(messages)
-        else:
-            return self._call_ollama(messages)
+    def _call_llm(self, messages: List[Dict[str, Any]], temperature: float = PERSONA_TEMPERATURE) -> str:
+        """
+        Call the selected LLM provider with optional multimodal vision support.
 
-    def _call_ollama(self, messages: List[Dict[str, Any]]) -> str:
+        Args:
+            messages: Chat messages.
+            temperature: Sampling temperature. Use FACTUAL_TEMPERATURE for reasoning,
+                classification and search-grounded answers; PERSONA_TEMPERATURE (default)
+                for creative in-character banter.
+        """
+        if Config.LLM_PROVIDER == "gemini":
+            return self._call_gemini(messages, temperature)
+        elif Config.LLM_PROVIDER == "openrouter":
+            return self._call_openrouter(messages, temperature)
+        elif Config.LLM_PROVIDER == "openai":
+            return self._call_openai(messages, temperature)
+        elif Config.LLM_PROVIDER == "anthropic":
+            return self._call_anthropic(messages, temperature)
+        elif Config.LLM_PROVIDER == "mistral":
+            return self._call_mistral(messages, temperature)
+        else:
+            return self._call_ollama(messages, temperature)
+
+    def _call_ollama(self, messages: List[Dict[str, Any]], temperature: float = PERSONA_TEMPERATURE) -> str:
         """Call standard Ollama endpoint (multimodal support varies by model)"""
         try:
             response = requests.post(
@@ -828,8 +892,8 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                     "messages": messages,
                     "stream": False,
                     "options": {
-                        "temperature": 0.85,
-                        "num_ctx": 8192, 
+                        "temperature": temperature,
+                        "num_ctx": 8192,
                     },
                     "keep_alive": "5m"
                 },
@@ -845,7 +909,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
         except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to connect to Ollama: {e}")
 
-    def _call_gemini(self, messages: List[Dict[str, Any]]) -> str:
+    def _call_gemini(self, messages: List[Dict[str, Any]], temperature: float = PERSONA_TEMPERATURE) -> str:
         """Call Google Gemini API with optional multimodal vision support"""
         if not GEMINI_AVAILABLE:
             raise ImportError("google-generativeai library is missing")
@@ -895,7 +959,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 gemini_messages,
                 generation_config=genai.types.GenerationConfig(
                     candidate_count=1,
-                    temperature=0.9,
+                    temperature=temperature,
                     # Force JSON output for Gemini which supports it natively
                     response_mime_type="application/json" 
                 )
@@ -908,7 +972,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 return '{"goal": "idle", "emotion": "neutral", "dialogue": "System Error: Please check my API Key."}'
             raise
             
-    def _call_openrouter(self, messages: List[Dict[str, Any]]) -> str:
+    def _call_openrouter(self, messages: List[Dict[str, Any]], temperature: float = PERSONA_TEMPERATURE) -> str:
         """Call OpenRouter API with optional multimodal vision support"""
         try:
             # Add site info for OpenRouter rankings (optional but good practice)
@@ -941,7 +1005,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
             payload = {
                 "model": Config.OPENROUTER_MODEL,
                 "messages": openrouter_messages,
-                "temperature": 0.85,
+                "temperature": temperature,
                 "response_format": { "type": "json_object" },
                 "max_tokens": 8192  # Lowered to preventing 402 errors on low credit accounts
             }
@@ -966,7 +1030,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
             print(f"[COGNITIVE ERROR] OpenRouter Request Failed: {e}")
             raise
 
-    def _call_openai(self, messages: List[Dict[str, Any]]) -> str:
+    def _call_openai(self, messages: List[Dict[str, Any]], temperature: float = PERSONA_TEMPERATURE) -> str:
         """Call OpenAI API with optional multimodal vision support"""
         try:
             headers = {
@@ -998,7 +1062,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
             payload = {
                 "model": Config.OPENAI_MODEL,
                 "messages": openai_messages,
-                "temperature": 0.85,
+                "temperature": temperature,
                 "response_format": { "type": "json_object" },
                 "max_tokens": 4096
             }
@@ -1025,7 +1089,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 return '{"goal": "idle", "emotion": "neutral", "dialogue": "System Error: Please check my OpenAI API Key."}'
             raise
 
-    def _call_anthropic(self, messages: List[Dict[str, Any]]) -> str:
+    def _call_anthropic(self, messages: List[Dict[str, Any]], temperature: float = PERSONA_TEMPERATURE) -> str:
         """Call Anthropic Claude API with optional multimodal vision support"""
         try:
             headers = {
@@ -1066,7 +1130,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 "model": Config.ANTHROPIC_MODEL,
                 "messages": anthropic_messages,
                 "system": system_message,
-                "temperature": 0.85,
+                "temperature": temperature,
                 "max_tokens": 4096
             }
 
@@ -1093,7 +1157,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
                 return '{"goal": "idle", "emotion": "neutral", "dialogue": "System Error: Please check my Anthropic API Key."}'
             raise
 
-    def _call_mistral(self, messages: List[Dict[str, Any]]) -> str:
+    def _call_mistral(self, messages: List[Dict[str, Any]], temperature: float = PERSONA_TEMPERATURE) -> str:
         """Call Mistral API with optional multimodal vision support"""
         try:
             headers = {
@@ -1123,7 +1187,7 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
             payload = {
                 "model": Config.MISTRAL_MODEL,
                 "messages": mistral_messages,
-                "temperature": 0.85,
+                "temperature": temperature,
                 "response_format": { "type": "json_object" },
                 "max_tokens": 4096
             }
@@ -1183,18 +1247,6 @@ NOW, RESPOND TO THE USER'S MESSAGE WITH THE JSON FORMAT ABOVE.
 
         return text
 
-    def _parse_response(self, response_text: str) -> CognitiveState:
-        """
-        Parse LLM response into CognitiveState.
-
-        Handles both clean JSON and JSON embedded in natural language.
-
-        Args:
-            response_text: Raw LLM output
-
-        Returns:
-            Parsed CognitiveState
-        """
     def _parse_response(self, response_text: str) -> CognitiveState:
         """
         Parse LLM response into CognitiveState.
@@ -1454,9 +1506,9 @@ RESPOND ONLY WITH THIS JSON:
 }}
 """
             messages = [{"role": "system", "content": prompt}]
-            
-            # Simple call to existing AI provider
-            response_text = self._call_llm(messages)
+
+            # Memory triage is a decision task, not banter - keep it deterministic.
+            response_text = self._call_llm(messages, temperature=FACTUAL_TEMPERATURE)
             
             # Extract JSON
             json_match = re.search(r'(\{.*?\})', response_text, re.DOTALL)
